@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +20,7 @@ interface AdvancedAnalyticsProps {
 
 export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   const { sales, loading, error } = useSalesData(userRole, user.id, user.name)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [dateRange, setDateRange] = useState({
     from: addDays(new Date(), -30),
     to: new Date()
@@ -26,6 +28,13 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   const [selectedTeam, setSelectedTeam] = useState("all")
   const [selectedService, setSelectedService] = useState("all")
   const [viewType, setViewType] = useState<'revenue' | 'deals' | 'performance'>('revenue')
+
+  // Update last updated timestamp whenever sales stream changes
+  useEffect(() => {
+    if (sales && sales.length >= 0) {
+      setLastUpdated(new Date())
+    }
+  }, [sales])
 
   const analytics = useMemo(() => {
     if (!sales || sales.length === 0) return null
@@ -47,6 +56,30 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     const totalRevenue = finalFilteredSales.reduce((sum, sale) => sum + (sale.amount || 0), 0)
     const totalDeals = finalFilteredSales.length
     const averageDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0
+
+    // Time-based KPIs
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    const startOfWeek = (() => {
+      const d = new Date()
+      const day = d.getDay() || 7 // Monday=1..Sunday=7
+      d.setHours(0,0,0,0)
+      d.setDate(d.getDate() - (day - 1))
+      return d
+    })()
+
+    let revenueToday = 0, dealsToday = 0
+    let revenueThisWeek = 0, dealsThisWeek = 0
+    for (const s of finalFilteredSales) {
+      const ds = new Date(s.date)
+      if (format(ds, 'yyyy-MM-dd') === todayStr) {
+        revenueToday += s.amount || 0
+        dealsToday += 1
+      }
+      if (ds >= startOfWeek && ds <= dateRange.to) {
+        revenueThisWeek += s.amount || 0
+        dealsThisWeek += 1
+      }
+    }
 
     // Daily trend
     const dailyData = finalFilteredSales.reduce((acc, sale) => {
@@ -122,9 +155,43 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       teamPerformance,
       servicePerformance,
       performanceCorrelation,
-      filteredSales: finalFilteredSales
+      filteredSales: finalFilteredSales,
+      revenueToday,
+      dealsToday,
+      revenueThisWeek,
+      dealsThisWeek,
     }
   }, [sales, dateRange, selectedTeam, selectedService])
+
+  // Export filtered detailed rows as CSV (Excel-compatible)
+  const handleExport = () => {
+    if (!analytics) return
+    const rows = analytics.filteredSales
+    const headers = [
+      'date','customer_name','amount','sales_agent','closing_agent','team','type_service','DealID'
+    ]
+    const csv = [headers.join(',')]
+    for (const r of rows) {
+      const line = [
+        r.date,
+        r.customer_name?.replaceAll('"', '""') ?? '',
+        String(r.amount ?? ''),
+        r.sales_agent ?? '',
+        r.closing_agent ?? '',
+        r.team ?? '',
+        r.type_service ?? '',
+        r.DealID ?? ''
+      ].map(v => /[",\n]/.test(String(v)) ? `"${String(v)}"` : String(v)).join(',')
+      csv.push(line)
+    }
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `analytics_${format(dateRange.from, 'yyyyMMdd')}_${format(dateRange.to, 'yyyyMMdd')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   if (loading) {
     return (
@@ -173,8 +240,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           </p>
         </div>
         
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            Live{lastUpdated ? ` • updated ${format(lastUpdated, 'HH:mm:ss')}` : ''}
+          </Badge>
+          <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
@@ -207,10 +278,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Teams</SelectItem>
-                      <SelectItem value="CS TEAM">CS TEAM</SelectItem>
-                      <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
-                      <SelectItem value="SAIF MOHAMED">SAIF MOHAMED</SelectItem>
-                      <SelectItem value="OTHER">OTHER</SelectItem>
+                      {Array.from(new Set(sales.map(s => s.team).filter(Boolean))).map(team => (
+                        <SelectItem key={team} value={team}>{team}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -223,9 +293,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Services</SelectItem>
-                      <SelectItem value="SLIVER">SLIVER</SelectItem>
-                      <SelectItem value="GOLD">GOLD</SelectItem>
-                      <SelectItem value="PERMIUM">PERMIUM</SelectItem>
+                      {Array.from(new Set(sales.map(s => s.type_service).filter(Boolean))).map(svc => (
+                        <SelectItem key={svc} value={svc}>{svc}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -303,6 +373,61 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                 </p>
               </div>
               <Award className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Live KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Revenue Today</p>
+                <p className="text-2xl font-bold">${analytics.revenueToday.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Live from stream</p>
+              </div>
+              <Activity className="h-8 w-8 text-cyan-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Deals Today</p>
+                <p className="text-2xl font-bold">{analytics.dealsToday}</p>
+                <p className="text-xs text-muted-foreground">Live from stream</p>
+              </div>
+              <Users className="h-8 w-8 text-cyan-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Revenue This Week</p>
+                <p className="text-2xl font-bold">${analytics.revenueThisWeek.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Mon - Today</p>
+              </div>
+              <BarChart3 className="h-8 w-8 text-emerald-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Deals This Week</p>
+                <p className="text-2xl font-bold">{analytics.dealsThisWeek}</p>
+                <p className="text-xs text-muted-foreground">Mon - Today</p>
+              </div>
+              <Users className="h-8 w-8 text-emerald-600" />
             </div>
           </CardContent>
         </Card>
@@ -483,7 +608,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
                     return (
                       <tr key={index} className="border-b hover:bg-muted/50">
-                        <td className="py-3 font-medium capitalize">{name}</td>
+                        <td className="py-3 font-medium capitalize text-cyan-700 hover:underline">
+                          <Link href={`/agents/${encodeURIComponent(name)}`}>{name}</Link>
+                        </td>
                         <td className="py-3 font-semibold">${revenue.toLocaleString()}</td>
                         <td className="py-3">{deals}</td>
                         <td className="py-3">${Math.round(avgDeal).toLocaleString()}</td>

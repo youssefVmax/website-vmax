@@ -135,6 +135,7 @@ export default function FullPageDashboard() {
   const getNavItems = () => {
     const baseItems = [
       { id: "dashboard", icon: Home, label: "Dashboard" },
+      { id: "sales-dashboard", icon: PieChart, label: "Sales Dashboard" },
       { id: "analytics", icon: BarChart3, label: "Analytics" },
       { id: "notifications", icon: Bell, label: "Notifications" },
     ]
@@ -405,6 +406,8 @@ function getPageTitle(activeTab: string, userRole: string): string {
   switch (activeTab) {
     case "dashboard":
       return "Dashboard Overview"
+    case "sales-dashboard":
+      return "Sales Dashboard"
     case "analytics":
       return "Sales Analytics"
     case "all-deals":
@@ -451,6 +454,8 @@ function PageContent({
   switch (activeTab) {
     case "dashboard":
       return <DashboardOverview user={user} />
+    case "sales-dashboard":
+      return <SalesAnalysisDashboard userRole={user.role} user={user} />
     case "analytics":
       return <AdvancedAnalytics userRole={user.role} user={user} />
     case "all-deals":
