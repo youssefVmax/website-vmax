@@ -7,9 +7,17 @@ const dataFilePath = path.join(process.cwd(), 'public', 'data', 'targets.json');
 async function readTargets() {
   try {
     const fileContent = await fs.readFile(dataFilePath, 'utf-8');
-    return JSON.parse(fileContent);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
+    try {
+      const parsed = JSON.parse(fileContent);
+      // Ensure array
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (parseErr) {
+      // If JSON is invalid, reset file to empty array to recover
+      await fs.writeFile(dataFilePath, '[]', 'utf-8');
+      return [];
+    }
+  } catch (error: any) {
+    if (error && (error.code === 'ENOENT' || error?.message?.includes('no such file'))) {
       // If the file doesn't exist, create it with an empty array and return it.
       await fs.writeFile(dataFilePath, '[]', 'utf-8');
       return [];
@@ -18,15 +26,16 @@ async function readTargets() {
   }
 }
 
-async function writeTargets(data) {
-  await fs.writeFile(dataFilePath, JSON.stringify(data, null, 2));
+async function writeTargets(data: any[]) {
+  await fs.writeFile(dataFilePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 export async function GET() {
   try {
     const targets = await readTargets();
     return NextResponse.json(targets, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('GET /api/targets failed:', error);
     return NextResponse.json({ message: 'Error reading targets' }, { status: 500 });
   }
 }
@@ -46,7 +55,8 @@ export async function POST(req: NextRequest) {
     await writeTargets(targets);
     
     return NextResponse.json(newTarget, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('POST /api/targets failed:', error);
     return NextResponse.json({ message: 'Error creating target' }, { status: 500 });
   }
 }
@@ -71,7 +81,8 @@ export async function PUT(req: NextRequest) {
       
       return NextResponse.json(targets[targetIndex], { status: 200 });
 
-    } catch (error) {
+    } catch (error: any) {
+      console.error('PUT /api/targets failed:', error);
       return NextResponse.json({ message: 'Error updating target' }, { status: 500 });
     }
 }

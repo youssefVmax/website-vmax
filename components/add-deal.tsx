@@ -1,17 +1,19 @@
 // components/add-deal-page.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { USERS } from "@/lib/auth";
+import { useSalesData } from "@/hooks/useSalesData";
 
 export function AddDealPage() {
   const { toast } = useToast();
@@ -19,6 +21,57 @@ export function AddDealPage() {
   const { addNotification } = useNotifications();
   const salesmanOptions = USERS.filter(u => u.role === 'salesman')
   const allUserOptions = USERS
+  const isSalesman = user?.role === 'salesman'
+  const { sales } = useSalesData(user?.role || 'manager', user?.id, user?.name)
+
+  // Dynamic options from current data
+  const teamOptions = useMemo(() => {
+    const set = new Set<string>()
+    ;(sales || []).forEach(s => { if (s.team) set.add(s.team) })
+    // Ensure current default exists
+    set.add("CS TEAM")
+    return Array.from(set).sort()
+  }, [sales])
+
+  const serviceOptions = useMemo(() => {
+    const set = new Set<string>()
+    ;(sales || []).forEach(s => { if (s.type_service) set.add(s.type_service) })
+    // Ensure current defaults exist
+    ;["SLIVER","GOLD","PERMIUM"].forEach(v => set.add(v))
+    return Array.from(set).sort()
+  }, [sales])
+
+  // Program and Duration options derived from raw API
+  const [programOptions, setProgramOptions] = useState<string[]>(["IBO PLAYER","BOB PLAYER","IBO PRO","SMARTERS","IBOSS"])
+  const [durationOptions, setDurationOptions] = useState<string[]>(["YEAR","TWO YEAR","2y+6m","2y+5m","2y+4m","2y+3m","2y+2m","2y+1m"])
+
+  useEffect(() => {
+    let mounted = true
+    const load = async () => {
+      try {
+        const res = await fetch('/api/sales')
+        if (!res.ok) return
+        const rows = await res.json()
+        const programs = new Set<string>()
+        const durations = new Set<string>()
+        for (const r of rows || []) {
+          const prog = (r.product_type || r.type_program || '').toString().toUpperCase()
+          if (prog) programs.add(prog)
+          const durLabel = (r.duration || '').toString().toUpperCase()
+          if (durLabel) durations.add(durLabel)
+        }
+        // Ensure sensible defaults are present
+        ;["IBO PLAYER","BOB PLAYER","IBO PRO","SMARTERS","IBOSS"].forEach(v => programs.add(v))
+        ;["YEAR","TWO YEAR","2Y+6M","2Y+5M","2Y+4M","2Y+3M","2Y+2M","2Y+1M"].forEach(v => durations.add(v))
+        if (mounted) {
+          setProgramOptions(Array.from(programs).sort())
+          setDurationOptions(Array.from(durations).sort())
+        }
+      } catch {}
+    }
+    load()
+    return () => { mounted = false }
+  }, [])
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     customer_name: "",
@@ -72,6 +125,23 @@ export function AddDealPage() {
       }))
       return
     }
+    // Guard dynamic lists
+    if (name === 'team') {
+      if (!teamOptions.includes(value)) return
+    }
+    if (name === 'type_service') {
+      if (!serviceOptions.includes(value)) return
+    }
+    if (name === 'type_program') {
+      const v = value.toUpperCase()
+      if (!programOptions.includes(v)) return
+      value = v
+    }
+    if (name === 'duration') {
+      const v = value.toUpperCase()
+      if (!durationOptions.includes(v)) return
+      value = v
+    }
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -80,6 +150,18 @@ export function AddDealPage() {
     setLoading(true);
 
     try {
+      // Validate dynamic fields against options
+      const errors: string[] = []
+      if (!teamOptions.includes(formData.team)) errors.push('Invalid Team selected')
+      if (!serviceOptions.includes(formData.type_service)) errors.push('Invalid Service selected')
+      if (!programOptions.includes((formData.type_program || '').toUpperCase())) errors.push('Invalid Program selected')
+      if (!durationOptions.includes((formData.duration || '').toUpperCase())) errors.push('Invalid Duration selected')
+      if (errors.length) {
+        toast({ title: 'Validation Error', description: errors.join(', '), variant: 'destructive' })
+        setLoading(false)
+        return
+      }
+
       const timestamp = new Date().getTime();
       const random = Math.floor(Math.random() * 1000);
       const dealId = `Deal-${timestamp.toString().slice(-4)}${random.toString().padStart(3, '0')}`;
@@ -250,19 +332,25 @@ export function AddDealPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="sales_agent">Sales Agent *</Label>
-                <Select 
-                  value={formData.SalesAgentID || ''}
-                  onValueChange={(v) => handleSelectChange('sales_agent', v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select sales agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {salesmanOptions.map(a => (
-                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isSalesman ? (
+                  <div className="flex items-center h-10 px-3 rounded-md border text-sm">
+                    <span className="capitalize">{formData.sales_agent || user?.name}</span>
+                  </div>
+                ) : (
+                  <Select 
+                    value={formData.SalesAgentID || ''}
+                    onValueChange={(v) => handleSelectChange('sales_agent', v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select sales agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {salesmanOptions.map(a => (
+                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -292,10 +380,9 @@ export function AddDealPage() {
                     <SelectValue placeholder="Select team" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CS TEAM">CS TEAM</SelectItem>
-                    <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
-                    <SelectItem value="SAIF MOHAMED">SAIF MOHAMED</SelectItem>
-                    <SelectItem value="OTHER">OTHER</SelectItem>
+                    {teamOptions.map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -310,14 +397,9 @@ export function AddDealPage() {
                     <SelectValue placeholder="Select duration" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="YEAR">YEAR</SelectItem>
-                    <SelectItem value="TWO YEAR">TWO YEAR</SelectItem>
-                    <SelectItem value="2y+6m">2y+6m</SelectItem>
-                    <SelectItem value="2y+5m">2y+5m</SelectItem>
-                    <SelectItem value="2y+4m">2y+4m</SelectItem>
-                    <SelectItem value="2y+3m">2y+3m</SelectItem>
-                    <SelectItem value="2y+2m">2y+2m</SelectItem>
-                    <SelectItem value="2y+1m">2y+1m</SelectItem>
+                    {durationOptions.map(d => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -332,11 +414,9 @@ export function AddDealPage() {
                     <SelectValue placeholder="Select program type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="IBO PLAYER">IBO PLAYER</SelectItem>
-                    <SelectItem value="BOB PLAYER">BOB PLAYER</SelectItem>
-                    <SelectItem value="IBO PRO">IBO PRO</SelectItem>
-                    <SelectItem value="SMARTERS">SMARTERS</SelectItem>
-                    <SelectItem value="IBOSS">IBOSS</SelectItem>
+                    {programOptions.map(p => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -351,9 +431,9 @@ export function AddDealPage() {
                     <SelectValue placeholder="Select service type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="SLIVER">SLIVER</SelectItem>
-                    <SelectItem value="GOLD">GOLD</SelectItem>
-                    <SelectItem value="PERMIUM">PERMIUM</SelectItem>
+                    {serviceOptions.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

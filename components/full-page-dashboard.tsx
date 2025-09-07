@@ -135,7 +135,6 @@ export default function FullPageDashboard() {
   const getNavItems = () => {
     const baseItems = [
       { id: "dashboard", icon: Home, label: "Dashboard" },
-      { id: "sales-dashboard", icon: PieChart, label: "Sales Dashboard" },
       { id: "analytics", icon: BarChart3, label: "Analytics" },
       { id: "notifications", icon: Bell, label: "Notifications" },
     ]
@@ -143,7 +142,6 @@ export default function FullPageDashboard() {
     if (user.role === 'manager') {
       return [
         ...baseItems,
-        { id: "all-deals", icon: FileText, label: "All Deals" },
         { id: "team-targets", icon: Target, label: "Team Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         { id: "customers", icon: Users, label: "All Customers" },
@@ -159,7 +157,6 @@ export default function FullPageDashboard() {
         { id: "my-targets", icon: Target, label: "My Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         { id: "my-customers", icon: Users, label: "My Customers" },
-        { id: "competition", icon: TrendingUp, label: "Competition" },
       ]
     } else {
       return [
