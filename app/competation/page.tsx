@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "@/hooks/useAuth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -57,6 +58,7 @@ interface ServiceData {
 }
 
 export default function SalesCompetitionDashboard() {
+  const { user } = useAuth()
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
   const [celebrating, setCelebrating] = useState(false)
@@ -64,6 +66,25 @@ export default function SalesCompetitionDashboard() {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [currentMonth] = useState(new Date().toLocaleString("default", { month: "long", year: "numeric" }))
   const [activeTab, setActiveTab] = useState<'leaderboard' | 'teams' | 'sales-by-service'>('sales-by-service')
+
+  // Salesmen no longer use this page; avoid mounting heavy UI and charts
+  if (user?.role === 'salesman') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-8">
+        <Card className="max-w-xl w-full">
+          <CardHeader>
+            <CardTitle>Competition</CardTitle>
+            <CardDescription>This page is not available for your role.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Please use the Dashboard, My Deals Table, or Analytics tabs.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   useEffect(() => {
     const fetchDeals = async () => {

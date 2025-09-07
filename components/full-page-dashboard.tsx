@@ -129,12 +129,7 @@ export default function FullPageDashboard() {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  // Default landing tab by role (must be declared before any returns)
-  useEffect(() => {
-    if (user?.role === 'salesman' && activeTab === 'dashboard') {
-      setActiveTab('my-deals')
-    }
-  }, [user, activeTab])
+  // Removed auto-redirect. Salesmen now land on Dashboard and stay there unless they choose another tab.
 
   if (!user) {
     return null // This should be handled by the auth wrapper
