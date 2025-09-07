@@ -41,6 +41,7 @@ import { DataCenter } from "@/components/data-center"
 import { SalesTargets } from "@/components/sales-targets"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
+import MyDealsTable from "@/components/my-deals-table"
 
 export default function FullPageDashboard() {
   const { user, logout } = useAuth()
@@ -132,6 +133,14 @@ export default function FullPageDashboard() {
     return null // This should be handled by the auth wrapper
   }
 
+  // Default landing tab by role
+  useEffect(() => {
+    // If salesman, default to My Deals Table on first load
+    if (user?.role === 'salesman' && activeTab === 'dashboard') {
+      setActiveTab('my-deals')
+    }
+  }, [user])
+
   const getNavItems = () => {
     const baseItems = [
       { id: "dashboard", icon: Home, label: "Dashboard" },
@@ -152,11 +161,12 @@ export default function FullPageDashboard() {
     } else if (user.role === 'salesman') {
       return [
         ...baseItems,
-        { id: "my-deals", icon: FileText, label: "My Deals" },
+        { id: "my-deals", icon: FileText, label: "My Deals Table" },
         { id: "add-deal", icon: Plus, label: "Add Deal" },
         { id: "my-targets", icon: Target, label: "My Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         { id: "my-customers", icon: Users, label: "My Customers" },
+        { id: "competition", icon: TrendingUp, label: "Competition" },
       ]
     } else {
       return [
@@ -410,7 +420,7 @@ function getPageTitle(activeTab: string, userRole: string): string {
     case "all-deals":
       return "All Deals Management"
     case "my-deals":
-      return "My Sales Deals"
+      return "My Deals Table"
     case "support-deals":
       return "Support Deals"
     case "add-deal":
@@ -458,7 +468,9 @@ function PageContent({
     case "all-deals":
     case "my-deals":
     case "support-deals":
-      return <DealsManagement user={user} />
+      return activeTab === "my-deals" && user.role === 'salesman'
+        ? <MyDealsTable user={user} />
+        : <DealsManagement user={user} />
     case "add-deal":
       return <AddDealPage />
     case "team-targets":

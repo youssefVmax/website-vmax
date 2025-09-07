@@ -1,28 +1,52 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import os from 'os';
 import { NextRequest, NextResponse } from 'next/server';
 import { USERS } from '@/lib/auth';
 
-const dataFilePath = path.join(process.cwd(), 'public', 'data', 'notifications.json');
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+// Prefer a writable location for serverless (e.g., Netlify/Vercel). Fallback to tmp.
+const WRITABLE_DIR = process.env.NOTIFICATIONS_DIR || os.tmpdir();
+const TMP_FILE = path.join(WRITABLE_DIR, 'notifications.json');
+const PUBLIC_SEED = path.join(process.cwd(), 'public', 'data', 'notifications.json');
 
 async function ensureFile() {
   try {
-    await fs.access(dataFilePath);
+    await fs.access(TMP_FILE);
   } catch {
-    await fs.mkdir(path.dirname(dataFilePath), { recursive: true });
-    await fs.writeFile(dataFilePath, '[]', 'utf-8');
+    try {
+      await fs.mkdir(path.dirname(TMP_FILE), { recursive: true });
+    } catch {}
+    // Seed from public file if exists; otherwise empty array
+    try {
+      const seed = await fs.readFile(PUBLIC_SEED, 'utf-8').catch(() => '[]');
+      // validate JSON
+      JSON.parse(seed);
+      await fs.writeFile(TMP_FILE, seed, 'utf-8');
+    } catch {
+      await fs.writeFile(TMP_FILE, '[]', 'utf-8');
+    }
   }
 }
 
 async function readNotifications() {
   await ensureFile();
-  const fileContent = await fs.readFile(dataFilePath, 'utf-8');
-  return JSON.parse(fileContent);
+  const fileContent = await fs.readFile(TMP_FILE, 'utf-8');
+  try {
+    const parsed = JSON.parse(fileContent);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    // Reset to [] if corrupted
+    await fs.writeFile(TMP_FILE, '[]', 'utf-8');
+    return [];
+  }
 }
 
 async function writeNotifications(data: any) {
   await ensureFile();
-  await fs.writeFile(dataFilePath, JSON.stringify(data, null, 2), 'utf-8');
+  await fs.writeFile(TMP_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 // Helper to sanitize and filter notifications according to target audience
@@ -58,13 +82,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(notifications, { status: 200 });
   } catch (error) {
     console.error('Error reading notifications:', error);
-    return NextResponse.json({ message: 'Error reading notifications' }, { status: 500 });
+    return NextResponse.json({ message: 'Error reading notifications', details: String((error as any)?.message || error) }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
+    }
+    if (!Array.isArray(body.to) || body.to.length === 0) {
+      return NextResponse.json({ message: 'Notifications require a non-empty "to" array' }, { status: 400 });
+    }
     const notifications = await readNotifications();
 
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -84,7 +114,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(newNotification, { status: 201 });
   } catch (error) {
     console.error('Error creating notification:', error);
-    return NextResponse.json({ message: 'Error creating notification' }, { status: 500 });
+    return NextResponse.json({ message: 'Error creating notification', details: String((error as any)?.message || error) }, { status: 500 });
   }
 }
 
@@ -117,7 +147,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(notifications[index], { status: 200 });
   } catch (error) {
     console.error('Error updating notification:', error);
-    return NextResponse.json({ message: 'Error updating notification' }, { status: 500 });
+    return NextResponse.json({ message: 'Error updating notification', details: String((error as any)?.message || error) }, { status: 500 });
   }
 }
 
