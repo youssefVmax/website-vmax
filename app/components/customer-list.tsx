@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import React, { useState, useMemo } from "react"
 import { useSalesData } from "@/hooks/useSalesData"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -31,6 +31,32 @@ interface Customer {
   amount: number
 }
 
+class CustomerListBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; message?: string }> {
+  constructor(props: any) {
+    super(props)
+    this.state = { hasError: false, message: undefined }
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, message: error?.message || 'Something went wrong' }
+  }
+  componentDidCatch(error: any, info: any) {
+    // eslint-disable-next-line no-console
+    console.error('CustomerList error boundary caught', error, info)
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card className="border-destructive">
+          <CardContent className="p-6 text-destructive">
+            Failed to render Customer List: {this.state.message}
+          </CardContent>
+        </Card>
+      )
+    }
+    return this.props.children as any
+  }
+}
+
 export function CustomerList({ userRole, userId }: CustomerListProps) {
   const { sales = [], loading, error } = useSalesData(userRole, userId)
   const [query, setQuery] = useState("")
@@ -41,25 +67,6 @@ export function CustomerList({ userRole, userId }: CustomerListProps) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        {[...Array(5)].map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <Card className="border-destructive">
-        <CardContent className="p-6 text-destructive">
-          Error loading customer data: {error.message}
-        </CardContent>
-      </Card>
-    )
-  }
 
   // Role filter first
   const roleFiltered = useMemo(() => {
@@ -125,17 +132,8 @@ export function CustomerList({ userRole, userId }: CustomerListProps) {
   const start = (currentPage - 1) * pageSize
   const pageData = sorted.slice(start, start + pageSize)
 
-  if (uniqueCustomers.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center text-muted-foreground">
-          No customers found
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
+    <CustomerListBoundary>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -175,6 +173,21 @@ export function CustomerList({ userRole, userId }: CustomerListProps) {
         </div>
       </CardHeader>
       <CardContent>
+        {error && (
+          <div className="mb-4 p-3 rounded border border-destructive text-destructive text-sm">
+            Error loading customer data: {error.message}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : uniqueCustomers.length === 0 ? (
+          <div className="p-6 text-center text-muted-foreground">No customers found</div>
+        ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -257,26 +270,29 @@ export function CustomerList({ userRole, userId }: CustomerListProps) {
             </TableBody>
           </Table>
         </div>
-        {/* Pagination footer */}
-        <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-          <div>
-            Showing {pageData.length} of {total} customers
+        )}
+        {!loading && uniqueCustomers.length > 0 && (
+          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+            <div>
+              Showing {pageData.length} of {total} customers
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious onClick={() => setPage(p => Math.max(1, p - 1))} />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="px-3">Page {currentPage} / {totalPages}</span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext onClick={() => setPage(p => Math.min(totalPages, p + 1))} />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious onClick={() => setPage(p => Math.max(1, p - 1))} />
-              </PaginationItem>
-              <PaginationItem>
-                <span className="px-3">Page {currentPage} / {totalPages}</span>
-              </PaginationItem>
-              <PaginationItem>
-                <PaginationNext onClick={() => setPage(p => Math.min(totalPages, p + 1))} />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+        )}
       </CardContent>
     </Card>
+    </CustomerListBoundary>
   )
 }
