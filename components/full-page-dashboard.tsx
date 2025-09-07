@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
-import { SalesAnalysisDashboard } from '@/components/sales-dashboard-fixed'
+import SalesAnalysisDashboard from '@/components/sales-dashboard'
 import NotificationsPage from "@/components/notifications-page-new"
 import { CustomerList } from "@/app/components/customer-list"
 import { AddDealPage } from "@/components/add-deal"
@@ -129,17 +129,16 @@ export default function FullPageDashboard() {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  if (!user) {
-    return null // This should be handled by the auth wrapper
-  }
-
-  // Default landing tab by role
+  // Default landing tab by role (must be declared before any returns)
   useEffect(() => {
-    // If salesman, default to My Deals Table on first load
     if (user?.role === 'salesman' && activeTab === 'dashboard') {
       setActiveTab('my-deals')
     }
-  }, [user])
+  }, [user, activeTab])
+
+  if (!user) {
+    return null // This should be handled by the auth wrapper
+  }
 
   const getNavItems = () => {
     const baseItems = [
@@ -155,7 +154,6 @@ export default function FullPageDashboard() {
         { id: "datacenter", icon: Database, label: "Data Center" },
         { id: "customers", icon: Users, label: "All Customers" },
         { id: "team-management", icon: UserCheck, label: "Team Management" },
-        { id: "competition", icon: TrendingUp, label: "Competition" },
         { id: "settings", icon: Settings, label: "Settings" },
       ]
     } else if (user.role === 'salesman') {
@@ -173,7 +171,6 @@ export default function FullPageDashboard() {
         { id: "support-deals", icon: FileText, label: "Support Deals" },
         { id: "customers", icon: Users, label: "Customer Support" },
         { id: "datacenter", icon: Database, label: "Data Center" },
-        { id: "competition", icon: TrendingUp, label: "Competition" },
       ]
     }
   }
