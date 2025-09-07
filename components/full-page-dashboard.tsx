@@ -166,7 +166,6 @@ export default function FullPageDashboard() {
         { id: "my-targets", icon: Target, label: "My Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         { id: "my-customers", icon: Users, label: "My Customers" },
-        { id: "competition", icon: TrendingUp, label: "Competition" },
       ]
     } else {
       return [

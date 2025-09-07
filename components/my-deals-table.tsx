@@ -180,17 +180,17 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
           <CardTitle>My Deals</CardTitle>
           <div className="flex items-center gap-2">
             <Input placeholder="Search by customer or deal ID" value={query} onChange={(e)=>{setQuery(e.target.value); setPage(1)}} className="w-64" />
-            <Select value={serviceFilter ?? ""} onValueChange={(v)=>{setServiceFilter(v||undefined); setPage(1)}}>
+            <Select value={serviceFilter ?? "__all__"} onValueChange={(v)=>{setServiceFilter(v === '__all__' ? undefined : v); setPage(1)}}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Service" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Services</SelectItem>
+                <SelectItem value="__all__">All Services</SelectItem>
                 {services.map(s=> <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={teamFilter ?? ""} onValueChange={(v)=>{setTeamFilter(v||undefined); setPage(1)}}>
+            <Select value={teamFilter ?? "__all__"} onValueChange={(v)=>{setTeamFilter(v === '__all__' ? undefined : v); setPage(1)}}>
               <SelectTrigger className="w-40"><SelectValue placeholder="Team" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Teams</SelectItem>
+                <SelectItem value="__all__">All Teams</SelectItem>
                 {teams.map(t=> <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
