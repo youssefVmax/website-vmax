@@ -86,3 +86,48 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ message: 'Error updating target' }, { status: 500 });
     }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { agentId, dealAmount } = await req.json();
+    
+    if (!agentId || !dealAmount) {
+      return NextResponse.json({ message: 'agentId and dealAmount are required' }, { status: 400 });
+    }
+
+    let targets = await readTargets();
+    
+    // Find target for this agent
+    const targetIndex = targets.findIndex(t => t.agentId === agentId);
+    
+    if (targetIndex === -1) {
+      return NextResponse.json({ message: 'No target found for this agent' }, { status: 404 });
+    }
+
+    // Update current sales (subtract from remaining target)
+    const target = targets[targetIndex];
+    target.currentSales = (target.currentSales || 0) + parseFloat(dealAmount);
+    target.currentDeals = (target.currentDeals || 0) + 1;
+    
+    // Update status based on progress
+    const salesProgress = target.monthlyTarget > 0 ? (target.currentSales / target.monthlyTarget) * 100 : 0;
+    const dealsProgress = target.dealsTarget > 0 ? (target.currentDeals / target.dealsTarget) * 100 : 0;
+    
+    if (salesProgress >= 100 || dealsProgress >= 100) {
+      target.status = 'exceeded';
+    } else if (salesProgress >= 70 || dealsProgress >= 70) {
+      target.status = 'on-track';
+    } else {
+      target.status = 'behind';
+    }
+
+    targets[targetIndex] = target;
+    await writeTargets(targets);
+    
+    return NextResponse.json(target, { status: 200 });
+
+  } catch (error: any) {
+    console.error('PATCH /api/targets failed:', error);
+    return NextResponse.json({ message: 'Error updating target progress' }, { status: 500 });
+  }
+}

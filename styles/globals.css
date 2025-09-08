@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import custom SweetAlert2 styles */
+@import './sweetalert-custom.css';
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

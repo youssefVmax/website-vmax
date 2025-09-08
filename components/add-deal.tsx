@@ -9,14 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+import { showDealAdded, showError, showLoading } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { USERS } from "@/lib/auth";
 import { useSalesData } from "@/hooks/useSalesData";
 
 export function AddDealPage() {
-  const { toast } = useToast();
   const { user } = useAuth();
   const { addNotification } = useNotifications();
   const salesmanOptions = USERS.filter(u => u.role === 'salesman')
@@ -157,7 +156,7 @@ export function AddDealPage() {
       if (!programOptions.includes((formData.type_program || '').toUpperCase())) errors.push('Invalid Program selected')
       if (!durationOptions.includes((formData.duration || '').toUpperCase())) errors.push('Invalid Duration selected')
       if (errors.length) {
-        toast({ title: 'Validation Error', description: errors.join(', '), variant: 'destructive' })
+        showError('Validation Error', errors.join(', '))
         setLoading(false)
         return
       }
@@ -183,8 +182,8 @@ export function AddDealPage() {
         closing_agent_norm: formData.closing_agent.toLowerCase(),
       };
 
-      // Persist to CSV via API
-      const res = await fetch('/api/sales', {
+      // Persist to deals API (not CSV)
+      const res = await fetch('/api/deals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newDeal),
@@ -206,10 +205,22 @@ export function AddDealPage() {
         actionRequired: false,
       } as any);
 
-      toast({
-        title: "Deal added successfully!",
-        description: `Deal ID: ${dealId} has been created.`,
-      });
+      // Update salesman's target progress
+      try {
+        await fetch('/api/targets', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: user?.id,
+            dealAmount: parseFloat(formData.amount) || 0
+          })
+        });
+      } catch (targetError) {
+        console.warn('Failed to update target progress:', targetError);
+        // Don't fail the deal creation if target update fails
+      }
+
+      await showDealAdded(parseFloat(formData.amount), formData.customer_name);
 
       setFormData({
         date: new Date().toISOString().split('T')[0],
@@ -236,11 +247,7 @@ export function AddDealPage() {
     } catch (error) {
       console.error('Error adding deal:', error);
 
-      toast({
-        title: "Error",
-        description: "Failed to add deal. Please try again.",
-        variant: "destructive",
-      });
+      showError("Missing Information", "Please fill in all required fields");
     } finally {
       setLoading(false);
     }

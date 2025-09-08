@@ -1,0 +1,242 @@
+/* Custom SweetAlert2 styles matching the app's futuristic design */
+
+.custom-swal-popup {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%) !important;
+  border: 1px solid rgba(6, 182, 212, 0.3) !important;
+  border-radius: 16px !important;
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(6, 182, 212, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(20px) !important;
+  color: #f1f5f9 !important;
+  font-family: inherit !important;
+}
+
+.custom-swal-title {
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+  font-size: 1.5rem !important;
+  background: linear-gradient(135deg, #06b6d4, #3b82f6) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  margin-bottom: 1rem !important;
+}
+
+.custom-swal-content {
+  color: #cbd5e1 !important;
+  font-size: 1rem !important;
+  line-height: 1.6 !important;
+}
+
+.custom-swal-confirm {
+  background: linear-gradient(135deg, #06b6d4, #3b82f6) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 4px 14px 0 rgba(6, 182, 212, 0.3) !important;
+}
+
+.custom-swal-confirm:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 25px 0 rgba(6, 182, 212, 0.4) !important;
+}
+
+.custom-swal-cancel {
+  background: rgba(71, 85, 105, 0.8) !important;
+  border: 1px solid rgba(148, 163, 184, 0.3) !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-weight: 600 !important;
+  color: #f1f5f9 !important;
+  transition: all 0.2s ease !important;
+  margin-right: 12px !important;
+}
+
+.custom-swal-cancel:hover {
+  background: rgba(100, 116, 139, 0.8) !important;
+  border-color: rgba(148, 163, 184, 0.5) !important;
+  transform: translateY(-1px) !important;
+}
+
+.custom-swal-deny {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.3) !important;
+}
+
+.custom-swal-deny:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 25px 0 rgba(239, 68, 68, 0.4) !important;
+}
+
+/* Success icon styling */
+.swal2-success .swal2-success-ring {
+  border-color: #06b6d4 !important;
+}
+
+.swal2-success .swal2-success-fix {
+  background-color: #06b6d4 !important;
+}
+
+.swal2-success [class^='swal2-success-line'] {
+  background-color: #06b6d4 !important;
+}
+
+/* Error icon styling */
+.swal2-error .swal2-x-mark-line-left,
+.swal2-error .swal2-x-mark-line-right {
+  background-color: #ef4444 !important;
+}
+
+/* Warning icon styling */
+.swal2-warning .swal2-warning-outline {
+  border-color: #f59e0b !important;
+}
+
+.swal2-warning .swal2-warning-inner {
+  color: #f59e0b !important;
+}
+
+/* Info icon styling */
+.swal2-info .swal2-info-ring {
+  border-color: #3b82f6 !important;
+}
+
+.swal2-info .swal2-info-inner {
+  color: #3b82f6 !important;
+}
+
+/* Question icon styling */
+.swal2-question .swal2-question-mark {
+  color: #06b6d4 !important;
+}
+
+.swal2-question .swal2-question-ring {
+  border-color: #06b6d4 !important;
+}
+
+/* Timer progress bar */
+.swal2-timer-progress-bar {
+  background: linear-gradient(90deg, #06b6d4, #3b82f6) !important;
+}
+
+/* Toast positioning and styling */
+.swal2-toast {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%) !important;
+  border: 1px solid rgba(6, 182, 212, 0.3) !important;
+  border-radius: 12px !important;
+  box-shadow: 
+    0 10px 25px -5px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(6, 182, 212, 0.1) !important;
+  backdrop-filter: blur(20px) !important;
+  color: #f1f5f9 !important;
+}
+
+.swal2-toast .swal2-title {
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+}
+
+/* Custom deal success content */
+.deal-success-content {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.deal-amount {
+  font-size: 2rem;
+  font-weight: bold;
+  background: linear-gradient(135deg, #06b6d4, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+}
+
+.deal-customer {
+  font-size: 1.1rem;
+  color: #cbd5e1;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.deal-message {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+/* Loading spinner customization */
+.swal2-loader {
+  border-color: #06b6d4 transparent #06b6d4 transparent !important;
+}
+
+/* Backdrop customization */
+.swal2-backdrop-show {
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Animation improvements */
+@keyframes swal2-show {
+  0% {
+    transform: scale(0.7) translateY(20px);
+    opacity: 0;
+  }
+  45% {
+    transform: scale(1.05) translateY(-5px);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(0.95) translateY(0);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes swal2-hide {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.5) translateY(20px);
+    opacity: 0;
+  }
+}
+
+.swal2-show {
+  animation: swal2-show 0.3s ease-out !important;
+}
+
+.swal2-hide {
+  animation: swal2-hide 0.15s ease-in !important;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .custom-swal-popup {
+    margin: 1rem !important;
+    max-width: calc(100vw - 2rem) !important;
+  }
+  
+  .deal-amount {
+    font-size: 1.5rem;
+  }
+  
+  .custom-swal-title {
+    font-size: 1.25rem !important;
+  }
+}

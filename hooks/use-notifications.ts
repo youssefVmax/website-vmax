@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { Notification } from "@/types/notification"
 import { useAuth } from "@/hooks/useAuth"
-import { useToast } from "@/hooks/use-toast"
+import { showToast } from "@/lib/sweetalert"
 
 interface NotificationsContextType {
   notifications: Notification[]
@@ -19,7 +19,6 @@ const NotificationsContext = createContext<NotificationsContextType | undefined>
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const { user } = useAuth()
-  const { toast } = useToast()
   const knownIdsRef = React.useRef<Set<string>>(new Set())
 
   // Poll notifications from API
@@ -72,7 +71,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
                 const addressedToUser = Array.isArray(n.to) && (n.to.includes('ALL') || (user?.id && n.to.includes(user.id)))
                 const managerSeesAll = user?.role === 'manager'
                 if ((addressedToUser || managerSeesAll) && !n.read) {
-                  toast({ title: n.title, description: n.message })
+                  // Use SweetAlert2 toast matching app design
+                  const title = n.title ? `${n.title}` : 'Notification'
+                  const message = n.message ? ` ${n.message}` : ''
+                  showToast(`${title}${message ? ': ' + message : ''}`, 'info')
                 }
               }
             }
@@ -90,7 +92,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       console.warn('EventSource not available; using polling only')
     }
     return () => { es?.close() }
-  }, [user?.id, user?.role, toast])
+  }, [user?.id, user?.role])
 
   const unreadCount = notifications.filter(n => !n.read).length
 

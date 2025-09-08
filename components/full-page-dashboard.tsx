@@ -27,6 +27,7 @@ import {
   UserCheck,
   Shield,
   PieChart,
+  DollarSign,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -41,6 +42,8 @@ import { SalesTargets } from "@/components/sales-targets"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import MyDealsTable from "@/components/my-deals-table"
+import { useSalesData } from "@/hooks/useSalesData"
+import { ImportExportControls } from "@/components/import-export-controls"
 
 export default function FullPageDashboard() {
   const { user, logout } = useAuth()
@@ -49,6 +52,15 @@ export default function FullPageDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Listen for tab changes from dashboard buttons
+  useEffect(() => {
+    const handleTabChange = (event: CustomEvent) => {
+      setActiveTab(event.detail)
+    }
+    window.addEventListener('setActiveTab', handleTabChange as EventListener)
+    return () => window.removeEventListener('setActiveTab', handleTabChange as EventListener)
+  }, [])
 
   // Apply theme to document
   useEffect(() => {
@@ -348,12 +360,13 @@ export default function FullPageDashboard() {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto">
             <PageContent 
               activeTab={activeTab} 
               user={user} 
               uploadedFiles={uploadedFiles}
               setUploadedFiles={setUploadedFiles}
+              setActiveTab={setActiveTab}
             />
           </main>
         </div>
@@ -438,16 +451,18 @@ function PageContent({
   activeTab, 
   user, 
   uploadedFiles, 
-  setUploadedFiles 
+  setUploadedFiles,
+  setActiveTab
 }: { 
   activeTab: string; 
   user: any;
   uploadedFiles: string[];
   setUploadedFiles: (files: string[]) => void;
+  setActiveTab: (tab: string) => void;
 }) {
   switch (activeTab) {
     case "dashboard":
-      return <DashboardOverview user={user} />
+      return <DashboardOverview user={user} setActiveTab={setActiveTab} />
     case "sales-dashboard":
       return <SalesAnalysisDashboard userRole={user.role} user={user} />
     case "analytics":
@@ -462,6 +477,8 @@ function PageContent({
       return <AddDealPage />
     case "team-targets":
       return <SalesTargets userRole={user.role} user={user} />
+    case "my-targets":
+      return <SalesTargets userRole={user.role} user={user} />
     case "datacenter":
       return <DataCenter userRole={user.role} user={user} />
     case "notifications":
@@ -473,11 +490,29 @@ function PageContent({
     case "settings":
       return <ProfileSettings user={user} />
     default:
-      return <DashboardOverview user={user} />
+      return <DashboardOverview user={user} setActiveTab={setActiveTab} />
   }
 }
 
-function DashboardOverview({ user }: { user: any }) {
+function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
+  const { sales = [], metrics, loading, error } = useSalesData(user.role, user.id, user.name)
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-16 bg-muted rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
@@ -490,49 +525,59 @@ function DashboardOverview({ user }: { user: any }) {
                 {user.role === 'manager' 
                   ? 'Here\'s an overview of your team\'s performance today.'
                   : user.role === 'salesman'
-                  ? 'Ready to close some deals? Here\'s your performance overview.'
-                  : 'Here\'s an overview of your customer support activities.'}
+                    ? `You have ${sales.length} deals totaling $${metrics?.totalSales?.toFixed(2) || '0.00'}`
+                    : `Supporting ${sales.length} customer interactions.`}
               </p>
             </div>
-            <Badge variant="outline" className="text-sm">
-              {user.team || user.role}
-            </Badge>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-cyan-600">${metrics?.totalSales?.toFixed(2) || '0.00'}</p>
+              <p className="text-sm text-muted-foreground">{sales.length} Deals</p>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Role-based KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <MetricCard
-          title="Total Sales"
-          value="$125,430"
+          title={user.role === 'manager' ? "Team Sales" : "My Sales"}
+          value={`$${metrics?.totalSales?.toFixed(2) || '0.00'}`}
+          icon={DollarSign}
+          trend="up"
+          change={`${sales.length} deals`}
+        />
+        <MetricCard
+          title={user.role === 'manager' ? "Total Deals" : "My Deals"}
+          value={String(sales.length)}
           icon={TrendingUp}
           trend="up"
-          change="+12.5%"
+          change={`Avg: $${metrics?.averageDealSize?.toFixed(2) || '0.00'}`}
         />
         <MetricCard
-          title="Active Deals"
-          value="24"
-          icon={FileText}
-          trend="up"
-          change="+8.2%"
-        />
-        <MetricCard
-          title="Customers"
-          value="156"
+          title={user.role === 'manager' ? "Active Agents" : "My Performance"}
+          value={user.role === 'manager' ? String(Object.keys(metrics?.salesByAgent || {}).length) : `${((sales.length / 30) || 0).toFixed(1)}/day`}
           icon={Users}
           trend="stable"
-          change="+2.1%"
+          change={user.role === 'manager' ? "team members" : "average"}
         />
         <MetricCard
-          title="Target Progress"
-          value="78%"
+          title={user.role === 'manager' ? "Top Service" : "Recent Activity"}
+          value={user.role === 'manager' 
+            ? Object.entries(metrics?.salesByService || {}).sort(([,a], [,b]) => (b as number) - (a as number))[0]?.[0] || 'N/A'
+            : `${metrics?.recentSales?.length || 0} recent`}
           icon={Target}
           trend="up"
-          change="+5.3%"
+          change={user.role === 'manager' ? "best seller" : "this week"}
         />
       </div>
 
+
       <SalesAnalysisDashboard userRole={user.role} user={user} />
+      
+      {/* Import/Export Controls for Managers */}
+      {user.role === 'manager' && (
+        <ImportExportControls userRole={user.role} />
+      )}
       
       {/* Quick Actions */}
       <Card>
@@ -541,64 +586,56 @@ function DashboardOverview({ user }: { user: any }) {
           <CardDescription>Common tasks for your role</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {user.role === 'manager' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {user.role === 'manager' ? (
               <>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <Plus className="h-6 w-6 mb-2" />
-                  Add Deal
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("team-management")}>
+                  <Users className="h-6 w-6 mb-2" />
+                  Team Overview
                 </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("team-targets")}>
                   <Target className="h-6 w-6 mb-2" />
                   Set Targets
                 </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <Users className="h-6 w-6 mb-2" />
-                  Manage Team
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("analytics")}>
                   <BarChart3 className="h-6 w-6 mb-2" />
-                  View Reports
+                  Analytics
                 </Button>
-              </>
-            )}
-            
-            {user.role === 'salesman' && (
-              <>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <Plus className="h-6 w-6 mb-2" />
-                  New Deal
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <FileText className="h-6 w-6 mb-2" />
-                  My Deals
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <Target className="h-6 w-6 mb-2" />
-                  My Targets
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <TrendingUp className="h-6 w-6 mb-2" />
-                  Competition
-                </Button>
-              </>
-            )}
-            
-            {user.role === 'customer-service' && (
-              <>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <Users className="h-6 w-6 mb-2" />
-                  Customers
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
-                  <FileText className="h-6 w-6 mb-2" />
-                  Support Deals
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("notifications")}>
                   <Bell className="h-6 w-6 mb-2" />
                   Notifications
                 </Button>
-                <Button variant="outline" className="h-20 flex flex-col">
+              </>
+            ) : user.role === 'salesman' ? (
+              <>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("add-deal")}>
+                  <Plus className="h-6 w-6 mb-2" />
+                  Add Deal
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("my-deals")}>
+                  <FileText className="h-6 w-6 mb-2" />
+                  My Deals
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("my-targets")}>
+                  <Target className="h-6 w-6 mb-2" />
+                  My Targets
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("analytics")}>
+                  <Activity className="h-6 w-6 mb-2" />
+                  Analytics
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("support-deals")}>
+                  <FileText className="h-6 w-6 mb-2" />
+                  Support Deals
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("notifications")}>
+                  <Bell className="h-6 w-6 mb-2" />
+                  Notifications
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("analytics")}>
                   <Activity className="h-6 w-6 mb-2" />
                   Analytics
                 </Button>

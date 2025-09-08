@@ -40,8 +40,8 @@ interface AnalyticsData {
 }
 
 function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps) {
-  // Use live data (CSV + SSE) with sanitization from the hook
-  const { sales, loading } = useSalesData(userRole, user?.id, user?.name);
+  // Use live data with real-time updates via SSE
+  const { sales, loading, error, refresh } = useSalesData(userRole, user?.id, user?.name);
 
   // Normalize to DealData for charts/KPIs
   const salesData: DealData[] = (sales || []).map((row: any) => ({
@@ -176,287 +176,355 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-2">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-              <p>Loading sales data...</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-16 bg-muted rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (!analytics) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-red-600">No sales data available</p>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="p-6">
+          <p className="text-red-600">Error loading data: {error.message}</p>
+          <button onClick={refresh} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded">
+            Retry
+          </button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!analytics || analytics.totalDeals === 0) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-gray-600 mb-4">No deals found. Start by adding your first deal!</p>
+          <div className="text-sm text-gray-500">
+            <p>• Total Sales: $0.00</p>
+            <p>• Total Deals: 0</p>
+            <p>• Average Deal Size: $0.00</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold mb-2">Welcome back, {user.name}!</h1>
-          <p className="text-gray-600">
+    <div className="space-y-6">
+      {/* Real-time Status Indicator */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Sales Analytics</h2>
+          <p className="text-sm text-muted-foreground">
             {userRole === 'manager' 
-              ? 'Here\'s an overview of your team\'s performance.' 
+              ? `Team performance • ${analytics.totalDeals} deals • $${analytics.totalSales.toLocaleString()}`
               : userRole === 'salesman'
-              ? 'Track your sales performance and targets.'
-              : 'Customer support dashboard.'}
+              ? `Your performance • ${analytics.totalDeals} deals • $${analytics.totalSales.toLocaleString()}`
+              : `Support metrics • ${analytics.totalDeals} interactions`}
           </p>
         </div>
-
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Sales</p>
-                  <p className="text-2xl font-bold text-gray-900">${analytics.totalSales.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                </div>
-                <DollarSign className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Deals</p>
-                  <p className="text-2xl font-bold text-gray-900">{analytics.totalDeals}</p>
-                </div>
-                <Target className="h-8 w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Average Deal</p>
-                  <p className="text-2xl font-bold text-gray-900">${Number(analytics.averageDealSize).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Top Agent Sales</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    ${analytics.topAgents[0]?.sales?.toLocaleString() || '0'}
-                  </p>
-                </div>
-                <Award className="h-8 w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex items-center gap-2 text-sm text-green-600">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          Live Data
         </div>
+      </div>
 
-        {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Daily Sales Trend */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Daily Sales Trend</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={analytics.dailyTrend}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis />
-                    <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Sales']} />
-                    <Line type="monotone" dataKey="sales" stroke="#8884d8" strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Sales</p>
+                <p className="text-2xl font-bold text-gray-900">${analytics.totalSales.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
               </div>
-            </CardContent>
-          </Card>
+              <DollarSign className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Top Agents */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Performing Agents</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analytics.topAgents.slice(0, 8)} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
-                    <Tooltip formatter={(value) => [`$${value}`, 'Sales']} />
-                    <Bar dataKey="sales" fill="#82ca9d" />
-                  </BarChart>
-                </ResponsiveContainer>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Deals</p>
+                <p className="text-2xl font-bold text-gray-900">{analytics.totalDeals}</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <Target className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Charts Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Sales by Service */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales by Service Type</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={analytics.salesByService}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="sales"
-                      nameKey="service"
-                      label={(entry: any) => `${entry.service}: ${((entry.sales / analytics.totalSales) * 100 || 0).toFixed(0)}%`}
-                    >
-                      {analytics.salesByService.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Sales']} />
-                  </PieChart>
-                </ResponsiveContainer>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Average Deal</p>
+                <p className="text-2xl font-bold text-gray-900">${Number(analytics.averageDealSize).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
               </div>
-            </CardContent>
-          </Card>
+              <TrendingUp className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Sales by Team */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales by Team</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analytics.salesByTeam}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="team" tick={{ fontSize: 12 }} />
-                    <YAxis />
-                    <Tooltip formatter={(value) => [`$${value}`, 'Sales']} />
-                    <Bar dataKey="sales" fill="#ffc658" />
-                  </BarChart>
-                </ResponsiveContainer>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Top Agent Sales</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  ${analytics.topAgents[0]?.sales?.toLocaleString() || '0'}
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <Award className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* User Analysis Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* User Count Distribution */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <div className="flex items-center">
-                  <UserCheck className="mr-2 h-5 w-5" />
-                  User Count Distribution
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analytics.userAnalysisData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip formatter={(value, name) => {
-                      if (name === 'value') return [value, 'Count'];
-                      return [value, name];
-                    }} />
-                    <Bar dataKey="value" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Revenue by User Count */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <div className="flex items-center">
-                  <BarChart3 className="mr-2 h-5 w-5" />
-                  Revenue by User Count
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ScatterChart>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" dataKey="name" name="Users" />
-                    <YAxis type="number" dataKey="value" name="Revenue" />
-                    <ZAxis type="number" dataKey="name" name="Deals" range={[50, 300]} />
-                    <Tooltip formatter={(value, name) => {
-                      if (name === 'name') return [value, 'Users per Deal'];
-                      if (name === 'value') return [`$${value}`, 'Total Revenue'];
-                      return [value, name];
-                    }} />
-                    <Scatter name="Deals" data={analytics.userAnalysisData} fill="#8884d8" />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Deals Table */}
+      {/* Charts Row 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Daily Sales Trend */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Deals</CardTitle>
+            <CardTitle>Daily Sales Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={analytics.dailyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis />
+                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Sales']} />
+                  <Line type="monotone" dataKey="sales" stroke="#8884d8" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top Agents */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Performing Agents</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.topAgents.slice(0, 8)} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
+                  <Tooltip formatter={(value) => [`$${value}`, 'Sales']} />
+                  <Bar dataKey="sales" fill="#82ca9d" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Row 2 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Sales by Service */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales by Service Type</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={analytics.salesByService}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="sales"
+                    nameKey="service"
+                    label={(entry: any) => `${entry.service}: ${((entry.sales / analytics.totalSales) * 100 || 0).toFixed(0)}%`}
+                  >
+                    {analytics.salesByService.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Sales']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sales by Team */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales by Team</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.salesByTeam}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="team" tick={{ fontSize: 12 }} />
+                  <YAxis />
+                  <Tooltip formatter={(value) => [`$${value}`, 'Sales']} />
+                  <Bar dataKey="sales" fill="#ffc658" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* User Analysis Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* User Count Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <div className="flex items-center">
+                <UserCheck className="mr-2 h-5 w-5" />
+                User Count Distribution
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.userAnalysisData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip formatter={(value, name) => {
+                    if (name === 'value') return [value, 'Count'];
+                    return [value, name];
+                  }} />
+                  <Bar dataKey="value" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Revenue by User Count */}
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <div className="flex items-center">
+                <BarChart3 className="mr-2 h-5 w-5" />
+                Revenue by User Count
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart data={analytics.userAnalysisData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" dataKey="name" name="Users" />
+                  <YAxis type="number" dataKey="value" name="Revenue" />
+                  <ZAxis type="number" dataKey="name" name="Deals" range={[50, 300]} />
+                  <Tooltip formatter={(value, name) => {
+                    if (name === 'name') return [value, 'Users per Deal'];
+                    if (name === 'value') return [`$${value}`, 'Total Revenue'];
+                    return [value, name];
+                  }} />
+                  <Scatter name="Deals" fill="#8884d8" />
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Deals Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Deals</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2">Date</th>
+                  <th className="text-left py-2">Customer</th>
+                  <th className="text-left py-2">Amount</th>
+                  <th className="text-left py-2">Service</th>
+                  <th className="text-left py-2">Sales Agent</th>
+                  <th className="text-left py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.recentDeals.map((deal, index) => (
+                  <tr key={index} className="border-b hover:bg-gray-50">
+                    <td className="py-2">{deal.date.toLocaleDateString()}</td>
+                    <td className="py-2">{deal.customer_name}</td>
+                    <td className="py-2 font-semibold">${deal.amount}</td>
+                    <td className="py-2">{deal.service}</td>
+                    <td className="py-2 capitalize">{deal.salesAgent}</td>
+                    <td className="py-2">
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                        Completed
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Agent Performance Table (Manager only) */}
+      {userRole === 'manager' && (
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Agent Performance Summary</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2">Date</th>
-                    <th className="text-left py-2">Customer</th>
-                    <th className="text-left py-2">Amount</th>
-                    <th className="text-left py-2">Service</th>
-                    <th className="text-left py-2">Sales Agent</th>
-                    <th className="text-left py-2">Status</th>
+                    <th className="text-left py-2">Agent</th>
+                    <th className="text-left py-2">Total Sales</th>
+                    <th className="text-left py-2">Deals Count</th>
+                    <th className="text-left py-2">Average Deal</th>
+                    <th className="text-left py-2">Performance</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {analytics.recentDeals.map((deal, index) => (
+                  {analytics.topAgents.map((agent, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="py-2">{deal.date.toLocaleDateString()}</td>
-                      <td className="py-2">{deal.customer_name}</td>
-                      <td className="py-2 font-semibold">${deal.amount}</td>
-                      <td className="py-2">{deal.service}</td>
-                      <td className="py-2 capitalize">{deal.salesAgent}</td>
+                      <td className="py-2 capitalize font-medium">{agent.agent}</td>
+                      <td className="py-2 font-semibold">${agent.sales.toLocaleString()}</td>
+                      <td className="py-2">{agent.deals}</td>
+                      <td className="py-2">${(agent.sales / agent.deals).toFixed(0)}</td>
                       <td className="py-2">
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                          Completed
-                        </span>
+                        <div className="flex items-center">
+                          <div className="w-20 bg-gray-200 rounded-full h-2 mr-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full" 
+                              style={{ width: `${(agent.sales / analytics.topAgents[0].sales) * 100}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs">
+                            {((agent.sales / analytics.topAgents[0].sales) * 100).toFixed(0)}%
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -465,53 +533,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
             </div>
           </CardContent>
         </Card>
-        {/* Agent Performance Table (Manager only) */}
-        {userRole === 'manager' && (
-          <Card className="mt-8">
-            <CardHeader>
-              <CardTitle>Agent Performance Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Agent</th>
-                      <th className="text-left py-2">Total Sales</th>
-                      <th className="text-left py-2">Deals Count</th>
-                      <th className="text-left py-2">Average Deal</th>
-                      <th className="text-left py-2">Performance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.topAgents.map((agent, index) => (
-                      <tr key={index} className="border-b hover:bg-gray-50">
-                        <td className="py-2 capitalize font-medium">{agent.agent}</td>
-                        <td className="py-2 font-semibold">${agent.sales.toLocaleString()}</td>
-                        <td className="py-2">{agent.deals}</td>
-                        <td className="py-2">${(agent.sales / agent.deals).toFixed(0)}</td>
-                        <td className="py-2">
-                          <div className="flex items-center">
-                            <div className="w-20 bg-gray-200 rounded-full h-2 mr-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full" 
-                                style={{ width: `${(agent.sales / analytics.topAgents[0].sales) * 100}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-xs">
-                              {((agent.sales / analytics.topAgents[0].sales) * 100).toFixed(0)}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      )}
     </div>
   );
 }
