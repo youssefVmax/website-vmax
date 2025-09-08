@@ -42,7 +42,7 @@ import { SalesTargets } from "@/components/sales-targets"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import MyDealsTable from "@/components/my-deals-table"
-import { useSalesData } from "@/hooks/useSalesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { ImportExportControls } from "@/components/import-export-controls"
 
 interface FullPageDashboardProps {
@@ -283,6 +283,12 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
                     }`}
                   >
                     {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
@@ -482,7 +488,7 @@ function PageContent({
 }
 
 function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
-  const { sales = [], metrics, loading, error } = useSalesData(user.role, user.id, user.name)
+  const { sales = [], metrics, loading, error } = useFirebaseSalesData(user.role, user.id, user.name)
 
   if (loading) {
     return (

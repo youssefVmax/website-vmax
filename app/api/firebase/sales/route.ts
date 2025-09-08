@@ -1,35 +1,6 @@
-import { promises as fs } from 'fs';
-import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { salesService } from '@/lib/firebase-services';
 import { Sale } from '@/types/firebase';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
-// The path to the deals data file (separate from CSV)
-const dataFilePath = path.join(process.cwd(), 'public', 'data', 'deals.json');
-
-// Function to read deals data from the file
-async function readDealsData() {
-  try {
-    const fileContent = await fs.readFile(dataFilePath, 'utf-8');
-    const parsed = JSON.parse(fileContent);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error: any) {
-    // If the file doesn't exist, create it with empty array
-    if (error.code === 'ENOENT') {
-      await fs.writeFile(dataFilePath, '[]', 'utf-8');
-      return [];
-    }
-    throw error;
-  }
-}
-
-// Function to write deals data to the file
-async function writeDealsData(data: any[]) {
-  await fs.writeFile(dataFilePath, JSON.stringify(data, null, 2), 'utf-8');
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,9 +17,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(sales);
   } catch (error) {
-    console.error('Error fetching deals:', error);
+    console.error('Error fetching sales:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch deals' },
+      { error: 'Failed to fetch sales data' },
       { status: 500 }
     );
   }
@@ -95,9 +66,9 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating deal:', error);
+    console.error('Error creating sale:', error);
     return NextResponse.json(
-      { error: 'Failed to create deal' },
+      { error: 'Failed to create sale' },
       { status: 500 }
     );
   }
@@ -119,9 +90,9 @@ export async function PUT(request: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating deal:', error);
+    console.error('Error updating sale:', error);
     return NextResponse.json(
-      { error: 'Failed to update deal' },
+      { error: 'Failed to update sale' },
       { status: 500 }
     );
   }
@@ -143,9 +114,9 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting deal:', error);
+    console.error('Error deleting sale:', error);
     return NextResponse.json(
-      { error: 'Failed to delete deal' },
+      { error: 'Failed to delete sale' },
       { status: 500 }
     );
   }

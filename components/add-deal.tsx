@@ -13,7 +13,7 @@ import { showDealAdded, showError, showLoading } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { USERS } from "@/lib/auth";
-import { useSalesData } from "@/hooks/useSalesData";
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
 
 export function AddDealPage() {
   const { user } = useAuth();
@@ -21,7 +21,7 @@ export function AddDealPage() {
   const salesmanOptions = USERS.filter(u => u.role === 'salesman')
   const allUserOptions = USERS
   const isSalesman = user?.role === 'salesman'
-  const { sales } = useSalesData(user?.role || 'manager', user?.id, user?.name)
+  const { sales, addSale } = useFirebaseSalesData(user?.role || 'manager', user?.id, user?.name)
 
   // Dynamic options from current data
   const teamOptions = useMemo(() => {
@@ -182,28 +182,21 @@ export function AddDealPage() {
         closing_agent_norm: formData.closing_agent.toLowerCase(),
       };
 
-      // Persist to deals API (not CSV)
-      const res = await fetch('/api/deals', {
+      // Save to Firebase directly
+      await addSale(newDeal);
+
+      // Create notification for managers
+      await fetch('/api/firebase/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newDeal),
+        body: JSON.stringify({
+          title: 'New Deal Created',
+          message: `${user?.name || 'Unknown'} created new deal ${dealId} for ${formData.customer_name} worth $${formData.amount}`,
+          type: 'success',
+          userRole: 'manager',
+          isRead: false
+        }),
       });
-      if (!res.ok) throw new Error('Failed to save deal');
-
-      // Notify manager in real-time via notifications API
-      await addNotification({
-        title: 'New Deal Created',
-        message: `${user?.name || 'Unknown'} created new deal ${dealId} for ${formData.customer_name}.`,
-        type: 'deal',
-        priority: 'medium',
-        from: user?.id || 'system',
-        to: ['manager-001'],
-        dealId,
-        dealName: formData.customer_name,
-        dealValue: parseFloat(formData.amount) || 0,
-        dealStage: 'new',
-        actionRequired: false,
-      } as any);
 
       // Update salesman's target progress
       try {

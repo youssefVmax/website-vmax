@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts'
 import { TrendingUp, DollarSign, Users, Target, Calendar, Download, Filter, BarChart3, PieChart as PieChartIcon, Activity, Award } from "lucide-react"
-import { useSalesData } from "@/hooks/useSalesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { addDays, format } from "date-fns"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"

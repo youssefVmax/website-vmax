@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter, ZAxis } from 'recharts';
 import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3 } from 'lucide-react';
-import { useSalesData } from '@/hooks/useSalesData';
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
 
@@ -41,7 +41,7 @@ interface AnalyticsData {
 
 function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps) {
   // Use live data with real-time updates via SSE
-  const { sales, loading, error, refresh } = useSalesData(userRole, user?.id, user?.name);
+  const { sales, loading, error, refresh } = useFirebaseSalesData(userRole, user?.id, user?.name);
 
   // Normalize to DealData for charts/KPIs
   const salesData: DealData[] = (sales || []).map((row: any) => ({

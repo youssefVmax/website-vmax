@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from "@/hooks/use-toast"
 import { useNotifications } from "@/hooks/use-notifications"
 import { ArrowUpDown, Download, Eye, Edit as EditIcon, RotateCcw } from "lucide-react"
-import { useSalesData } from "@/hooks/useSalesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 
 interface MyDealsTableProps {
   user: { id: string; name: string; username: string; role: 'manager'|'salesman'|'customer-service' }
@@ -20,7 +20,7 @@ interface MyDealsTableProps {
 
 export default function MyDealsTable({ user }: MyDealsTableProps) {
   // Fetch scoped rows for the salesman using streaming hook
-  const { sales = [], loading, error } = useSalesData('salesman', user.id, user.name)
+  const { sales = [], loading, error } = useFirebaseSalesData('salesman', user.id, user.name)
   const { toast } = useToast()
   const { addNotification } = useNotifications()
 
