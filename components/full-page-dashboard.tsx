@@ -35,7 +35,6 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
 import SalesAnalysisDashboard from '@/components/sales-dashboard'
 import NotificationsPage from "@/components/notifications-page-new"
-import { CustomerList } from "@/app/components/customer-list"
 import { AddDealPage } from "@/components/add-deal"
 import { DataCenter } from "@/components/data-center"
 import { SalesTargets } from "@/components/sales-targets"
@@ -147,7 +146,7 @@ export default function FullPageDashboard() {
         ...baseItems,
         { id: "team-targets", icon: Target, label: "Team Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
-        { id: "customers", icon: Users, label: "All Customers" },
+        
         { id: "team-management", icon: UserCheck, label: "Team Management" },
         { id: "settings", icon: Settings, label: "Settings" },
       ]
@@ -158,13 +157,13 @@ export default function FullPageDashboard() {
         { id: "add-deal", icon: Plus, label: "Add Deal" },
         { id: "my-targets", icon: Target, label: "My Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
-        { id: "my-customers", icon: Users, label: "My Customers" },
+        
       ]
     } else {
       return [
         ...baseItems,
         { id: "support-deals", icon: FileText, label: "Support Deals" },
-        { id: "customers", icon: Users, label: "Customer Support" },
+        
         { id: "datacenter", icon: Database, label: "Data Center" },
       ]
     }
@@ -424,9 +423,6 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "Data Center"
     case "notifications":
       return "Notifications"
-    case "customers":
-    case "my-customers":
-      return userRole === 'manager' ? "All Customers" : "My Customers"
     case "team-management":
       return "Team Management"
     case "competition":
@@ -465,15 +461,11 @@ function PageContent({
     case "add-deal":
       return <AddDealPage />
     case "team-targets":
-    case "my-targets":
       return <SalesTargets userRole={user.role} user={user} />
     case "datacenter":
       return <DataCenter userRole={user.role} user={user} />
     case "notifications":
       return <NotificationsPage userRole={user.role} user={user} />
-    case "customers":
-    case "my-customers":
-      return <CustomerList userRole={user.role} userId={user.id} />
     case "team-management":
       return <TeamManagement user={user} />
     case "competition":
