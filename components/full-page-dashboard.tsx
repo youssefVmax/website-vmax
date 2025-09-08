@@ -45,8 +45,12 @@ import MyDealsTable from "@/components/my-deals-table"
 import { useSalesData } from "@/hooks/useSalesData"
 import { ImportExportControls } from "@/components/import-export-controls"
 
-export default function FullPageDashboard() {
-  const { user, logout } = useAuth()
+interface FullPageDashboardProps {
+  user: any;
+  onLogout: () => void;
+}
+
+export default function FullPageDashboard({ user, onLogout }: FullPageDashboardProps) {
   const [isDark, setIsDark] = useState(true)
   const [activeTab, setActiveTab] = useState("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -279,23 +283,6 @@ export default function FullPageDashboard() {
                     }`}
                   >
                     {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={logout}
-                    className={`transition-colors duration-300 ${
-                      isDark ? 'text-slate-400 hover:text-slate-100' : 'text-slate-600 hover:text-slate-800'
-                    }`}
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
