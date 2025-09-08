@@ -40,37 +40,38 @@ export function AddDealPage() {
     return Array.from(set).sort()
   }, [sales])
 
-  // Program and Duration options derived from raw API
-  const [programOptions, setProgramOptions] = useState<string[]>(["IBO PLAYER","BOB PLAYER","IBO PRO","SMARTERS","IBOSS"])
-  const [durationOptions, setDurationOptions] = useState<string[]>(["YEAR","TWO YEAR","2y+6m","2y+5m","2y+4m","2y+3m","2y+2m","2y+1m"])
+  // Program and Duration options derived from Firebase data
+  const programOptions = useMemo(() => {
+    const set = new Set<string>()
+    ;(sales || []).forEach(s => { 
+      const prog = (s.type_program || '').toString().toUpperCase()
+      if (prog) set.add(prog)
+    })
+    // Ensure sensible defaults are present
+    ;["IBO PLAYER","BOB PLAYER","IBO PRO","SMARTERS","IBOSS"].forEach(v => set.add(v))
+    return Array.from(set).sort()
+  }, [sales])
 
-  useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      try {
-        const res = await fetch('/api/sales')
-        if (!res.ok) return
-        const rows = await res.json()
-        const programs = new Set<string>()
-        const durations = new Set<string>()
-        for (const r of rows || []) {
-          const prog = (r.product_type || r.type_program || '').toString().toUpperCase()
-          if (prog) programs.add(prog)
-          const durLabel = (r.duration || '').toString().toUpperCase()
-          if (durLabel) durations.add(durLabel)
-        }
-        // Ensure sensible defaults are present
-        ;["IBO PLAYER","BOB PLAYER","IBO PRO","SMARTERS","IBOSS"].forEach(v => programs.add(v))
-        ;["YEAR","TWO YEAR","2Y+6M","2Y+5M","2Y+4M","2Y+3M","2Y+2M","2Y+1M"].forEach(v => durations.add(v))
-        if (mounted) {
-          setProgramOptions(Array.from(programs).sort())
-          setDurationOptions(Array.from(durations).sort())
-        }
-      } catch {}
-    }
-    load()
-    return () => { mounted = false }
-  }, [])
+  const durationOptions = useMemo(() => {
+    const set = new Set<string>()
+    ;(sales || []).forEach(s => { 
+      // Convert duration_months to duration labels
+      const months = s.duration_months
+      let durLabel = ''
+      if (months === 12) durLabel = 'YEAR'
+      else if (months === 24) durLabel = 'TWO YEAR'
+      else if (months === 30) durLabel = '2Y+6M'
+      else if (months === 29) durLabel = '2Y+5M'
+      else if (months === 28) durLabel = '2Y+4M'
+      else if (months === 27) durLabel = '2Y+3M'
+      else if (months === 26) durLabel = '2Y+2M'
+      else if (months === 25) durLabel = '2Y+1M'
+      if (durLabel) set.add(durLabel)
+    })
+    // Ensure sensible defaults are present
+    ;["YEAR","TWO YEAR","2Y+6M","2Y+5M","2Y+4M","2Y+3M","2Y+2M","2Y+1M"].forEach(v => set.add(v))
+    return Array.from(set).sort()
+  }, [sales])
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     customer_name: "",

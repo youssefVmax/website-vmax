@@ -1,8 +1,0 @@
-{
-  "theme": "dark",
-  "emailNotifications": true,
-  "pushNotifications": true,
-  "dealAlerts": true,
-  "targetReminders": true,
-  "autoLogout": 30
-}

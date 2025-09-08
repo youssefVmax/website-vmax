@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Target, TrendingUp, Calendar, Award, Edit, Plus, Users, BarChart3 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useSalesData } from "@/hooks/useSalesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { useFirebaseTargets } from "@/hooks/useFirebaseTargets"
 
 interface SalesTarget {
   id: string
@@ -34,8 +35,8 @@ interface SalesTargetsProps {
 
 export function SalesTargets({ userRole, user }: SalesTargetsProps) {
   const { toast } = useToast()
-  const { sales } = useSalesData(userRole, user.id, user.name)
-  const [targets, setTargets] = useState<SalesTarget[]>([])
+  const { sales } = useFirebaseSalesData(userRole, user.id, user.name)
+  const { targets: firebaseTargets, loading: targetsLoading, addTarget, updateTarget } = useFirebaseTargets(user.id, userRole)
   const [isLoading, setIsLoading] = useState(true)
 
   const [newTarget, setNewTarget] = useState({
@@ -51,49 +52,39 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
 
   const isManager = userRole === 'manager'
 
-  // Fetch targets from API and poll for real-time updates
+  // Update loading state based on Firebase targets loading
   useEffect(() => {
-    const fetchTargets = async () => {
-      try {
-        const res = await fetch('/api/targets')
-        if (!res.ok) throw new Error('Failed to fetch targets')
-        const data = await res.json()
-        setTargets(data)
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Could not load sales targets.",
-          variant: "destructive"
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchTargets() // Initial fetch
-
-    const interval = setInterval(fetchTargets, 30000) // Poll every 30 seconds
-
-    return () => clearInterval(interval) // Cleanup on unmount
-  }, [toast])
+    setIsLoading(targetsLoading)
+  }, [targetsLoading])
 
   // Filter and process targets based on user role and sales data
   const processedTargets: SalesTarget[] = useMemo(() => {
     const targetsToProcess = userRole === 'salesman' 
-      ? targets.filter(t => t.agentName.toLowerCase() === user.name.toLowerCase() || t.agentId === user.id)
-      : targets;
+      ? firebaseTargets.filter(t => t.agentName.toLowerCase() === user.name.toLowerCase() || t.agentId === user.id)
+      : firebaseTargets;
 
     if (!sales) {
-      return targetsToProcess.map(t => ({ ...t, currentSales: 0, currentDeals: 0, status: 'behind' }));
+      return targetsToProcess.map(t => ({ 
+        id: t.id || '',
+        agentId: t.agentId,
+        agentName: t.agentName,
+        team: t.team,
+        monthlyTarget: t.monthlyTarget,
+        dealsTarget: t.dealsTarget,
+        period: t.period,
+        currentSales: 0, 
+        currentDeals: 0, 
+        status: 'behind' as const
+      }));
     }
 
     return targetsToProcess.map(target => {
-      const agentSales = sales.filter(sale => 
+      const agentSales = sales.filter((sale: any) => 
         sale.sales_agent_norm?.toLowerCase() === target.agentName.toLowerCase() ||
         sale.SalesAgentID === target.agentId
       );
       
-      const currentSales = agentSales.reduce((sum, sale) => sum + (sale.amount || 0), 0);
+      const currentSales = agentSales.reduce((sum: number, sale: any) => sum + (sale.amount || 0), 0);
       const currentDeals = agentSales.length;
       
       const salesProgress = target.monthlyTarget > 0 ? (currentSales / target.monthlyTarget) * 100 : 0;
@@ -107,25 +98,39 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
       }
 
       return {
-        ...target,
+        id: target.id,
+        agentId: target.agentId,
+        agentName: target.agentName,
+        team: target.team || 'Unknown',
+        monthlyTarget: target.monthlyTarget,
         currentSales,
+        dealsTarget: target.dealsTarget,
         currentDeals,
+        period: target.period,
         status
-      };
+      } as SalesTarget;
     });
-  }, [sales, targets, userRole, user.name, user.id]);
+  }, [sales, firebaseTargets, userRole, user.name, user.id]);
+
+  // Calculate statistics from processed targets
+  const totalTargets = processedTargets.length
+  const onTrackTargets = processedTargets.filter(t => t.status === 'on-track').length
+  const exceededTargets = processedTargets.filter(t => t.status === 'exceeded').length
+  const behindTargets = processedTargets.filter(t => t.status === 'behind').length
+  const totalRevenue = processedTargets.reduce((sum: number, t: SalesTarget) => sum + t.currentSales, 0)
+  const totalDeals = processedTargets.reduce((sum: number, t: SalesTarget) => sum + t.currentDeals, 0)
 
   const salesAgents = useMemo(() => {
     if (!sales) return []
-    const agents = sales.reduce((acc, sale) => {
+    const agents = sales.reduce((acc: any[], sale: any) => {
       const agentName = sale.sales_agent_norm || sale.sales_agent
       const agentId = sale.SalesAgentID
-      if (agentName && agentId && !acc.some(a => a.id === agentId)) {
+      if (agentName && agentId && !acc.some((a: any) => a.id === agentId)) {
         acc.push({ id: agentId, name: agentName, team: sale.team || 'Unknown' })
       }
       return acc
     }, [] as { id: string, name: string, team: string }[])
-    return agents.sort((a, b) => a.name.localeCompare(b.name))
+    return agents.sort((a: any, b: any) => a.name.localeCompare(b.name))
   }, [sales])
 
   const handleCreateTarget = async () => {
@@ -138,7 +143,7 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
       return
     }
 
-    const selectedAgent = salesAgents.find(a => a.id === newTarget.agentId)
+    const selectedAgent = salesAgents.find((a: any) => a.id === newTarget.agentId)
     if (!selectedAgent) return
 
     const payload = {
@@ -151,15 +156,7 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
     }
 
     try {
-      const res = await fetch('/api/targets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      if (!res.ok) throw new Error('Failed to create target')
-      
-      const createdTarget = await res.json()
-      setTargets(prev => [...prev, createdTarget])
+      const createdTarget = await addTarget(payload)
       setNewTarget({ agentId: '', agentName: '', team: '', monthlyTarget: '', dealsTarget: '', period: 'January 2025' })
       
       toast({
@@ -180,25 +177,14 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
     if (!editingTarget) return
 
     try {
-        const res = await fetch('/api/targets', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                id: editingTarget.id,
-                monthlyTarget: editingTarget.monthlyTarget,
-                dealsTarget: editingTarget.dealsTarget,
-                period: editingTarget.period
-            })
+        const res = await updateTarget(editingTarget.id, {
+          agentId: editingTarget.agentId,
+          agentName: editingTarget.agentName,
+          team: editingTarget.team,
+          monthlyTarget: editingTarget.monthlyTarget,
+          dealsTarget: editingTarget.dealsTarget,
+          period: editingTarget.period
         })
-        if (!res.ok) throw new Error('Failed to update target')
-
-        const updatedTarget = await res.json()
-        setTargets(prev => 
-            prev.map(target => 
-                target.id === updatedTarget.id ? { ...target, ...updatedTarget } : target
-            )
-        )
-        
         setEditingTarget(null)
         toast({
             title: "Target Updated",
@@ -261,7 +247,10 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="agent">Sales Agent</Label>
-                  <Select value={newTarget.agentId} onValueChange={(value) => setNewTarget(prev => ({ ...prev, agentId: value }))}>
+                  <Select value={newTarget.agentId} onValueChange={(value: string) => {
+                    const agent = salesAgents.find((agent: any) => agent.id === value)
+                    setNewTarget({ ...newTarget, agentId: value, agentName: agent.name, team: agent.team })
+                  }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select agent" />
                     </SelectTrigger>
@@ -297,7 +286,10 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
 
                 <div>
                   <Label htmlFor="period">Period</Label>
-                  <Select value={newTarget.period} onValueChange={(value) => setNewTarget(prev => ({ ...prev, period: value }))}>
+                  <Select 
+                    value={newTarget.period} 
+                    onValueChange={(value: string) => setNewTarget({ ...newTarget, period: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -384,7 +376,7 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
                                     <Label htmlFor="edit-period">Period</Label>
                                     <Select 
                                         value={editingTarget?.period || ''} 
-                                        onValueChange={(value) => setEditingTarget(prev => prev ? { ...prev, period: value } : null)}
+                                        onValueChange={(value: string) => setEditingTarget(prev => prev ? { ...prev, period: value } : null)}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -474,19 +466,19 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-green-600">
-                  {targets.filter(t => t.status === 'exceeded').length}
+                  {exceededTargets}
                 </p>
                 <p className="text-sm text-muted-foreground">Agents Exceeding Targets</p>
               </div>
               <div className="text-center">
                 <p className="text-3xl font-bold text-blue-600">
-                  {targets.filter(t => t.status === 'on-track').length}
+                  {onTrackTargets}
                 </p>
                 <p className="text-sm text-muted-foreground">Agents On Track</p>
               </div>
               <div className="text-center">
                 <p className="text-3xl font-bold text-red-600">
-                  {targets.filter(t => t.status === 'behind').length}
+                  {behindTargets}
                 </p>
                 <p className="text-sm text-muted-foreground">Agents Behind Target</p>
               </div>
@@ -494,9 +486,9 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
 
             <div className="space-y-3">
               {[...new Set(processedTargets.map(t => t.team))].map(team => {
-                const teamTargets = targets.filter(t => t.team === team)
-                const teamRevenue = teamTargets.reduce((sum, t) => sum + t.currentSales, 0)
-                const teamTarget = teamTargets.reduce((sum, t) => sum + t.monthlyTarget, 0)
+                const teamTargets = processedTargets.filter((t: SalesTarget) => t.team === team)
+                const teamRevenue = teamTargets.reduce((sum: number, t: SalesTarget) => sum + t.currentSales, 0)
+                const teamTarget = teamTargets.reduce((sum: number, t: SalesTarget) => sum + t.monthlyTarget, 0)
                 const teamProgress = teamTarget > 0 ? (teamRevenue / teamTarget) * 100 : 0
 
                 return (

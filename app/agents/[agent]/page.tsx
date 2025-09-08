@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useSalesData } from "@/hooks/useSalesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts"
 import { DollarSign, TrendingUp, Users } from "lucide-react"
 
@@ -12,7 +12,7 @@ export default function AgentDrilldownPage() {
   const params = useParams<{ agent: string }>()
   const agentParam = decodeURIComponent(params.agent)
   // Use manager scope to get full data; we filter locally for the selected agent
-  const { sales, loading, error } = useSalesData('manager')
+  const { sales, loading, error } = useFirebaseSalesData('manager')
 
   const data = useMemo(() => {
     const norm = agentParam.toLowerCase().trim()

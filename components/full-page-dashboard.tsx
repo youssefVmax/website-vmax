@@ -44,6 +44,7 @@ import AdvancedAnalytics from "@/components/advanced-analytics"
 import MyDealsTable from "@/components/my-deals-table"
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { ImportExportControls } from "@/components/import-export-controls"
+import UserManagement from "@/components/user-management"
 
 interface FullPageDashboardProps {
   user: any;
@@ -160,6 +161,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     if (user.role === 'manager') {
       return [
         ...baseItems,
+        { id: "user-management", icon: Users, label: "User Management" },
         { id: "team-targets", icon: Target, label: "Team Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         
@@ -429,6 +431,8 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "Data Center"
     case "notifications":
       return "Notifications"
+    case "user-management":
+      return "User Management"
     case "team-management":
       return "Team Management"
     case "competition":
@@ -476,6 +480,8 @@ function PageContent({
       return <DataCenter userRole={user.role} user={user} />
     case "notifications":
       return <NotificationsPage userRole={user.role} user={user} />
+    case "user-management":
+      return <UserManagement />
     case "team-management":
       return <TeamManagement user={user} />
     case "competition":

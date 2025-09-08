@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useNotifications } from "@/hooks/use-notifications"
-import { ArrowUpDown, Download, Eye, Edit as EditIcon, RotateCcw } from "lucide-react"
+import { ArrowUpDown, Eye, Edit as EditIcon, RotateCcw } from "lucide-react"
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 
 interface MyDealsTableProps {
@@ -97,26 +97,6 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
     else { setSortBy(key); setSortDir('asc') }
   }
 
-  const exportCsv = () => {
-    const headers = ['date','DealID','customer_name','role','type_service','team','amount']
-    const rows = sorted.map(r => [
-      r.date,
-      r.DealID,
-      r.customer_name,
-      (r as any).role,
-      r.type_service,
-      r.team,
-      String(r.amount || 0)
-    ].map(v => /[",\n]/.test(String(v)) ? `"${String(v).replaceAll('"','""')}"` : String(v)).join(','))
-    const csv = [headers.join(','), ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `my_deals_${user.username || user.id}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
 
   const handleSaveEdit = async () => {
     // Persist via notification to manager as an audit trail
@@ -202,9 +182,6 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                 {[10,20,50,100].map(n => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={exportCsv}>
-              <Download className="h-4 w-4 mr-2" /> Export CSV
-            </Button>
           </div>
         </div>
       </CardHeader>

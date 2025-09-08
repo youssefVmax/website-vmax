@@ -52,13 +52,12 @@ export interface Notification {
 
 export interface Target {
   id?: string;
-  userId: string;
-  userRole: string;
-  targetAmount: number;
-  currentAmount: number;
-  period: 'monthly' | 'quarterly' | 'yearly';
-  startDate: string;
-  endDate: string;
+  agentId: string;
+  agentName: string;
+  team: string;
+  monthlyTarget: number;
+  dealsTarget: number;
+  period: string;
   created_at?: Timestamp;
   updated_at?: Timestamp;
 }

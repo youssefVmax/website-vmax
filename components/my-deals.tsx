@@ -5,17 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download, Upload } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
-import { useSalesData } from "@/lib/salesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 
 export default function MyDeals() {
   const { user } = useAuth()
   const role = user?.role || 'salesman'
   const userId = user?.id
-  const { sales, loading, error } = useSalesData(role, userId)
+  const { sales, loading, error, refresh } = useFirebaseSalesData(role, userId, user?.name)
   const [filter, setFilter] = useState("")
-  const [importing, setImporting] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   const myDeals = useMemo(() => {
     const rows = (sales || [])
@@ -45,33 +45,12 @@ export default function MyDeals() {
   const userRemaining = Math.max(userTarget - totals.sum, 0)
   const systemRemaining = Math.max(systemTarget - (sales || []).reduce((acc: number, r: any) => acc + (typeof r.amount === 'number' ? r.amount : parseFloat(String(r.amount)) || 0), 0), 0)
 
-  const handleExport = async () => {
-    const params = new URLSearchParams()
-    if (userId) params.set('userId', userId)
-    if (role) params.set('role', role)
-    const url = `/api/sales/export${params.toString() ? `?${params.toString()}` : ''}`
-    const res = await fetch(url)
-    if (!res.ok) return
-    const blob = await res.blob()
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = 'my-deals.csv'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-  }
-
-  const handleImport = async (file: File) => {
-    setImporting(true)
+  const handleRefresh = async () => {
+    setRefreshing(true)
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch('/api/sales/import', { method: 'POST', body: form })
-      if (!res.ok) {
-        console.error('Import failed', await res.json())
-      }
+      await refresh()
     } finally {
-      setImporting(false)
+      setRefreshing(false)
     }
   }
 
@@ -83,15 +62,10 @@ export default function MyDeals() {
           <p className="text-muted-foreground">Your deals and progress toward targets</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" /> Export CSV
+          <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh Data'}
           </Button>
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files && handleImport(e.target.files[0])} />
-            <Button variant="outline" disabled={importing}>
-              <Upload className="h-4 w-4 mr-2" /> {importing ? 'Importing...' : 'Import CSV'}
-            </Button>
-          </label>
         </div>
       </div>
 

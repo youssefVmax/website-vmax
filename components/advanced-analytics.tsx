@@ -19,7 +19,7 @@ interface AdvancedAnalyticsProps {
 }
 
 export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
-  const { sales, loading, error, refresh } = useSalesData(userRole, user.id, user.name)
+  const { sales, loading, error, refresh } = useFirebaseSalesData(userRole, user.id, user.name)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [dateRange, setDateRange] = useState({
     from: addDays(new Date(), -30),

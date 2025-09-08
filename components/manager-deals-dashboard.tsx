@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts'
 import { TrendingUp, DollarSign, Users, Target, Calendar, Filter, Download, Upload, Plus, Search, Eye, Edit, Trash2 } from "lucide-react"
-import { useSalesData } from "@/lib/salesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 
 interface Deal {
   DealID: string
@@ -24,7 +24,7 @@ interface Deal {
 }
 
 export default function ManagerDealsDashboard() {
-  const { sales, loading, error } = useSalesData('manager')
+  const { sales, loading, error } = useFirebaseSalesData('manager')
   const [searchTerm, setSearchTerm] = useState("")
   const [dateFilter, setDateFilter] = useState("")
   const [teamFilter, setTeamFilter] = useState("all")

@@ -247,47 +247,71 @@ export const notificationService = {
   }
 };
 
-// Targets operations
+// Target service functions
 export const targetService = {
-  async getTargets(userId: string): Promise<Target[]> {
+  async getTargets(userId?: string, userRole?: string): Promise<Target[]> {
     try {
-      const q = query(
-        collection(db, COLLECTIONS.TARGETS),
-        where('userId', '==', userId),
-        orderBy('created_at', 'desc')
-      );
+      let q;
+      if (userRole === 'manager' || !userId) {
+        // Managers see all targets
+        q = query(
+          collection(db, COLLECTIONS.TARGETS),
+          orderBy('created_at', 'desc')
+        );
+      } else {
+        // Other users see only their targets
+        q = query(
+          collection(db, COLLECTIONS.TARGETS),
+          where('agentId', '==', userId),
+          orderBy('created_at', 'desc')
+        );
+      }
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Target));
     } catch (error) {
-      console.error('Error fetching targets:', error);
+      console.error('Error getting targets:', error);
       throw error;
     }
   },
 
-  async addTarget(target: Omit<Target, 'id' | 'created_at' | 'updated_at'>): Promise<string> {
+  async addTarget(target: Omit<Target, 'id' | 'created_at' | 'updated_at'>): Promise<Target> {
     try {
-      const targetData = {
+      const docRef = await addDoc(collection(db, COLLECTIONS.TARGETS), {
         ...target,
         created_at: serverTimestamp(),
         updated_at: serverTimestamp()
-      };
-      const docRef = await addDoc(collection(db, COLLECTIONS.TARGETS), targetData);
-      return docRef.id;
+      });
+      
+      const newDoc = await getDoc(docRef);
+      return { id: newDoc.id, ...newDoc.data() } as Target;
     } catch (error) {
       console.error('Error adding target:', error);
       throw error;
     }
   },
 
-  async updateTarget(id: string, updates: Partial<Target>): Promise<void> {
+  async updateTarget(id: string, updates: Partial<Target>): Promise<Target> {
     try {
-      const targetRef = doc(db, COLLECTIONS.TARGETS, id);
-      await updateDoc(targetRef, {
+      const docRef = doc(db, COLLECTIONS.TARGETS, id);
+      await updateDoc(docRef, {
         ...updates,
         updated_at: serverTimestamp()
       });
+      
+      const updatedDoc = await getDoc(docRef);
+      return { id: updatedDoc.id, ...updatedDoc.data() } as Target;
     } catch (error) {
       console.error('Error updating target:', error);
+      throw error;
+    }
+  },
+
+  async deleteTarget(id: string): Promise<void> {
+    try {
+      const docRef = doc(db, COLLECTIONS.TARGETS, id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      console.error('Error deleting target:', error);
       throw error;
     }
   }

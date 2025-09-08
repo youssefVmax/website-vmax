@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo } from "react"
-import { useSalesData } from "@/hooks/useSalesData"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -58,7 +58,7 @@ class CustomerListBoundary extends React.Component<{ children: React.ReactNode }
 }
 
 export function CustomerList({ userRole, userId }: CustomerListProps) {
-  const { sales = [], loading, error } = useSalesData(userRole, userId)
+  const { sales = [], loading, error } = useFirebaseSalesData(userRole, userId)
   const [query, setQuery] = useState("")
   const [teamFilter, setTeamFilter] = useState<string | undefined>(undefined)
   const [serviceFilter, setServiceFilter] = useState<string | undefined>(undefined)
