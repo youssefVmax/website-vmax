@@ -14,15 +14,25 @@ import { User } from '@/lib/auth'
 
 interface Recipient extends Pick<User, 'id' | 'name' | 'role' | 'team'> {}
 
-export default function NotificationsManager() {
-  const { user } = useAuth()
+interface NotificationsManagerProps {
+  userRole?: string
+  user?: any
+}
+
+export default function NotificationsManager({ userRole, user: propUser }: NotificationsManagerProps = {}) {
+  const { user: authUser } = useAuth()
   const { addNotification } = useNotifications()
 
+  // Resolve current user once
+  const user = propUser || authUser
+
+  // Hooks must always be called in the same order
   const [users, setUsers] = useState<Recipient[]>([])
   const [loadingUsers, setLoadingUsers] = useState(true)
 
   const [audience, setAudience] = useState<'ALL' | 'SPECIFIC'>('ALL')
   const [selected, setSelected] = useState<string[]>([])
+  const [addUserId, setAddUserId] = useState<string>('')
   const [selectedRole, setSelectedRole] = useState<'manager' | 'salesman' | 'customer-service' | 'none'>('none')
   const [selectedTeam, setSelectedTeam] = useState<string>('')
 
@@ -31,6 +41,9 @@ export default function NotificationsManager() {
   const [type, setType] = useState<'info' | 'warning' | 'success' | 'error' | 'message'>('message')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
   const [submitting, setSubmitting] = useState(false)
+
+  // Manager-only guard affects rendering only (not hook calls)
+  const isManager = user?.role === 'manager' || userRole === 'manager'
 
   useEffect(() => {
     let mounted = true
@@ -81,6 +94,12 @@ export default function NotificationsManager() {
     setSelectedTeam('')
   }
 
+  const addSelectedUser = (id: string) => {
+    if (!id || id === 'none') return
+    setSelected(prev => prev.includes(id) ? prev : [...prev, id])
+    setAddUserId('')
+  }
+
   const canSubmit = (title.trim().length > 0 && message.trim().length > 0 && (audience === 'ALL' || selected.length > 0))
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -90,7 +109,7 @@ export default function NotificationsManager() {
 
     setSubmitting(true)
     try {
-      const to = audience === 'ALL' ? ['ALL'] : selected
+      const to = audience === 'ALL' ? ['all'] : selected
       await addNotification({
         title,
         message,
@@ -197,6 +216,20 @@ export default function NotificationsManager() {
                     </SelectContent>
                   </Select>
                   <Button variant="outline" size="sm" className="mt-2 w-full" onClick={applyTeamSelection} disabled={!selectedTeam}>Add Team</Button>
+                </div>
+                <div>
+                  <Label className="text-xs">Add User</Label>
+                  <Select value={addUserId} onValueChange={(v: any) => addSelectedUser(v)}>
+                    <SelectTrigger className="w-full mt-1">
+                      <SelectValue placeholder={loadingUsers ? 'Loading users...' : 'Pick user'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {visibleUsers.map(u => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-end">
                   <Button variant="ghost" size="sm" className="w-full" onClick={clearSelection}>Clear Selection</Button>

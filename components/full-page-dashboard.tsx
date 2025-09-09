@@ -47,6 +47,7 @@ import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { ImportExportControls } from "@/components/import-export-controls"
 import UserManagement from "@/components/user-management"
 import { AnimatedMetricCard } from "@/components/animated-metrics"
+import AccessDenied from "@/components/access-denied"
 
 interface FullPageDashboardProps {
   user: any;
@@ -499,6 +500,10 @@ function PageContent({
     case "notifications":
       return <NotificationsPage userRole={user.role} user={user} />
     case "user-management":
+      // Only managers can access user management
+      if (user.role !== 'manager') {
+        return <AccessDenied feature="User Management" />
+      }
       return <UserManagement />
     case "team-management":
       return <TeamManagement user={user} />

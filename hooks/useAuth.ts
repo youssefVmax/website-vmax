@@ -9,6 +9,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   loading: boolean;
+  updateProfile: (updates: Partial<User>) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,23 +20,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Check for stored auth on mount
-    const storedUser = localStorage.getItem('vmax_user');
-    if (storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        // Validate that the stored user still exists in our system
-        const validUser = authenticateUser(parsedUser.username, parsedUser.password);
-        if (validUser) {
-          setUser(validUser);
-        } else {
+    const bootstrap = async () => {
+      const storedUser = localStorage.getItem('vmax_user');
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          // Validate that the stored user still exists in our system
+          const validUser = await authenticateUser(parsedUser.username, parsedUser.password);
+          if (validUser) {
+            setUser(validUser);
+          } else {
+            localStorage.removeItem('vmax_user');
+          }
+        } catch (error) {
+          console.error('Failed to parse stored user:', error);
           localStorage.removeItem('vmax_user');
         }
-      } catch (error) {
-        console.error('Failed to parse stored user:', error);
-        localStorage.removeItem('vmax_user');
       }
+      setLoading(false);
     }
-    setLoading(false);
+    void bootstrap();
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
@@ -44,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    const authenticatedUser = authenticateUser(username, password);
+    const authenticatedUser = await authenticateUser(username, password);
     
     if (authenticatedUser) {
       setUser(authenticatedUser);
@@ -57,6 +61,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
+  const updateProfile = async (updates: Partial<User>): Promise<boolean> => {
+    if (!user) return false;
+    try {
+      let updatedUser: User = { ...user, ...updates } as User;
+      // Manager is not stored in Firebase; skip remote update for manager
+      if (user.id !== 'manager-001') {
+        const { userService } = await import('@/lib/firebase-user-service');
+        await userService.updateUser(user.id, updates);
+        const refreshed = await userService.getUserById(user.id);
+        if (refreshed) {
+          updatedUser = { ...updatedUser, ...refreshed } as User;
+        }
+      }
+      setUser(updatedUser);
+      localStorage.setItem('vmax_user', JSON.stringify(updatedUser));
+      return true;
+    } catch (e) {
+      console.error('Failed to update profile', e);
+      return false;
+    }
+  }
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('vmax_user');
@@ -67,7 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     isAuthenticated: !!user,
-    loading
+    loading,
+    updateProfile,
   };
 
   return React.createElement(

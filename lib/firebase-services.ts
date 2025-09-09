@@ -220,12 +220,17 @@ export const notificationService = {
       let notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
       
       // Filter on client side to avoid index requirements
-      if (userId) {
-        notifications = notifications.filter(notification => 
-          !notification.to || 
-          notification.to.includes(userId) || 
-          notification.to.includes('all')
-        );
+      if (userId || userRole) {
+        notifications = notifications.filter(notification => {
+          const to = (notification.to || []) as any[]
+          // Accept if broadcast to all
+          if (to.includes('all')) return true
+          // Accept if explicit user id match
+          if (userId && to.includes(userId)) return true
+          // Accept if role-based targeting
+          if (userRole && to.includes(userRole)) return true
+          return to.length === 0 // no 'to' means visible to all by default
+        });
       }
       
       return notifications;

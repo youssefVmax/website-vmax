@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { User, Save } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useSettings } from "@/hooks/use-settings"
+import { useAuth } from "@/hooks/useAuth"
 
 interface ProfileSettingsProps {
   user: {
@@ -27,6 +28,7 @@ interface ProfileSettingsProps {
 
 export function ProfileSettings({ user }: ProfileSettingsProps) {
   const { toast } = useToast()
+  const { updateProfile } = useAuth()
   const [profile, setProfile] = useState({
     name: user.name,
     email: user.email || '',
@@ -44,13 +46,28 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
     twoFactorEnabled: false,
   })
 
-  const handleProfileSave = () => {
-    // In a real app, you would send this to your API
-    console.log('Saving profile:', profile)
-    toast({
-      title: "Profile Updated",
-      description: "Your profile information has been saved successfully."
-    })
+  const handleProfileSave = async () => {
+    const updates: Partial<typeof user> = {
+      name: profile.name,
+      email: profile.email,
+      phone: profile.phone,
+    }
+    const ok = await updateProfile(updates as any)
+    if (ok) {
+      // Broadcast user update so any app-level state can react
+      const event = new CustomEvent('userUpdated', { detail: updates })
+      window.dispatchEvent(event)
+      toast({
+        title: "Profile Updated",
+        description: "Your profile information has been saved successfully."
+      })
+    } else {
+      toast({
+        title: "Update Failed",
+        description: "Could not save your profile. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
   const handlePreferencesSave = () => {
@@ -188,91 +205,6 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
               <Save className="h-4 w-4 mr-2" />
               Save Profile
             </Button>
-          </CardContent>
-        </Card>
-
-        {/* Preferences */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Preferences</CardTitle>
-            <CardDescription>Customize your experience</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="theme">Theme</Label>
-                <Select value={settings.theme} onValueChange={(value) => updateSettings({ theme: value as any })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Email Notifications</Label>
-                  <p className="text-xs text-muted-foreground">Receive notifications via email</p>
-                </div>
-                <Switch
-                  checked={settings.emailNotifications}
-                  onCheckedChange={(checked) => updateSettings({ emailNotifications: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Push Notifications</Label>
-                  <p className="text-xs text-muted-foreground">Receive browser push notifications</p>
-                </div>
-                <Switch
-                  checked={settings.pushNotifications}
-                  onCheckedChange={(checked) => updateSettings({ pushNotifications: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Deal Alerts</Label>
-                  <p className="text-xs text-muted-foreground">Get notified about deal updates</p>
-                </div>
-                <Switch
-                  checked={settings.dealAlerts}
-                  onCheckedChange={(checked) => updateSettings({ dealAlerts: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Target Reminders</Label>
-                  <p className="text-xs text-muted-foreground">Reminders about sales targets</p>
-                </div>
-                <Switch
-                  checked={settings.targetReminders}
-                  onCheckedChange={(checked) => updateSettings({ targetReminders: checked })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="auto-logout">Auto Logout (minutes)</Label>
-                <Input
-                  id="auto-logout"
-                  type="number"
-                  value={settings.autoLogout}
-                  onChange={(e) => updateSettings({ autoLogout: parseInt(e.target.value) || 30 })}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end mt-6">
-              <Button onClick={handlePreferencesSave}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Preferences
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>

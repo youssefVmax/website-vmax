@@ -176,9 +176,11 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     }
   }
 
-  const canCreateNotifications = userRole === "manager" || userRole === "customer-service"
+  // Only managers can create notifications
+  const canCreateNotifications = userRole === "manager"
 
   const handleCreateMessage = async () => {
+    if (!canCreateNotifications) return
     if (!newMessage.message.trim()) return
 
     try {
@@ -189,7 +191,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
         priority: newMessage.priority as PriorityType,
         from: currentUser.name,
         fromAvatar: "/placeholder-user.jpg",
-        to: ["Sales Team"],
+        to: ["all"],
         isRead: false,
         isManagerMessage: userRole === 'manager',
         actionRequired: newMessage.priority === 'high',

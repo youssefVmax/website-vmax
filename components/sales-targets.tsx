@@ -133,6 +133,33 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
     return agents.sort((a: any, b: any) => a.name.localeCompare(b.name))
   }, [sales])
 
+  // Load agents from Firebase users (preferred source). Fallback to derived list if empty.
+  const [agentOptions, setAgentOptions] = useState<{ id: string; name: string; team: string }[]>([])
+  const [loadingAgents, setLoadingAgents] = useState<boolean>(false)
+
+  useEffect(() => {
+    let mounted = true
+    const loadAgents = async () => {
+      try {
+        setLoadingAgents(true)
+        const { userService } = await import('@/lib/firebase-user-service')
+        const firebaseAgents = await userService.getUsersByRole('salesman')
+        if (mounted) {
+          const mapped = (firebaseAgents || []).map((u: any) => ({ id: u.id, name: u.name || u.username, team: u.team || 'Unknown' }))
+          setAgentOptions(mapped.sort((a: any, b: any) => a.name.localeCompare(b.name)))
+        }
+      } catch (e) {
+        console.error('Failed to load agents from users collection', e)
+      } finally {
+        if (mounted) setLoadingAgents(false)
+      }
+    }
+    loadAgents()
+    return () => { mounted = false }
+  }, [])
+
+  const availableAgents = agentOptions.length > 0 ? agentOptions : salesAgents
+
   const handleCreateTarget = async () => {
     if (!newTarget.agentId || !newTarget.monthlyTarget || !newTarget.dealsTarget) {
       toast({
@@ -251,14 +278,16 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
                 <div>
                   <Label htmlFor="agent">Sales Agent</Label>
                   <Select value={newTarget.agentId} onValueChange={(value: string) => {
-                    const agent = salesAgents.find((agent: any) => agent.id === value)
-                    setNewTarget({ ...newTarget, agentId: value, agentName: agent.name, team: agent.team })
+                    const agent = availableAgents.find((agent: any) => agent.id === value)
+                    if (agent) {
+                      setNewTarget({ ...newTarget, agentId: value, agentName: agent.name, team: agent.team })
+                    }
                   }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select agent" />
+                      <SelectValue placeholder={loadingAgents ? 'Loading agents...' : 'Select agent'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {salesAgents.map(agent => (
+                      {availableAgents.map(agent => (
                         <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
                       ))}
                     </SelectContent>
