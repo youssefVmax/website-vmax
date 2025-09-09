@@ -65,8 +65,10 @@ export default function ComprehensiveAnalyticsDashboard({ userRole, userId, user
         const userMetricsData = await userAnalyticsService.getUserPerformanceMetrics(userId)
         setUserMetrics(userMetricsData)
         
-        const userDeals = await dealsService.getDealsByAgent(userId)
-        setDeals(userDeals)
+        if (userRole !== 'manager') {
+          const userDeals = await dealsService.getDealsByAgent(userId)
+          setDeals(userDeals)
+        }
       }
 
       // Load team analytics
@@ -258,7 +260,7 @@ export default function ComprehensiveAnalyticsDashboard({ userRole, userId, user
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(userMetrics.commissionEarned)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(userMetrics.commissionEarned || 0)}</div>
                 <p className="text-xs text-muted-foreground">
                   Total earned
                 </p>
@@ -356,19 +358,19 @@ export default function ComprehensiveAnalyticsDashboard({ userRole, userId, user
                     {deals.slice(0, 10).map((deal) => (
                       <TableRow key={deal.id}>
                         <TableCell className="font-medium">{deal.customer_name}</TableCell>
-                        <TableCell>{formatCurrency(deal.amount)}</TableCell>
-                        <TableCell>{deal.type_service}</TableCell>
+                        <TableCell>{formatCurrency(deal.amount_paid)}</TableCell>
+                        <TableCell>{deal.service_tier}</TableCell>
                         <TableCell>
-                          <Badge className={getStatusColor(deal.status)}>
-                            {deal.status}
+                          <Badge className={getStatusColor(deal.status || 'pending')}>
+                            {deal.status || 'pending'}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge className={getStageColor(deal.stage)}>
-                            {deal.stage}
+                          <Badge className={getStageColor(deal.stage || 'lead')}>
+                            {deal.stage || 'lead'}
                           </Badge>
                         </TableCell>
-                        <TableCell>{new Date(deal.date).toLocaleDateString()}</TableCell>
+                        <TableCell>{new Date(deal.signup_date).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button variant="ghost" size="sm">
@@ -462,10 +464,16 @@ export default function ComprehensiveAnalyticsDashboard({ userRole, userId, user
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={Object.entries(userRole === 'manager' ? companyAnalytics?.serviceAnalytics || {} : userMetrics?.topServices || []).map(([key, value]) => ({ 
-                    name: key, 
-                    revenue: typeof value === 'object' ? value.revenue : 0 
-                  }))}>
+                  <BarChart data={userRole === 'manager' 
+                    ? Object.entries(companyAnalytics?.serviceAnalytics || {}).map(([key, value]) => ({ 
+                        name: key, 
+                        revenue: value.revenue 
+                      }))
+                    : (userMetrics?.topServices || []).map(service => ({
+                        name: service.service,
+                        revenue: service.revenue
+                      }))
+                  }>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis />

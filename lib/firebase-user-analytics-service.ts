@@ -85,17 +85,17 @@ export class FirebaseUserAnalyticsService {
       const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
       const dealsThisMonth = userDeals.filter(deal => {
-        const dealDate = new Date(deal.date);
+        const dealDate = new Date(deal.signup_date);
         return dealDate.getMonth() === currentMonth && dealDate.getFullYear() === currentYear;
       });
 
       const dealsLastMonth = userDeals.filter(deal => {
-        const dealDate = new Date(deal.date);
+        const dealDate = new Date(deal.signup_date);
         return dealDate.getMonth() === lastMonth && dealDate.getFullYear() === lastMonthYear;
       });
 
-      const revenueThisMonth = dealsThisMonth.reduce((sum, deal) => sum + deal.amount, 0);
-      const revenueLastMonth = dealsLastMonth.reduce((sum, deal) => sum + deal.amount, 0);
+      const revenueThisMonth = dealsThisMonth.reduce((sum, deal) => sum + deal.amount_paid, 0);
+      const revenueLastMonth = dealsLastMonth.reduce((sum, deal) => sum + deal.amount_paid, 0);
       
       const growthRate = revenueLastMonth > 0 
         ? ((revenueThisMonth - revenueLastMonth) / revenueLastMonth) * 100 
@@ -103,11 +103,11 @@ export class FirebaseUserAnalyticsService {
 
       // Calculate top services
       const serviceStats = userDeals.reduce((acc, deal) => {
-        if (!acc[deal.type_service]) {
-          acc[deal.type_service] = { deals: 0, revenue: 0 };
+        if (!acc[deal.product_type]) {
+          acc[deal.product_type] = { deals: 0, revenue: 0 };
         }
-        acc[deal.type_service].deals += 1;
-        acc[deal.type_service].revenue += deal.amount;
+        acc[deal.product_type].deals += 1;
+        acc[deal.product_type].revenue += deal.amount_paid;
         return acc;
       }, {} as Record<string, { deals: number; revenue: number }>);
 
@@ -170,17 +170,17 @@ export class FirebaseUserAnalyticsService {
         member.performanceRank = index + 1;
       });
 
-      const totalRevenue = teamDeals.reduce((sum, deal) => sum + deal.amount, 0);
+      const totalRevenue = teamDeals.reduce((sum, deal) => sum + deal.amount_paid, 0);
       const averageDealSize = teamDeals.length > 0 ? totalRevenue / teamDeals.length : 0;
       const topPerformer = memberPerformance.length > 0 ? memberPerformance[0].userName : 'N/A';
 
       // Service distribution
       const serviceDistribution = teamDeals.reduce((acc, deal) => {
-        if (!acc[deal.type_service]) {
-          acc[deal.type_service] = { deals: 0, revenue: 0 };
+        if (!acc[deal.product_type]) {
+          acc[deal.product_type] = { deals: 0, revenue: 0 };
         }
-        acc[deal.type_service].deals += 1;
-        acc[deal.type_service].revenue += deal.amount;
+        acc[deal.product_type].deals += 1;
+        acc[deal.product_type].revenue += deal.amount_paid;
         return acc;
       }, {} as Record<string, { deals: number; revenue: number }>);
 
@@ -235,17 +235,17 @@ export class FirebaseUserAnalyticsService {
       
       Object.entries(analytics.dealsByService).forEach(([service, data]) => {
         const currentMonthDeals = allDeals.filter(deal => {
-          const dealDate = new Date(deal.date);
-          return dealDate.getMonth() === currentMonth && deal.type_service === service;
+          const dealDate = new Date(deal.signup_date);
+          return dealDate.getMonth() === currentMonth && deal.product_type === service;
         });
         
         const lastMonthDeals = allDeals.filter(deal => {
-          const dealDate = new Date(deal.date);
-          return dealDate.getMonth() === lastMonth && deal.type_service === service;
+          const dealDate = new Date(deal.signup_date);
+          return dealDate.getMonth() === lastMonth && deal.product_type === service;
         });
 
-        const currentRevenue = currentMonthDeals.reduce((sum, deal) => sum + deal.amount, 0);
-        const lastRevenue = lastMonthDeals.reduce((sum, deal) => sum + deal.amount, 0);
+        const currentRevenue = currentMonthDeals.reduce((sum, deal) => sum + deal.amount_paid, 0);
+        const lastRevenue = lastMonthDeals.reduce((sum, deal) => sum + deal.amount_paid, 0);
         
         const growth = lastRevenue > 0 ? ((currentRevenue - lastRevenue) / lastRevenue) * 100 : 0;
         
@@ -302,15 +302,15 @@ export class FirebaseUserAnalyticsService {
     
     // Process deals
     deals.forEach(deal => {
-      const date = new Date(deal.date);
+      const date = new Date(deal.signup_date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       
       if (!monthlyData[monthKey]) {
         monthlyData[monthKey] = { deals: 0, revenue: 0, users: new Set() };
       }
       monthlyData[monthKey].deals += 1;
-      monthlyData[monthKey].revenue += deal.amount;
-      monthlyData[monthKey].users.add(deal.sales_agent_id);
+      monthlyData[monthKey].revenue += deal.amount_paid;
+      monthlyData[monthKey].users.add(deal.SalesAgentID);
     });
 
     return Object.entries(monthlyData)
