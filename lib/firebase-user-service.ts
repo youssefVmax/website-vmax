@@ -8,9 +8,7 @@ import {
   getDoc, 
   query, 
   where, 
-  orderBy,
-  QueryDocumentSnapshot,
-  DocumentData
+  orderBy
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { User } from './auth';
@@ -43,7 +41,7 @@ export class FirebaseUserService {
       const q = query(collection(db, COLLECTIONS.USERS), orderBy('created_at', 'desc'));
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
+      return querySnapshot.docs.map((doc: any) => ({
         id: doc.id,
         ...doc.data()
       } as User));
@@ -141,7 +139,7 @@ export class FirebaseUserService {
       );
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
+      return querySnapshot.docs.map((doc: any) => ({
         id: doc.id,
         ...doc.data()
       } as User));
@@ -161,7 +159,7 @@ export class FirebaseUserService {
       );
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
+      return querySnapshot.docs.map((doc: any) => ({
         id: doc.id,
         ...doc.data()
       } as User));

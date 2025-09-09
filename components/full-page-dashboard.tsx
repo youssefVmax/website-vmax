@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { 
   BarChart3,
   Bell,
@@ -35,7 +35,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
 import SalesAnalysisDashboard from '@/components/sales-dashboard'
-import NotificationsPage from "@/components/notifications-page-new"
+import NotificationsPage from "@/components/notifications-page"
 import { AddDealPage } from "@/components/add-deal"
 import { DataCenter } from "@/components/data-center"
 import { SalesTargets } from "@/components/sales-targets"
@@ -713,6 +713,25 @@ function DealsManagement({ user }: { user: any }) {
 
 
 function TeamManagement({ user }: { user: any }) {
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const { sales = [] } = useFirebaseSalesData('manager', user.id, user.name)
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const { userService } = await import('@/lib/firebase-user-service')
+        const allUsers = await userService.getAllUsers()
+        setUsers(allUsers)
+      } catch (error) {
+        console.error('Error loading users:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadUsers()
+  }, [])
+
   if (user.role !== 'manager') {
     return (
       <Card>
@@ -725,6 +744,58 @@ function TeamManagement({ user }: { user: any }) {
     )
   }
 
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-4 bg-muted rounded w-1/4"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="h-32 bg-muted rounded"></div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Group users by team and calculate performance metrics
+  const teamStats = useMemo(() => {
+    const teams = users.reduce((acc: Record<string, { members: any[], sales: any[] }>, user: any) => {
+      const teamName = user.team || 'OTHER'
+      if (!acc[teamName]) {
+        acc[teamName] = { members: [], sales: [] }
+      }
+      acc[teamName].members.push(user)
+      
+      // Get sales for this user
+      const userSales = sales.filter((sale: any) => 
+        sale.sales_agent?.toLowerCase() === user.name.toLowerCase() ||
+        sale.closing_agent?.toLowerCase() === user.name.toLowerCase()
+      )
+      acc[teamName].sales.push(...userSales)
+      
+      return acc
+    }, {})
+
+    return Object.entries(teams).map(([teamName, data]) => {
+      const totalRevenue = data.sales.reduce((sum: number, sale: any) => sum + (sale.amount || 0), 0)
+      const avgDealSize = data.sales.length > 0 ? totalRevenue / data.sales.length : 0
+      const performance = Math.min(100, Math.max(0, (avgDealSize / 1000) * 10)) // Simple performance calculation
+      
+      return {
+        team: teamName,
+        members: data.members.length,
+        performance: Math.round(performance),
+        totalRevenue,
+        totalDeals: data.sales.length,
+        users: data.members
+      }
+    })
+  }, [users, sales])
+
   return (
     <div className="space-y-6">
       <Card>
@@ -733,23 +804,18 @@ function TeamManagement({ user }: { user: any }) {
             <UserCheck className="h-5 w-5 mr-2" />
             Team Management
           </CardTitle>
-          <CardDescription>Manage team members, roles, and permissions</CardDescription>
+          <CardDescription>Manage team members, roles, and performance metrics</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { team: "CS TEAM", members: 5, performance: 85 },
-              { team: "ALI ASHRAF", members: 8, performance: 92 },
-              { team: "SAIF MOHAMED", members: 7, performance: 88 },
-              { team: "OTHER", members: 5, performance: 76 },
-            ].map((team) => (
+            {teamStats.map((team: any) => (
               <Card key={team.team} className="p-4">
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <h4 className="font-medium">{team.team}</h4>
                     <Badge variant="outline">{team.members} members</Badge>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Performance</span>
                       <span>{team.performance}%</span>
@@ -760,8 +826,20 @@ function TeamManagement({ user }: { user: any }) {
                         style={{ width: `${team.performance}%` }}
                       />
                     </div>
+                    <div className="text-xs text-muted-foreground">
+                      ${team.totalRevenue.toLocaleString()} • {team.totalDeals} deals
+                    </div>
                   </div>
-                  <Button variant="outline" size="sm" className="w-full">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full"
+                    onClick={() => {
+                      // Navigate to detailed team view
+                      const event = new CustomEvent('setActiveTab', { detail: 'user-management' })
+                      window.dispatchEvent(event)
+                    }}
+                  >
                     Manage Team
                   </Button>
                 </div>

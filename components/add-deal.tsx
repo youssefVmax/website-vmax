@@ -12,16 +12,35 @@ import { Badge } from "@/components/ui/badge";
 import { showDealAdded, showError, showLoading } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/use-notifications";
-import { USERS } from "@/lib/auth";
+import { User, getUsersByRole } from "@/lib/auth";
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
+import { notificationService } from "@/lib/firebase-services";
 
 export function AddDealPage() {
   const { user } = useAuth();
   const { addNotification } = useNotifications();
-  const salesmanOptions = USERS.filter(u => u.role === 'salesman')
-  const allUserOptions = USERS
+  const [salesmanOptions, setSalesmanOptions] = useState<User[]>([]);
+  const [allUserOptions, setAllUserOptions] = useState<User[]>([]);
   const isSalesman = user?.role === 'salesman'
   const { sales, addSale } = useFirebaseSalesData(user?.role || 'manager', user?.id, user?.name)
+
+  // Load users from Firebase
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const salesmen = await getUsersByRole('salesman');
+        const customerService = await getUsersByRole('customer-service');
+        const managers = await getUsersByRole('manager');
+        
+        setSalesmanOptions(salesmen);
+        setAllUserOptions([...salesmen, ...customerService, ...managers]);
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
+    };
+    
+    loadUsers();
+  }, []);
 
   // Dynamic options from current data
   const teamOptions = useMemo(() => {
@@ -105,7 +124,7 @@ export function AddDealPage() {
   const handleSelectChange = (name: string, value: string) => {
     // For agent selectors, also set corresponding IDs
     if (name === 'sales_agent') {
-      const selected = salesmanOptions.find(u => u.id === value)
+      const selected = salesmanOptions.find((u: User) => u.id === value)
       setFormData(prev => ({
         ...prev,
         sales_agent: selected?.name || prev.sales_agent,
@@ -116,7 +135,7 @@ export function AddDealPage() {
       return
     }
     if (name === 'closing_agent') {
-      const selected = allUserOptions.find(u => u.id === value)
+      const selected = allUserOptions.find((u: User) => u.id === value)
       setFormData(prev => ({
         ...prev,
         closing_agent: selected?.name || prev.closing_agent,
@@ -186,17 +205,19 @@ export function AddDealPage() {
       // Save to Firebase directly
       await addSale(newDeal);
 
-      // Create notification for managers
-      await fetch('/api/firebase/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'New Deal Created',
-          message: `${user?.name || 'Unknown'} created new deal ${dealId} for ${formData.customer_name} worth $${formData.amount}`,
-          type: 'success',
-          userRole: 'manager',
-          isRead: false
-        }),
+      // Create notification for managers using Firebase service directly
+      await notificationService.addNotification({
+        title: 'New Deal Created',
+        message: `${user?.name || 'Unknown'} created new deal ${dealId} for ${formData.customer_name} worth $${formData.amount}`,
+        type: 'deal',
+        priority: 'medium',
+        from: user?.name || 'System',
+        userRole: 'manager',
+        isRead: false,
+        dealId: dealId,
+        dealName: formData.customer_name,
+        dealValue: parseFloat(formData.amount) || 0,
+        actionRequired: false
       });
 
       // Update salesman's target progress
@@ -346,7 +367,7 @@ export function AddDealPage() {
                       <SelectValue placeholder="Select sales agent" />
                     </SelectTrigger>
                     <SelectContent>
-                      {salesmanOptions.map(a => (
+                      {salesmanOptions.map((a: User) => (
                         <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -364,7 +385,7 @@ export function AddDealPage() {
                     <SelectValue placeholder="Select closing agent" />
                   </SelectTrigger>
                   <SelectContent>
-                    {allUserOptions.map(a => (
+                    {allUserOptions.map((a: User) => (
                       <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                     ))}
                   </SelectContent>

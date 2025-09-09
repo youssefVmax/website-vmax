@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Bell, Plus, Send, CheckCircle, Info, Briefcase, MessageSquare, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
@@ -10,6 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { formatDistanceToNow } from "date-fns"
+import { notificationService } from "@/lib/firebase-services"
+import { useToast } from "@/hooks/use-toast"
+import { Notification as FirebaseNotification } from "@/types/firebase"
 
 type NotificationType = "info" | "warning" | "success" | "error" | "deal" | "message"
 type PriorityType = "low" | "medium" | "high"
@@ -32,6 +35,8 @@ interface Notification {
   dealValue?: number
   isManagerMessage?: boolean
   actionRequired?: boolean
+  isRead?: boolean
+  created_at?: any
 }
 
 interface NotificationsPageProps {
@@ -41,92 +46,65 @@ interface NotificationsPageProps {
 
 export default function NotificationsPage({ userRole = 'salesman', user }: NotificationsPageProps) {
   const currentUser = user || { name: "Mohsen Sayed", username: "mohsen.sayed" }
+  const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState("all")
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [newMessage, setNewMessage] = useState({
     message: "",
     priority: "medium" as PriorityType,
   })
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: "1",
-      title: "New Deal Assigned",
-      message: "You've been assigned to follow up with TechCorp Solutions. The deal is in the proposal stage with a potential value of $45,000.",
-      type: "deal",
-      priority: "high",
-      from: "Manager",
-      fromAvatar: "/placeholder-user.jpg",
-      to: [currentUser.name],
-      timestamp: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-      read: false,
-      dealId: "DEAL-1001",
-      dealName: "TechCorp Solutions",
-      dealStage: "Proposal",
-      dealValue: 45000,
-      actionRequired: true
-    },
-    {
-      id: "2",
-      title: "Deal Status Update",
-      message: "The deal with StreamMax Ltd has moved to the negotiation stage. The client has reviewed the proposal and has some questions.",
-      type: "deal",
-      priority: "medium",
-      from: "System",
-      to: [currentUser.name],
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-      read: false,
-      dealId: "DEAL-1002",
-      dealName: "StreamMax Ltd",
-      dealStage: "Negotiation",
-      dealValue: 32000
-    },
-    {
-      id: "3",
-      title: "Message from Manager",
-      message: "Great job on closing the DataFlow deal! The client was very impressed with your presentation. Let's schedule a call to discuss next steps and potential upselling opportunities.",
-      type: "message",
-      priority: "high",
-      from: "Sarah Johnson",
-      fromAvatar: "/placeholder-user.jpg",
-      to: [currentUser.name],
-      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000), // 5 hours ago
-      read: false,
-      isManagerMessage: true,
-      actionRequired: true
-    },
-    {
-      id: "4",
-      title: "Deal Won: CloudTech Solutions",
-      message: "Congratulations! The CloudTech Solutions deal has been successfully closed with a final value of $68,000. This brings you closer to your quarterly target.",
-      type: "success",
-      priority: "high",
-      from: "System",
-      to: [currentUser.name, "Sales Team"],
-      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-      read: true,
-      dealId: "DEAL-0998",
-      dealName: "CloudTech Solutions",
-      dealStage: "Closed Won",
-      dealValue: 68000
-    },
-    {
-      id: "5",
-      title: "Reminder: Follow Up Required",
-      message: "The deal with InnovateX is waiting for your response. The client expects to hear back from you by tomorrow.",
-      type: "warning",
-      priority: "high",
-      from: "System",
-      to: [currentUser.name],
-      timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-      read: true,
-      dealId: "DEAL-1000",
-      dealName: "InnovateX",
-      dealStage: "Follow Up",
-      dealValue: 28000,
-      actionRequired: true
+  const [notifications, setNotifications] = useState<Notification[]>([])
+
+  // Load notifications from Firebase on component mount
+  useEffect(() => {
+    loadNotifications()
+  }, [])
+
+  const loadNotifications = async () => {
+    try {
+      setLoading(true)
+      const firebaseNotifications = await notificationService.getNotifications(
+        (user as any)?.id, 
+        userRole
+      )
+      
+      // Transform Firebase notifications to match our interface
+      const transformedNotifications = firebaseNotifications.map(notif => ({
+        id: notif.id || '',
+        title: notif.title,
+        message: notif.message,
+        type: (notif.type as NotificationType) || 'info',
+        priority: (notif.priority as PriorityType) || 'medium',
+        from: notif.from || 'System',
+        fromAvatar: notif.fromAvatar,
+        to: notif.to || [currentUser.name],
+        timestamp: notif.created_at?.toDate ? notif.created_at.toDate() : 
+                   (notif.created_at && typeof notif.created_at === 'object' && 'seconds' in notif.created_at) 
+                     ? new Date(notif.created_at.seconds * 1000) 
+                     : new Date(),
+        read: notif.isRead || false,
+        dealId: notif.dealId,
+        dealName: notif.dealName,
+        dealStage: notif.dealStage,
+        dealValue: notif.dealValue,
+        isManagerMessage: notif.isManagerMessage || false,
+        actionRequired: notif.actionRequired || false
+      })).filter(notif => notif.id !== '')
+      
+      setNotifications(transformedNotifications)
+    } catch (error) {
+      console.error('Error loading notifications:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load notifications",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
     }
-  ])
+  }
 
 
   // Filter notifications based on active tab
@@ -140,21 +118,42 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
   const unreadCount = filteredNotifications.filter(notif => !notif.read).length
 
   // Mark notification as read
-  const markAsRead = (id: string) => {
-    setNotifications(prevNotifications => 
-      prevNotifications.map(notification => 
-        notification.id === id ? { ...notification, read: true } : notification
+  const markAsRead = async (id: string) => {
+    try {
+      await notificationService.markAsRead(id)
+      setNotifications(prevNotifications => 
+        prevNotifications.map(notification => 
+          notification.id === id ? { ...notification, read: true } : notification
+        )
       )
-    )
+    } catch (error) {
+      console.error('Error marking notification as read:', error)
+      toast({
+        title: "Error",
+        description: "Failed to mark notification as read",
+        variant: "destructive"
+      })
+    }
   }
 
-  const markAllAsRead = () => {
-    setNotifications(prevNotifications => 
-      prevNotifications.map(notification => ({
-        ...notification,
-        read: true
-      }))
-    )
+  const markAllAsRead = async () => {
+    try {
+      const unreadNotifications = notifications.filter(n => !n.read)
+      await Promise.all(unreadNotifications.map(n => notificationService.markAsRead(n.id)))
+      setNotifications(prevNotifications => 
+        prevNotifications.map(notification => ({
+          ...notification,
+          read: true
+        }))
+      )
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error)
+      toast({
+        title: "Error",
+        description: "Failed to mark all notifications as read",
+        variant: "destructive"
+      })
+    }
   }
 
   const getPriorityColor = (priority: PriorityType) => {
@@ -179,31 +178,68 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
 
   const canCreateNotifications = userRole === "manager" || userRole === "customer-service"
 
-  const handleCreateMessage = () => {
+  const handleCreateMessage = async () => {
     if (!newMessage.message.trim()) return
 
-    const notification: Notification = {
-      id: Date.now().toString(),
-      title: `New ${newMessage.priority} message from ${currentUser.name}`,
-      message: newMessage.message,
-      type: "message",
-      priority: newMessage.priority,
-      from: currentUser.name,
-      fromAvatar: "/placeholder-user.jpg",
-      to: ["Sales Team"],
-      timestamp: new Date(),
-      read: false,
-      isManagerMessage: userRole === 'manager'
-    }
+    try {
+      const notificationData = {
+        title: `New ${newMessage.priority} priority message from ${currentUser.name}`,
+        message: newMessage.message,
+        type: "message" as const,
+        priority: newMessage.priority as PriorityType,
+        from: currentUser.name,
+        fromAvatar: "/placeholder-user.jpg",
+        to: ["Sales Team"],
+        isRead: false,
+        isManagerMessage: userRole === 'manager',
+        actionRequired: newMessage.priority === 'high',
+        userRole: userRole
+      }
 
-    setNotifications(prev => [notification, ...prev])
-    setNewMessage({
-      message: "",
-      priority: "medium"
-    })
-    setShowCreateForm(false)
+      const notificationId = await notificationService.addNotification(notificationData)
+      
+      // Add to local state for immediate UI update
+      const newNotification: Notification = {
+        id: notificationId,
+        ...notificationData,
+        timestamp: new Date(),
+        read: false
+      }
+
+      setNotifications(prev => [newNotification, ...prev])
+      setNewMessage({
+        message: "",
+        priority: "medium"
+      })
+      setShowCreateForm(false)
+      
+      toast({
+        title: "Message Sent",
+        description: "Your message has been sent to the team."
+      })
+    } catch (error) {
+      console.error('Error creating notification:', error)
+      toast({
+        title: "Error",
+        description: "Failed to send message",
+        variant: "destructive"
+      })
+    }
   }
 
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-4 md:p-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading notifications...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto p-4 md:p-6">

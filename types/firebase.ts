@@ -42,10 +42,20 @@ export interface Notification {
   id?: string;
   title: string;
   message: string;
-  type: 'info' | 'warning' | 'error' | 'success';
+  type: 'info' | 'warning' | 'error' | 'success' | 'deal' | 'message';
+  priority?: 'low' | 'medium' | 'high';
+  from?: string;
+  fromAvatar?: string;
+  to?: string[];
   userId?: string;
   userRole?: string;
   isRead: boolean;
+  dealId?: string;
+  dealName?: string;
+  dealStage?: string;
+  dealValue?: number;
+  isManagerMessage?: boolean;
+  actionRequired?: boolean;
   created_at?: Timestamp;
   expires_at?: Timestamp;
 }

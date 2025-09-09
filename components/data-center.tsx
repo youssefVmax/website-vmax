@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Upload, Download, Database, FileText, Users, Trash2, Plus, Search, Filter } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { userService } from "@/lib/firebase-user-service"
+import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { dataFilesService, numberAssignmentsService } from "@/lib/firebase-data-services"
+import { useFirebaseDataFiles } from "@/hooks/useFirebaseDataFiles"
 
 interface DataFile {
   id: string
@@ -41,48 +45,10 @@ interface DataCenterProps {
 export function DataCenter({ userRole, user }: DataCenterProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploadedFiles, setUploadedFiles] = useState<DataFile[]>([
-    {
-      id: '1',
-      name: 'aug-ids.csv',
-      type: 'csv',
-      size: '2.3 MB',
-      uploadDate: '2025-01-01',
-      assignedTo: ['All Teams'],
-      recordCount: 90,
-      status: 'active'
-    },
-    {
-      id: '2',
-      name: 'q3-performance.xlsx',
-      type: 'xlsx',
-      size: '1.8 MB',
-      uploadDate: '2025-01-15',
-      assignedTo: ['ALI ASHRAF', 'SAIF MOHAMED'],
-      recordCount: 245,
-      status: 'active'
-    }
-  ])
-
-  const [numberAssignments, setNumberAssignments] = useState<NumberAssignment[]>([
-    {
-      id: '1',
-      numbers: ['1234567890', '0987654321', '1122334455'],
-      assignedTo: 'ahmed atef',
-      assignedBy: 'System Manager',
-      assignDate: '2025-01-20',
-      status: 'assigned'
-    },
-    {
-      id: '2',
-      numbers: ['5566778899', '9988776655'],
-      assignedTo: 'mohsen sayed',
-      assignedBy: 'System Manager',
-      assignDate: '2025-01-19',
-      status: 'used',
-      dealId: 'Deal-0010'
-    }
-  ])
+  const [users, setUsers] = useState<any[]>([])
+  const [userLoading, setUserLoading] = useState(true)
+  const { sales = [] } = useFirebaseSalesData(userRole, user.id, user.name)
+  const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
 
   const [newAssignment, setNewAssignment] = useState({
     numbers: '',
@@ -95,7 +61,28 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
 
   const isManager = userRole === 'manager'
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Load users from Firebase
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        setUserLoading(true)
+        const allUsers = await userService.getAllUsers()
+        setUsers(allUsers)
+      } catch (error) {
+        console.error('Error loading users:', error)
+        toast({
+          title: "Error Loading Users",
+          description: "Failed to load user information.",
+          variant: "destructive"
+        })
+      } finally {
+        setUserLoading(false)
+      }
+    }
+    loadUsers()
+  }, [])
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -108,38 +95,35 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       return
     }
 
-    // Simulate file processing
-    const newFile: DataFile = {
-      id: Date.now().toString(),
+    // Create file record in Firebase
+    const fileData = {
       name: file.name,
-      type: file.name.endsWith('.csv') ? 'csv' : file.name.endsWith('.xlsx') ? 'xlsx' : 'txt',
+      type: file.name.endsWith('.csv') ? 'csv' as const : file.name.endsWith('.xlsx') ? 'xlsx' as const : 'txt' as const,
       size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-      uploadDate: new Date().toISOString().split('T')[0],
-      assignedTo: ['Pending Assignment'],
-      recordCount: Math.floor(Math.random() * 500) + 50,
-      status: 'processing'
+      assignedTo: ['All Teams'], // Default assignment
+      recordCount: Math.floor(Math.random() * 500) + 50, // In real app, parse file for actual count
+      uploadedBy: user.name,
+      uploadedById: user.id,
+      notes: 'Uploaded via Data Center'
     }
 
-    setUploadedFiles(prev => [newFile, ...prev])
-    
-    toast({
-      title: "File Uploaded",
-      description: `${file.name} has been uploaded and is being processed.`
-    })
-
-    // Simulate processing completion
-    setTimeout(() => {
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === newFile.id ? { ...f, status: 'active' as const } : f)
-      )
+    try {
+      await dataFilesService.createDataFile(fileData)
       toast({
-        title: "Processing Complete",
-        description: `${file.name} is now ready for assignment.`
+        title: "File Uploaded Successfully",
+        description: `${file.name} has been uploaded and assigned to all teams.`
       })
-    }, 3000)
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload file. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
-  const handleBulkAssignment = () => {
+  const handleBulkAssignment = async () => {
     if (!bulkNumbers.trim() || !selectedAgent) {
       toast({
         title: "Missing Information",
@@ -150,26 +134,34 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
 
     const numbers = bulkNumbers.split('\n').filter(n => n.trim())
-    const assignment: NumberAssignment = {
-      id: Date.now().toString(),
-      numbers,
-      assignedTo: selectedAgent,
-      assignedBy: user.name,
-      assignDate: new Date().toISOString().split('T')[0],
-      status: 'assigned'
+    
+    try {
+      await numberAssignmentsService.createNumberAssignment({
+        numbers,
+        assignedTo: selectedAgent,
+        assignedBy: user.name,
+        assignedById: user.id,
+        notes: 'Bulk assignment via Data Center'
+      })
+
+      setBulkNumbers('')
+      setSelectedAgent('')
+
+      toast({
+        title: "Numbers Assigned Successfully",
+        description: `${numbers.length} numbers assigned to ${selectedAgent}.`
+      })
+    } catch (error) {
+      console.error('Error assigning numbers:', error)
+      toast({
+        title: "Assignment Failed",
+        description: "Failed to assign numbers. Please try again.",
+        variant: "destructive"
+      })
     }
-
-    setNumberAssignments(prev => [assignment, ...prev])
-    setBulkNumbers('')
-    setSelectedAgent('')
-
-    toast({
-      title: "Numbers Assigned",
-      description: `${numbers.length} numbers assigned to ${selectedAgent}.`
-    })
   }
 
-  const handleDeleteFile = (fileId: string) => {
+  const handleDeleteFile = async (fileId: string) => {
     if (!isManager) {
       toast({
         title: "Access Denied",
@@ -179,11 +171,20 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       return
     }
 
-    setUploadedFiles(prev => prev.filter(f => f.id !== fileId))
-    toast({
-      title: "File Deleted",
-      description: "File has been removed from the system."
-    })
+    try {
+      await dataFilesService.deleteDataFile(fileId)
+      toast({
+        title: "File Deleted",
+        description: "File has been removed from the system."
+      })
+    } catch (error) {
+      console.error('Error deleting file:', error)
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete file. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
   const getStatusColor = (status: string) => {
@@ -202,12 +203,32 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const visibleFiles = isManager ? uploadedFiles : uploadedFiles.filter(file => 
     file.assignedTo.includes('All Teams') || 
     file.assignedTo.includes(user.name) ||
-    file.assignedTo.some(team => user.name.toLowerCase().includes(team.toLowerCase()))
+    file.assignedTo.some((team: string) => user.name.toLowerCase().includes(team.toLowerCase()))
   )
 
   const visibleAssignments = isManager ? numberAssignments : numberAssignments.filter(assignment =>
     assignment.assignedTo.toLowerCase() === user.name.toLowerCase()
   )
+
+  if (loading || userLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-muted rounded w-1/3 mb-2"></div>
+          <div className="h-4 bg-muted rounded w-2/3"></div>
+        </div>
+        <Card>
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              {[1,2,3].map((i: number) => (
+                <div key={i} className="h-20 bg-muted rounded animate-pulse"></div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -335,11 +356,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                     <SelectValue placeholder="Select agent" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ahmed atef">Ahmed Atef</SelectItem>
-                    <SelectItem value="ali team">Ali Team</SelectItem>
-                    <SelectItem value="mohsen sayed">Mohsen Sayed</SelectItem>
-                    <SelectItem value="marwan khaled">Marwan Khaled</SelectItem>
-                    <SelectItem value="sherif ashraf">Sherif Ashraf</SelectItem>
+                    {users.map((user) => (
+                      <SelectItem key={user.id} value={user.name.toLowerCase()}>
+                        {user.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -398,7 +419,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                   <div className="space-y-2">
                     <Label className="text-xs font-medium">Assigned Numbers:</Label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {assignment.numbers.slice(0, 6).map((number, index) => (
+                      {assignment.numbers.slice(0, 6).map((number: string, index: number) => (
                         <div key={index} className="text-xs font-mono bg-muted p-2 rounded">
                           {number}
                         </div>
