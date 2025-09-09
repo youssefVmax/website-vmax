@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Notification } from "@/types/notification"
 import { useAuth } from "@/hooks/useAuth"
 import { showToast } from "@/lib/sweetalert"
+import { notificationService } from "@/lib/firebase-services"
 
 interface NotificationsContextType {
   notifications: Notification[]
@@ -21,27 +22,37 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const knownIdsRef = React.useRef<Set<string>>(new Set())
 
-  // Poll notifications from API
+  // Load notifications from Firebase
   useEffect(() => {
     let mounted = true
 
     const load = async () => {
       try {
-        const query = new URLSearchParams()
-        if (user?.id) query.set('userId', user.id)
-        if (user?.role) query.set('role', user.role)
-        const url = `/api/notifications${query.toString() ? `?${query.toString()}` : ''}`
-        const res = await fetch(url, { cache: 'no-store' })
-        if (!res.ok) throw new Error('Failed to fetch notifications')
-        const data = await res.json()
-        // Parse timestamp strings into Date objects
-        const parsed: Notification[] = data.map((n: any) => ({
-          ...n,
-          timestamp: new Date(n.timestamp),
+        if (!user?.id || !user?.role) return
+        const data = await notificationService.getNotifications(user.id, user.role)
+        // Map Firebase notifications to expected format
+        const mapped: Notification[] = data.map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: n.type,
+          priority: n.priority || 'medium',
+          from: n.from || 'System',
+          fromAvatar: n.fromAvatar,
+          to: n.to || [],
+          timestamp: n.created_at?.toDate() || new Date(),
+          read: n.isRead || false,
+          dealId: n.dealId,
+          dealName: n.dealName,
+          dealStage: n.dealStage,
+          dealValue: n.dealValue,
+          isManagerMessage: n.isManagerMessage,
+          actionRequired: n.actionRequired
         }))
-        if (mounted) setNotifications(parsed)
+        if (mounted) setNotifications(mapped)
       } catch (e) {
         console.error('Notifications fetch failed', e)
+        if (mounted) setNotifications([])
       }
     }
 
@@ -50,67 +61,59 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return () => { mounted = false; clearInterval(id) }
   }, [user?.id, user?.role])
 
-  // Subscribe to SSE stream for near real-time updates
+  // Show toasts for new notifications
   useEffect(() => {
-    let es: EventSource | null = null
-    try {
-      const query = new URLSearchParams()
-      if (user?.id) query.set('userId', user.id)
-      if (user?.role) query.set('role', user.role)
-      es = new EventSource(`/api/notifications/stream${query.toString() ? `?${query.toString()}` : ''}`)
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          const parsed: Notification[] = data.map((n: any) => ({ ...n, timestamp: new Date(n.timestamp) }))
-          setNotifications(prev => {
-            // Compute toasts for new notifications addressed to the current user
-            const prevIds = knownIdsRef.current
-            for (const n of parsed) {
-              if (!prevIds.has(n.id)) {
-                prevIds.add(n.id)
-                const addressedToUser = Array.isArray(n.to) && (n.to.includes('ALL') || (user?.id && n.to.includes(user.id)))
-                const managerSeesAll = user?.role === 'manager'
-                if ((addressedToUser || managerSeesAll) && !n.read) {
-                  // Use SweetAlert2 toast matching app design
-                  const title = n.title ? `${n.title}` : 'Notification'
-                  const message = n.message ? ` ${n.message}` : ''
-                  showToast(`${title}${message ? ': ' + message : ''}`, 'info')
-                }
-              }
-            }
-            return parsed
-          })
-        } catch (e) {
-          console.error('Failed to parse SSE notification payload', e)
+    const prevIds = knownIdsRef.current
+    for (const n of notifications) {
+      if (!prevIds.has(n.id)) {
+        prevIds.add(n.id)
+        const addressedToUser = Array.isArray(n.to) && (n.to.includes('ALL') || (user?.id && n.to.includes(user.id)))
+        const managerSeesAll = user?.role === 'manager'
+        if ((addressedToUser || managerSeesAll) && !n.read) {
+          // Use SweetAlert2 toast matching app design
+          const title = n.title ? `${n.title}` : 'Notification'
+          const message = n.message ? ` ${n.message}` : ''
+          showToast(`${title}${message ? ': ' + message : ''}`, 'info')
         }
       }
-      es.onerror = () => {
-        // Fail silently; polling continues as fallback
-        es?.close()
-      }
-    } catch (e) {
-      console.warn('EventSource not available; using polling only')
     }
-    return () => { es?.close() }
-  }, [user?.id, user?.role])
+  }, [notifications, user?.id, user?.role])
 
   const unreadCount = notifications.filter(n => !n.read).length
 
   const refresh = async () => {
-    const res = await fetch('/api/notifications', { cache: 'no-store' })
-    if (res.ok) {
-      const data = await res.json()
-      const parsed: Notification[] = data.map((n: any) => ({ ...n, timestamp: new Date(n.timestamp) }))
-      setNotifications(parsed)
+    try {
+      if (!user?.id || !user?.role) return
+      const data = await notificationService.getNotifications(user.id, user.role)
+      // Map Firebase notifications to expected format
+      const mapped: Notification[] = data.map((n: any) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        priority: n.priority || 'medium',
+        from: n.from || 'System',
+        fromAvatar: n.fromAvatar,
+        to: n.to || [],
+        timestamp: n.created_at?.toDate() || new Date(),
+        read: n.isRead || false,
+        dealId: n.dealId,
+        dealName: n.dealName,
+        dealStage: n.dealStage,
+        dealValue: n.dealValue,
+        isManagerMessage: n.isManagerMessage,
+        actionRequired: n.actionRequired
+      }))
+      setNotifications(mapped)
+    } catch (e) {
+      console.error('Refresh notifications failed', e)
     }
   }
 
   const markAsRead = async (id: string) => {
     try {
-      const res = await fetch('/api/notifications', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
-      if (!res.ok) throw new Error('Failed to update notification')
-      const updated = await res.json()
-      setNotifications(prev => prev.map(n => n.id === updated.id ? { ...n, read: true } : n))
+      await notificationService.markAsRead(id)
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
     } catch (e) {
       console.error('markAsRead failed', e)
     }
@@ -124,9 +127,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       else if (userId && typeof userId === 'object') targetUserId = user?.id || undefined
       else targetUserId = user?.id || undefined
 
-      const body = targetUserId ? { markAllForUser: true, userId: targetUserId } : { markAllForUser: true, userId: 'ALL' }
-      const res = await fetch('/api/notifications', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      if (!res.ok) throw new Error('Failed to mark all as read')
+      await notificationService.markAllAsRead(targetUserId || user?.id || '')
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
     } catch (e) {
       console.error('markAllAsRead failed', e)
@@ -135,12 +136,36 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const addNotification = async (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     try {
-      const res = await fetch('/api/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(notification) })
-      if (!res.ok) throw new Error('Failed to create notification')
-      const created = await res.json()
-      // Parse timestamp
-      created.timestamp = new Date(created.timestamp)
-      setNotifications(prev => [created, ...prev])
+      // Map to Firebase format
+      const firebaseNotification = {
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+        priority: notification.priority,
+        from: notification.from,
+        fromAvatar: notification.fromAvatar,
+        to: notification.to,
+        userId: user?.id,
+        userRole: user?.role,
+        isRead: false,
+        dealId: notification.dealId,
+        dealName: notification.dealName,
+        dealStage: notification.dealStage,
+        dealValue: notification.dealValue,
+        isManagerMessage: notification.isManagerMessage,
+        actionRequired: notification.actionRequired
+      }
+      
+      const id = await notificationService.addNotification(firebaseNotification)
+      
+      // Add to local state with proper format
+      const newNotification: Notification = {
+        id,
+        ...notification,
+        timestamp: new Date(),
+        read: false
+      }
+      setNotifications(prev => [newNotification, ...prev])
     } catch (e) {
       console.error('addNotification failed', e)
     }

@@ -1,18 +1,18 @@
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
   limit,
   onSnapshot,
-  Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Sale, User, Notification, Target, Settings, COLLECTIONS } from '@/types/firebase';
@@ -143,6 +143,17 @@ export const salesService = {
 
 // User operations
 export const userService = {
+  async getUsers(): Promise<User[]> {
+    try {
+      const q = query(collection(db, COLLECTIONS.USERS), orderBy('name', 'asc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      throw error;
+    }
+  },
+
   async getUser(id: string): Promise<User | null> {
     try {
       const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, id));
@@ -245,6 +256,31 @@ export const notificationService = {
       await updateDoc(notificationRef, { isRead: true });
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      throw error;
+    }
+  },
+
+  async markAllAsRead(userId: string): Promise<void> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.NOTIFICATIONS),
+        where('isRead', '==', false)
+      );
+      
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      
+      snapshot.docs.forEach(doc => {
+        const notification = doc.data() as Notification;
+        // Only mark as read if user is in the 'to' array or user is manager
+        if (!notification.to || notification.to.includes(userId) || notification.to.includes('all')) {
+          batch.update(doc.ref, { isRead: true });
+        }
+      });
+      
+      await batch.commit();
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
       throw error;
     }
   }

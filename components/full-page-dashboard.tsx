@@ -286,6 +286,17 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
                   >
                     {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onLogout}
+                    className={`transition-colors duration-300 ${
+                      isDark ? 'text-slate-400 hover:text-red-400' : 'text-slate-600 hover:text-red-600'
+                    }`}
+                    title="Logout"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Bell, Plus, Send, CheckCircle, Info, Briefcase, MessageSquare, AlertCircle } from "lucide-react"
+import { Bell, Plus, Send, CheckCircle, Info, Briefcase, MessageSquare, AlertCircle, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,9 +9,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Checkbox } from "@/components/ui/checkbox"
 import { formatDistanceToNow } from "date-fns"
 import { Notification, PriorityType, NotificationType } from "@/types/notification"
 import { useNotifications } from "@/hooks/use-notifications"
+import { userService } from "@/lib/firebase-services"
 
 type UserRole = "manager" | "salesman" | "customer-service"
 
@@ -25,6 +27,8 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
 
   const [activeTab, setActiveTab] = useState("all")
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [users, setUsers] = useState<any[]>([])
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
   const [newMessage, setNewMessage] = useState({
     message: "",
     priority: "medium" as PriorityType,
@@ -36,6 +40,21 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     markAllAsRead, 
     addNotification 
   } = useNotifications()
+  
+  // Load users for manager user selection
+  useEffect(() => {
+    const loadUsers = async () => {
+      if (userRole === 'manager') {
+        try {
+          const allUsers = await userService.getUsers()
+          setUsers(allUsers)
+        } catch (error) {
+          console.error('Failed to load users:', error)
+        }
+      }
+    }
+    loadUsers()
+  }, [userRole])
   
   // No sample data - all notifications come from Firebase
 
@@ -75,6 +94,9 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
 
   const handleCreateMessage = () => {
     if (!newMessage.message.trim()) return
+    if (userRole === 'manager' && selectedUsers.length === 0) return
+
+    const recipients = userRole === 'manager' ? selectedUsers : ["Sales Team"]
 
     const notification: Notification = {
       id: Date.now().toString(),
@@ -84,7 +106,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
       priority: newMessage.priority,
       from: currentUser.name,
       fromAvatar: "/placeholder-user.jpg",
-      to: ["Sales Team"],
+      to: recipients,
       timestamp: new Date(),
       read: false,
       isManagerMessage: userRole === 'manager'
@@ -95,7 +117,24 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
       message: "",
       priority: "medium"
     })
+    setSelectedUsers([])
     setShowCreateForm(false)
+  }
+
+  const handleUserSelection = (userId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedUsers(prev => [...prev, userId])
+    } else {
+      setSelectedUsers(prev => prev.filter(id => id !== userId))
+    }
+  }
+
+  const handleSelectAll = () => {
+    if (selectedUsers.length === users.length) {
+      setSelectedUsers([])
+    } else {
+      setSelectedUsers(users.map(user => user.id))
+    }
   }
 
   return (
@@ -146,6 +185,54 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
                   rows={4}
                 />
               </div>
+              
+              {userRole === 'manager' && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium">Recipients</label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSelectAll}
+                    >
+                      <Users className="mr-1 h-3 w-3" />
+                      {selectedUsers.length === users.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                  </div>
+                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
+                    {users.map((user) => (
+                      <div key={user.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={user.id}
+                          checked={selectedUsers.includes(user.id)}
+                          onCheckedChange={(checked) => handleUserSelection(user.id, checked as boolean)}
+                        />
+                        <label
+                          htmlFor={user.id}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs">{user.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <span>{user.name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {user.role}
+                            </Badge>
+                          </div>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedUsers.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedUsers.length} recipient{selectedUsers.length > 1 ? 's' : ''} selected
+                    </p>
+                  )}
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Priority</label>
@@ -172,7 +259,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
             </Button>
             <Button
               onClick={handleCreateMessage}
-              disabled={!newMessage.message.trim()}
+              disabled={!newMessage.message.trim() || (userRole === 'manager' && selectedUsers.length === 0)}
             >
               <Send className="mr-2 h-4 w-4" /> Send Message
             </Button>
