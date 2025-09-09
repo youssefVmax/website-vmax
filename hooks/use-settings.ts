@@ -26,20 +26,30 @@ export function useSettings() {
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
   const pendingRef = useRef<AppSettings | null>(null)
 
-  // Load initial
+  // Load initial settings from localStorage or use defaults
   useEffect(() => {
     let mounted = true
     const load = async () => {
       try {
-        const res = await fetch('/api/settings', { cache: 'no-store' })
-        if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`)
-        const json = await res.json()
-        if (!mounted) return
-        setSettings({ ...DEFAULTS, ...json })
-        setLoading(false)
+        // Try to load from localStorage first
+        const stored = localStorage.getItem('app_settings')
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (mounted) {
+            setSettings({ ...DEFAULTS, ...parsed })
+            setLoading(false)
+            return
+          }
+        }
+        // If no stored settings, use defaults
+        if (mounted) {
+          setSettings(DEFAULTS)
+          setLoading(false)
+        }
       } catch (e: any) {
         if (!mounted) return
-        setError(e instanceof Error ? e : new Error('Failed to load settings'))
+        console.warn('Failed to load settings from localStorage, using defaults:', e)
+        setSettings(DEFAULTS)
         setLoading(false)
       }
     }
@@ -61,17 +71,11 @@ export function useSettings() {
 
   const flushSave = useCallback(async (next: AppSettings) => {
     try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
-      })
-      if (!res.ok) throw new Error(`Failed to save settings: ${res.status}`)
-      const saved = await res.json()
-      // broadcast
-      bcRef.current?.postMessage({ type: 'settings:update', payload: saved })
+      // Save to localStorage instead of API
+      localStorage.setItem('app_settings', JSON.stringify(next))
+      // broadcast to other tabs
+      bcRef.current?.postMessage({ type: 'settings:update', payload: next })
     } catch (e) {
-      // Optionally surface error to UI
       console.error('Settings save failed', e)
     }
   }, [])

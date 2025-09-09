@@ -41,10 +41,12 @@ import { DataCenter } from "@/components/data-center"
 import { SalesTargets } from "@/components/sales-targets"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
+import EnhancedAnalytics from "@/components/enhanced-analytics"
 import MyDealsTable from "@/components/my-deals-table"
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { ImportExportControls } from "@/components/import-export-controls"
 import UserManagement from "@/components/user-management"
+import { AnimatedMetricCard } from "@/components/animated-metrics"
 
 interface FullPageDashboardProps {
   user: any;
@@ -155,6 +157,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     const baseItems = [
       { id: "dashboard", icon: Home, label: "Dashboard" },
       { id: "analytics", icon: BarChart3, label: "Analytics" },
+      { id: "enhanced-analytics", icon: PieChart, label: "Enhanced Analytics" },
       { id: "notifications", icon: Bell, label: "Notifications" },
     ]
 
@@ -426,6 +429,8 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "Sales Dashboard"
     case "analytics":
       return "Sales Analytics"
+    case "enhanced-analytics":
+      return "Enhanced Analytics"
     case "all-deals":
       return "All Deals Management"
     case "my-deals":
@@ -475,6 +480,8 @@ function PageContent({
       return <SalesAnalysisDashboard userRole={user.role} user={user} />
     case "analytics":
       return <AdvancedAnalytics userRole={user.role} user={user} />
+    case "enhanced-analytics":
+      return <EnhancedAnalytics userRole={user.role} user={user} />
     case "all-deals":
     case "my-deals":
     case "support-deals":
@@ -526,58 +533,75 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-cyan-200/50">
-        <CardContent className="p-6">
+      <Card className="bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10 border-cyan-200/50 dark:border-cyan-800/50 backdrop-blur-sm relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-purple-500/5"></div>
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500"></div>
+        <CardContent className="p-8 relative">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold">Welcome back, {user.name}!</h3>
-              <p className="text-muted-foreground">
-                {user.role === 'manager' 
-                  ? 'Here\'s an overview of your team\'s performance today.'
-                  : user.role === 'salesman'
-                    ? `You have ${sales.length} deals totaling $${metrics?.totalSales?.toFixed(2) || '0.00'}`
-                    : `Supporting ${sales.length} customer interactions.`}
-              </p>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full flex items-center justify-center">
+                  <User className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-cyan-400 dark:to-blue-400 bg-clip-text text-transparent">
+                    Welcome back, {user.name}!
+                  </h3>
+                  <p className="text-muted-foreground text-sm">
+                    {user.role === 'manager' 
+                      ? 'Here\'s an overview of your team\'s performance today.'
+                      : user.role === 'salesman'
+                        ? `You have ${sales.length} deals totaling $${metrics?.totalSales?.toFixed(2) || '0.00'}`
+                        : `Supporting ${sales.length} customer interactions.`}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold text-cyan-600">${metrics?.totalSales?.toFixed(2) || '0.00'}</p>
-              <p className="text-sm text-muted-foreground">{sales.length} Deals</p>
+            <div className="text-right space-y-2">
+              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-4 rounded-xl border border-green-200/50 dark:border-green-800/50">
+                <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent">
+                  ${metrics?.totalSales?.toFixed(2) || '0.00'}
+                </p>
+                <p className="text-sm text-muted-foreground">{sales.length} Deals</p>
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Role-based KPIs */}
+      {/* Role-based KPIs with Real-time Animation */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard
+        <AnimatedMetricCard
           title={user.role === 'manager' ? "Team Sales" : "My Sales"}
-          value={`$${metrics?.totalSales?.toFixed(2) || '0.00'}`}
+          value={metrics?.totalSales || 0}
+          previousValue={(metrics?.totalSales || 0) * 0.95}
           icon={DollarSign}
-          trend="up"
-          change={`${sales.length} deals`}
+          format="currency"
+          color="green"
         />
-        <MetricCard
+        <AnimatedMetricCard
           title={user.role === 'manager' ? "Total Deals" : "My Deals"}
-          value={String(sales.length)}
+          value={sales.length}
+          previousValue={Math.max(0, sales.length - 2)}
           icon={TrendingUp}
-          trend="up"
-          change={`Avg: $${metrics?.averageDealSize?.toFixed(2) || '0.00'}`}
+          format="number"
+          color="blue"
         />
-        <MetricCard
-          title={user.role === 'manager' ? "Active Agents" : "My Performance"}
-          value={user.role === 'manager' ? String(Object.keys(metrics?.salesByAgent || {}).length) : `${((sales.length / 30) || 0).toFixed(1)}/day`}
+        <AnimatedMetricCard
+          title={user.role === 'manager' ? "Active Agents" : "Performance Score"}
+          value={user.role === 'manager' ? Object.keys(metrics?.salesByAgent || {}).length : Math.min(100, (sales.length * 10))}
+          previousValue={user.role === 'manager' ? Math.max(1, Object.keys(metrics?.salesByAgent || {}).length - 1) : Math.min(95, (sales.length * 10) - 5)}
           icon={Users}
-          trend="stable"
-          change={user.role === 'manager' ? "team members" : "average"}
+          format={user.role === 'manager' ? "number" : "percentage"}
+          color="purple"
         />
-        <MetricCard
-          title={user.role === 'manager' ? "Top Service" : "Recent Activity"}
-          value={user.role === 'manager' 
-            ? Object.entries(metrics?.salesByService || {}).sort(([,a], [,b]) => (b as number) - (a as number))[0]?.[0] || 'N/A'
-            : `${metrics?.recentSales?.length || 0} recent`}
+        <AnimatedMetricCard
+          title={user.role === 'manager' ? "Avg Deal Size" : "Weekly Target"}
+          value={user.role === 'manager' ? (metrics?.averageDealSize || 0) : Math.min(100, ((sales.length / 7) * 100))}
+          previousValue={user.role === 'manager' ? (metrics?.averageDealSize || 0) * 0.9 : Math.min(95, ((sales.length / 7) * 100) - 5)}
           icon={Target}
-          trend="up"
-          change={user.role === 'manager' ? "best seller" : "this week"}
+          format={user.role === 'manager' ? "currency" : "percentage"}
+          color="orange"
         />
       </div>
 
@@ -658,29 +682,77 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
   )
 }
 
-function MetricCard({ title, value, icon: Icon, trend, change }: {
+function MetricCard({ title, value, icon: Icon, trend, change, color = 'blue' }: {
   title: string;
   value: string;
   icon: LucideIcon;
   trend: 'up' | 'down' | 'stable';
   change: string;
+  color?: 'blue' | 'green' | 'purple' | 'orange' | 'cyan';
 }) {
+  const colorClasses = {
+    blue: {
+      bg: 'bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/50',
+      border: 'border-blue-200/50 dark:border-blue-800/50',
+      icon: 'text-blue-600 dark:text-blue-400',
+      accent: 'bg-blue-500'
+    },
+    green: {
+      bg: 'bg-gradient-to-br from-emerald-50 to-green-100 dark:from-emerald-950/50 dark:to-green-900/50',
+      border: 'border-emerald-200/50 dark:border-emerald-800/50',
+      icon: 'text-emerald-600 dark:text-emerald-400',
+      accent: 'bg-emerald-500'
+    },
+    purple: {
+      bg: 'bg-gradient-to-br from-purple-50 to-violet-100 dark:from-purple-950/50 dark:to-violet-900/50',
+      border: 'border-purple-200/50 dark:border-purple-800/50',
+      icon: 'text-purple-600 dark:text-purple-400',
+      accent: 'bg-purple-500'
+    },
+    orange: {
+      bg: 'bg-gradient-to-br from-orange-50 to-amber-100 dark:from-orange-950/50 dark:to-amber-900/50',
+      border: 'border-orange-200/50 dark:border-orange-800/50',
+      icon: 'text-orange-600 dark:text-orange-400',
+      accent: 'bg-orange-500'
+    },
+    cyan: {
+      bg: 'bg-gradient-to-br from-cyan-50 to-teal-100 dark:from-cyan-950/50 dark:to-teal-900/50',
+      border: 'border-cyan-200/50 dark:border-cyan-800/50',
+      icon: 'text-cyan-600 dark:text-cyan-400',
+      accent: 'bg-cyan-500'
+    }
+  };
+
+  const classes = colorClasses[color];
+  
   return (
-    <Card>
-      <CardContent className="p-6">
+    <Card className={`${classes.bg} ${classes.border} backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:scale-105 group relative overflow-hidden`}>
+      <div className={`absolute top-0 left-0 w-full h-1 ${classes.accent}`}></div>
+      <CardContent className="p-6 relative">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="space-y-2">
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
-            <p className={`text-xs ${
-              trend === 'up' ? 'text-green-600' : 
-              trend === 'down' ? 'text-red-600' : 'text-gray-600'
-            }`}>
-              {change} from last month
+            <p className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
+              {value}
             </p>
+            <div className="flex items-center space-x-2">
+              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                trend === 'up' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 
+                trend === 'down' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 
+                'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+              }`}>
+                {trend === 'up' && '↗'}
+                {trend === 'down' && '↘'}
+                {trend === 'stable' && '→'}
+                <span className="ml-1">{change}</span>
+              </div>
+            </div>
           </div>
-          <Icon className="h-8 w-8 text-muted-foreground" />
+          <div className={`p-3 rounded-full ${classes.bg} group-hover:scale-110 transition-transform duration-300`}>
+            <Icon className={`h-8 w-8 ${classes.icon}`} />
+          </div>
         </div>
+        <div className={`absolute bottom-0 right-0 w-20 h-20 ${classes.accent} opacity-5 rounded-full transform translate-x-8 translate-y-8`}></div>
       </CardContent>
     </Card>
   )

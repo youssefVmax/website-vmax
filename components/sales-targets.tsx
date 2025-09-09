@@ -240,10 +240,13 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
                 Set New Target
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent aria-describedby="create-target-description">
               <DialogHeader>
                 <DialogTitle>Create New Sales Target</DialogTitle>
               </DialogHeader>
+              <div id="create-target-description" className="sr-only">
+                Create a new sales target for a team member with specific goals and timeframes
+              </div>
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="agent">Sales Agent</Label>
@@ -347,10 +350,13 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
                             <Edit className="h-4 w-4" />
                           </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent aria-describedby="edit-target-description">
                             <DialogHeader>
                                 <DialogTitle>Edit Sales Target for {editingTarget?.agentName}</DialogTitle>
                             </DialogHeader>
+                            <div id="edit-target-description" className="sr-only">
+                                Modify the sales target amount and period for the selected team member
+                            </div>
                             <div className="space-y-4">
                                 <div>
                                     <Label htmlFor="edit-monthly-target">Monthly Revenue Target ($)</Label>

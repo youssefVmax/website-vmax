@@ -273,10 +273,13 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
 
         {/* View dialog */}
         <Dialog open={!!viewDeal} onOpenChange={(o)=>!o && setViewDeal(null)}>
-          <DialogContent>
+          <DialogContent aria-describedby="view-deal-description">
             <DialogHeader>
               <DialogTitle>Deal Details</DialogTitle>
             </DialogHeader>
+            <div id="view-deal-description" className="sr-only">
+              View detailed information about the selected deal
+            </div>
             <div className="space-y-2 text-sm">
               <div><strong>Deal ID:</strong> {viewDeal?.DealID}</div>
               <div><strong>Date:</strong> {viewDeal ? new Date(viewDeal.date).toLocaleString() : ''}</div>
@@ -290,10 +293,13 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
 
         {/* Edit dialog */}
         <Dialog open={!!editDeal} onOpenChange={(o)=>!o && setEditDeal(null)}>
-          <DialogContent>
+          <DialogContent aria-describedby="edit-deal-description">
             <DialogHeader>
               <DialogTitle>Edit Deal Note</DialogTitle>
             </DialogHeader>
+            <div id="edit-deal-description" className="sr-only">
+              Edit the note or comments for the selected deal
+            </div>
             <div className="space-y-3">
               <Input placeholder="Add a note about this deal" value={editNote} onChange={(e)=>setEditNote(e.target.value)} />
             </div>

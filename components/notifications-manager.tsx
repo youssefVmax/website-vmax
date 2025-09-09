@@ -23,7 +23,7 @@ export default function NotificationsManager() {
 
   const [audience, setAudience] = useState<'ALL' | 'SPECIFIC'>('ALL')
   const [selected, setSelected] = useState<string[]>([])
-  const [selectedRole, setSelectedRole] = useState<'manager' | 'salesman' | 'customer-service' | ''>('')
+  const [selectedRole, setSelectedRole] = useState<'manager' | 'salesman' | 'customer-service' | 'none'>('none')
   const [selectedTeam, setSelectedTeam] = useState<string>('')
 
   const [title, setTitle] = useState('')
@@ -36,13 +36,14 @@ export default function NotificationsManager() {
     let mounted = true
     const load = async () => {
       try {
-        const res = await fetch('/api/users', { cache: 'no-store' })
-        const data = await res.json()
+        const { userService } = await import('@/lib/firebase-user-service')
+        const data = await userService.getAllUsers()
         if (mounted) setUsers(data)
       } catch (e) {
         console.error('Failed to fetch users', e)
+        if (mounted) setUsers([])
       } finally {
-        setLoadingUsers(false)
+        if (mounted) setLoadingUsers(false)
       }
     }
     load()
@@ -62,20 +63,21 @@ export default function NotificationsManager() {
   }
 
   const applyRoleSelection = () => {
-    if (!selectedRole) return
-    const ids = visibleUsers.filter(u => u.role === selectedRole).map(u => u.id)
-    setSelected(Array.from(new Set([...selected, ...ids])))
+    if (!selectedRole || selectedRole === "none") return
+    const roleUsers = users.filter(u => u.role === selectedRole)
+    setSelected(prev => [...new Set([...prev, ...roleUsers.map(u => u.id)])])
+    setSelectedRole("none")
   }
 
   const applyTeamSelection = () => {
     if (!selectedTeam) return
     const ids = visibleUsers.filter(u => u.team === selectedTeam).map(u => u.id)
-    setSelected(Array.from(new Set([...selected, ...ids])))
+    setSelected(prev => [...new Set([...prev, ...ids])])
   }
 
   const clearSelection = () => {
     setSelected([])
-    setSelectedRole('')
+    setSelectedRole('none')
     setSelectedTeam('')
   }
 
@@ -173,7 +175,7 @@ export default function NotificationsManager() {
                       <SelectValue placeholder="Pick role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {roles.map(r => (
                         <SelectItem key={r} value={r}>{r}</SelectItem>
                       ))}
@@ -188,7 +190,7 @@ export default function NotificationsManager() {
                       <SelectValue placeholder="Pick team" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {teams.map(t => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
