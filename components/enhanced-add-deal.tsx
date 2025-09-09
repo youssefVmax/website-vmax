@@ -132,6 +132,15 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     setLoading(true)
 
     try {
+      // Validate required fields
+      if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.amount_paid) {
+        alert('Please fill in all required fields: Customer Name, Email, Phone, and Amount Paid')
+        setLoading(false)
+        return
+      }
+
+      console.log('Creating deal with data:', formData)
+
       // Combine form data with calculated fields
       const dealData = {
         ...formData,
@@ -143,10 +152,16 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         // These will be calculated by the service based on existing data
         agent_avg_paid: 0,
         is_above_avg: false,
-        paid_rank: 0
+        paid_rank: 0,
+        created_by: currentUser.id || currentUser.username
       }
 
+      console.log('Processed deal data:', dealData)
       const dealId = await dealsService.createDeal(dealData, currentUser)
+      console.log('Deal created successfully with ID:', dealId)
+      
+      // Show success message
+      alert(`Deal for "${formData.customer_name}" created successfully! Deal ID: ${dealId}`)
       
       if (onSuccess) {
         onSuccess(dealId)

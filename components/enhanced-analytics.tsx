@@ -65,18 +65,19 @@ function EnhancedAnalytics({ userRole, user }: EnhancedAnalyticsProps) {
     }
 
     // Group by date
-    const dailyData: { [key: string]: { sales: number; deals: number; amounts: number[] } } = {};
-    
-    filteredSales.forEach((sale: any) => {
-      const dateStr = new Date(sale.date).toISOString().split('T')[0];
-      if (!dailyData[dateStr]) {
-        dailyData[dateStr] = { sales: 0, deals: 0, amounts: [] };
+    const dailyData = sales.reduce((acc, sale) => {
+      const saleDate = new Date((sale as any).date || (sale as any).signup_date || (sale as any).created_at);
+      const dateStr = saleDate.toISOString().split('T')[0];
+      
+      if (!acc[dateStr]) {
+        acc[dateStr] = { sales: 0, deals: 0 };
       }
-      const amount = parseFloat(sale.amount) || 0;
-      dailyData[dateStr].sales += amount;
-      dailyData[dateStr].deals += 1;
-      dailyData[dateStr].amounts.push(amount);
-    });
+      
+      acc[dateStr].sales += ((sale as any).amount_paid || (sale as any).amount || 0);
+      acc[dateStr].deals += 1;
+      
+      return acc;
+    }, {} as Record<string, { sales: number; deals: number }>);
 
     // Convert to time series with cumulative data
     let cumulativeSales = 0;
@@ -312,109 +313,112 @@ function EnhancedAnalytics({ userRole, user }: EnhancedAnalyticsProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="h-96">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              {chartType === 'line' && (
-                <LineChart data={timeSeriesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip 
-                    formatter={(value, name) => [
-                      selectedMetric === 'sales' || selectedMetric === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
-                      name === 'sales' ? 'Sales' : name === 'deals' ? 'Deals' : name === 'avgDealSize' ? 'Avg Deal Size' : 'Cumulative Sales'
-                    ]}
-                    labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey={selectedMetric} 
-                    stroke="#06b6d4" 
-                    strokeWidth={3}
-                    dot={{ fill: '#06b6d4', strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6, stroke: '#06b6d4', strokeWidth: 2 }}
-                  />
-                </LineChart>
-              )}
-              
-              {chartType === 'area' && (
-                <AreaChart data={timeSeriesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip 
-                    formatter={(value) => [
-                      selectedMetric === 'sales' || selectedMetric === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
-                      selectedMetric === 'sales' ? 'Sales' : selectedMetric === 'deals' ? 'Deals' : selectedMetric === 'avgDealSize' ? 'Avg Deal Size' : 'Cumulative Sales'
-                    ]}
-                    labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey={selectedMetric} 
-                    stroke="#06b6d4" 
-                    fill="url(#colorGradient)"
-                    strokeWidth={2}
-                  />
-                  <defs>
-                    <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05}/>
-                    </linearGradient>
-                  </defs>
-                </AreaChart>
-              )}
-              
-              {chartType === 'bar' && (
-                <BarChart data={timeSeriesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip 
-                    formatter={(value) => [
-                      selectedMetric === 'sales' || selectedMetric === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
-                      selectedMetric === 'sales' ? 'Sales' : selectedMetric === 'deals' ? 'Deals' : selectedMetric === 'avgDealSize' ? 'Avg Deal Size' : 'Cumulative Sales'
-                    ]}
-                    labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  />
-                  <Bar dataKey={selectedMetric} fill="#06b6d4" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              )}
-              
-              {chartType === 'composed' && (
-                <ComposedChart data={timeSeriesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                  <Tooltip 
-                    formatter={(value, name) => [
-                      name === 'sales' || name === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
-                      name === 'sales' ? 'Sales' : name === 'deals' ? 'Deals' : name === 'avgDealSize' ? 'Avg Deal Size' : 'Cumulative Sales'
-                    ]}
-                    labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  />
-                  <Bar yAxisId="left" dataKey="sales" fill="#06b6d4" radius={[2, 2, 0, 0]} />
-                  <Line yAxisId="right" type="monotone" dataKey="deals" stroke="#10b981" strokeWidth={2} />
-                  <Line yAxisId="right" type="monotone" dataKey="cumulativeSales" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" />
-                </ComposedChart>
-              )}
+              <>
+                {chartType === 'line' && (
+                  <LineChart data={timeSeriesData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      formatter={(value, name) => [
+                        selectedMetric === 'sales' || selectedMetric === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
+                        name
+                      ]}
+                      labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey={selectedMetric} 
+                      stroke="#06b6d4" 
+                      strokeWidth={3}
+                      dot={{ fill: '#06b6d4', strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6, stroke: '#06b6d4', strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                )}
+                {chartType === 'area' && (
+                  <AreaChart data={timeSeriesData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      formatter={(value) => [
+                        selectedMetric === 'sales' || selectedMetric === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
+                        selectedMetric
+                      ]}
+                      labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey={selectedMetric} 
+                      stroke="#06b6d4" 
+                      fill="url(#colorGradient)"
+                      strokeWidth={2}
+                    />
+                    <defs>
+                      <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05}/>
+                      </linearGradient>
+                    </defs>
+                  </AreaChart>
+                )}
+                {chartType === 'bar' && (
+                  <BarChart data={timeSeriesData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      formatter={(value) => [
+                        selectedMetric === 'sales' || selectedMetric === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
+                        selectedMetric
+                      ]}
+                      labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                    />
+                    <Bar 
+                      dataKey={selectedMetric} 
+                      fill="#06b6d4"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                )}
+                {chartType === 'composed' && (
+                  <ComposedChart data={timeSeriesData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    />
+                    <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      formatter={(value, name) => [
+                        name === 'sales' || name === 'cumulativeSales' ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
+                        name === 'sales' ? 'Sales' : name === 'deals' ? 'Deals' : name === 'avgDealSize' ? 'Avg Deal Size' : 'Cumulative Sales'
+                      ]}
+                      labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                    />
+                    <Bar yAxisId="left" dataKey="sales" fill="#06b6d4" radius={[2, 2, 0, 0]} />
+                    <Line yAxisId="right" type="monotone" dataKey="deals" stroke="#10b981" strokeWidth={2} />
+                    <Line yAxisId="right" type="monotone" dataKey="cumulativeSales" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" />
+                  </ComposedChart>
+                )}
+              </>
             </ResponsiveContainer>
           </div>
         </CardContent>

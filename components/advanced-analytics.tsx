@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts'
 import { TrendingUp, DollarSign, Users, Target, Calendar, Download, Filter, BarChart3, PieChart as PieChartIcon, Activity, Award } from "lucide-react"
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { Sale, Deal } from "@/types/firebase"
 import { addDays, format } from "date-fns"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -17,6 +18,8 @@ interface AdvancedAnalyticsProps {
   userRole: 'manager' | 'salesman' | 'customer-service'
   user: { name: string; username: string; id: string }
 }
+
+type SaleOrDeal = Sale | Deal | any;
 
 export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   const { sales, loading, error, refresh } = useFirebaseSalesData(userRole, user.id, user.name)
@@ -41,19 +44,19 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
     // Filter by date range
     const filteredSales = sales.filter(sale => {
-      const saleDate = new Date(sale.date)
+      const saleDate = new Date((sale as any).date || (sale as any).signup_date || (sale as any).created_at)
       return saleDate >= dateRange.from && saleDate <= dateRange.to
     })
 
     // Further filter by team and service
     const finalFilteredSales = filteredSales.filter(sale => {
-      const teamMatch = selectedTeam === "all" || sale.team === selectedTeam
-      const serviceMatch = selectedService === "all" || sale.type_service === selectedService
+      const teamMatch = selectedTeam === "all" || (sale as any).team === selectedTeam || (sale as any).sales_team === selectedTeam
+      const serviceMatch = selectedService === "all" || (sale as any).type_service === selectedService || (sale as any).product_type === selectedService
       return teamMatch && serviceMatch
     })
 
     // Calculate metrics
-    const totalRevenue = finalFilteredSales.reduce((sum, sale) => sum + (sale.amount || 0), 0)
+    const totalRevenue = finalFilteredSales.reduce((sum, sale) => sum + ((sale as any).amount_paid || (sale as any).amount || 0), 0)
     const totalDeals = finalFilteredSales.length
     const averageDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0
 
@@ -83,11 +86,11 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
     // Daily trend
     const dailyData = finalFilteredSales.reduce((acc, sale) => {
-      const date = sale.date
+      const date = (sale as any).date || (sale as any).signup_date || format(new Date(), 'yyyy-MM-dd')
       if (!acc[date]) {
         acc[date] = { date, revenue: 0, deals: 0 }
       }
-      acc[date].revenue += sale.amount || 0
+      acc[date].revenue += ((sale as any).amount_paid || (sale as any).amount || 0)
       acc[date].deals += 1
       return acc
     }, {} as Record<string, { date: string; revenue: number; deals: number }>)
@@ -97,20 +100,11 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     )
 
     // Sales by agent
-    const agentData = finalFilteredSales.reduce((acc, sale) => {
-      const agent = sale.sales_agent || 'Unknown'
-      if (!acc[agent]) {
-        acc[agent] = { agent, revenue: 0, deals: 0, avgDealSize: 0 }
-      }
-      acc[agent].revenue += sale.amount || 0
-      acc[agent].deals += 1
-      acc[agent].avgDealSize = acc[agent].revenue / acc[agent].deals
+    const revenueByAgent = finalFilteredSales.reduce((acc, sale) => {
+      const agent = (sale as any).sales_agent || (sale as any).sales_agent_norm || 'Unknown'
+      acc[agent] = (acc[agent] || 0) + ((sale as any).amount_paid || (sale as any).amount || 0)
       return acc
-    }, {} as Record<string, { agent: string; revenue: number; deals: number; avgDealSize: number }>)
-
-    const topAgents = Object.values(agentData)
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10)
+    }, {} as Record<string, number>)
 
     // Sales by team
     const teamData = finalFilteredSales.reduce((acc, sale) => {
@@ -126,17 +120,38 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     const teamPerformance = Object.values(teamData).sort((a, b) => b.revenue - a.revenue)
 
     // Sales by service
+    const revenueByService = finalFilteredSales.reduce((acc, sale) => {
+      const service = (sale as any).type_service || (sale as any).product_type || 'Other'
+      acc[service] = (acc[service] || 0) + ((sale as any).amount_paid || (sale as any).amount || 0)
+      return acc
+    }, {} as Record<string, number>)
+
     const serviceData = finalFilteredSales.reduce((acc, sale) => {
-      const service = sale.type_service || 'Unknown'
+      const service = (sale as any).type_service || (sale as any).product_type || 'Other'
       if (!acc[service]) {
         acc[service] = { service, revenue: 0, deals: 0 }
       }
-      acc[service].revenue += sale.amount || 0
+      acc[service].revenue += ((sale as any).amount_paid || (sale as any).amount || 0)
       acc[service].deals += 1
       return acc
     }, {} as Record<string, { service: string; revenue: number; deals: number }>)
 
     const servicePerformance = Object.values(serviceData).sort((a, b) => b.revenue - a.revenue)
+
+    // Top agents
+    const topAgents = Object.entries(revenueByAgent)
+      .map(([agent, revenue]) => ({
+        agent,
+        revenue,
+        deals: finalFilteredSales.filter(s => 
+          ((s as any).sales_agent || (s as any).sales_agent_norm) === agent
+        ).length,
+        avgDealSize: revenue / Math.max(1, finalFilteredSales.filter(s => 
+          ((s as any).sales_agent || (s as any).sales_agent_norm) === agent
+        ).length)
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
 
     // Performance correlation (deal size vs deals count)
     const performanceCorrelation = topAgents.map(agent => ({

@@ -67,6 +67,14 @@ export default function UserManagement() {
 
   const handleAddUser = async () => {
     try {
+      setError(null)
+      
+      // Validate required fields
+      if (!formData.username || !formData.password || !formData.name || !formData.role) {
+        setError('Please fill in all required fields')
+        return
+      }
+
       // Check if username already exists
       const exists = await userService.usernameExists(formData.username)
       if (exists) {
@@ -74,13 +82,20 @@ export default function UserManagement() {
         return
       }
 
-      await userService.createUser(formData)
+      console.log('Creating user with data:', formData)
+      const userId = await userService.createUser(formData)
+      console.log('User created successfully with ID:', userId)
+      
       await loadUsers()
       setIsAddDialogOpen(false)
       resetForm()
       setError(null)
+      
+      // Show success message
+      alert(`User "${formData.name}" created successfully!`)
     } catch (err) {
-      setError('Failed to create user')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create user'
+      setError(errorMessage)
       console.error('Error creating user:', err)
     }
   }

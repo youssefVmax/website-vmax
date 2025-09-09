@@ -851,7 +851,7 @@ function TeamManagement({ user }: { user: any }) {
 
   // Group users by team and calculate performance metrics
   const teamStats = useMemo(() => {
-    if (!users || users.length === 0 || !sales) return [];
+    if (!users || users.length === 0) return [];
     
     const teams = users.reduce((acc: Record<string, { members: any[], sales: any[] }>, user: any) => {
       const teamName = user.team || 'OTHER'
@@ -860,18 +860,28 @@ function TeamManagement({ user }: { user: any }) {
       }
       acc[teamName].members.push(user)
       
-      // Get sales for this user
-      const userSales = sales.filter((sale: any) => 
-        sale.sales_agent?.toLowerCase() === user.name.toLowerCase() ||
-        sale.closing_agent?.toLowerCase() === user.name.toLowerCase()
-      )
-      acc[teamName].sales.push(...userSales)
+      // Get sales for this user - handle both sales array and empty/undefined cases
+      if (sales && Array.isArray(sales)) {
+        const userSales = sales.filter((sale: any) => {
+          if (!sale) return false;
+          const salesAgent = sale.sales_agent || sale.sales_agent_norm || '';
+          const closingAgent = sale.closing_agent || sale.closing_agent_norm || '';
+          const userName = user.name || '';
+          
+          return salesAgent.toLowerCase() === userName.toLowerCase() ||
+                 closingAgent.toLowerCase() === userName.toLowerCase();
+        });
+        acc[teamName].sales.push(...userSales);
+      }
       
       return acc
     }, {})
 
     return Object.entries(teams).map(([teamName, data]) => {
-      const totalRevenue = data.sales.reduce((sum: number, sale: any) => sum + (sale.amount_paid || sale.amount || 0), 0)
+      const totalRevenue = data.sales.reduce((sum: number, sale: any) => {
+        if (!sale) return sum;
+        return sum + ((sale as any).amount_paid || (sale as any).amount || 0);
+      }, 0);
       const avgDealSize = data.sales.length > 0 ? totalRevenue / data.sales.length : 0
       const performance = Math.min(100, Math.max(0, (avgDealSize / 1000) * 10)) // Simple performance calculation
       

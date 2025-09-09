@@ -79,12 +79,11 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
     }
 
     return targetsToProcess.map(target => {
-      const agentSales = sales.filter((sale: any) => 
-        sale.sales_agent_norm?.toLowerCase() === target.agentName.toLowerCase() ||
-        sale.SalesAgentID === target.agentId
-      );
-      
-      const currentSales = agentSales.reduce((sum: number, sale: any) => sum + (sale.amount || 0), 0);
+      const agentSales = sales.filter(sale => 
+        (sale as any).sales_agent?.toLowerCase() === target.agentName.toLowerCase() ||
+        (sale as any).closing_agent?.toLowerCase() === target.agentName.toLowerCase()
+      )
+      const currentSales = agentSales.reduce((sum, sale) => sum + ((sale as any).amount_paid || (sale as any).amount || 0), 0);
       const currentDeals = agentSales.length;
       
       const salesProgress = target.monthlyTarget > 0 ? (currentSales / target.monthlyTarget) * 100 : 0;

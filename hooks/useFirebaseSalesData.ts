@@ -9,24 +9,24 @@ export function useFirebaseSalesData(userRole: string, userId?: string, userName
   const [error, setError] = useState<Error | null>(null);
 
   const calculateMetrics = useCallback((sales: Sale[]): SalesMetrics => {
-    const totalSales = sales.reduce((sum, sale) => sum + (sale.amount || 0), 0);
+    const totalSales = sales.reduce((sum, sale) => sum + ((sale as any).amount_paid || sale.amount || 0), 0);
     const totalDeals = sales.length;
     const averageDealSize = totalDeals > 0 ? totalSales / totalDeals : 0;
 
     const salesByAgent = sales.reduce((acc, sale) => {
-      const agent = sale.sales_agent || 'Unknown';
-      acc[agent] = (acc[agent] || 0) + (sale.amount || 0);
+      const agent = (sale as any).sales_agent_norm || sale.sales_agent || 'Unknown';
+      acc[agent] = (acc[agent] || 0) + ((sale as any).amount_paid || sale.amount || 0);
       return acc;
     }, {} as Record<string, number>);
 
     const salesByService = sales.reduce((acc, sale) => {
-      const service = sale.type_service || 'Other';
-      acc[service] = (acc[service] || 0) + (sale.amount || 0);
+      const service = (sale as any).product_type || sale.type_service || 'Other';
+      acc[service] = (acc[service] || 0) + ((sale as any).amount_paid || sale.amount || 0);
       return acc;
     }, {} as Record<string, number>);
 
     const recentSales = [...sales]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .sort((a, b) => new Date((b as any).signup_date || b.date).getTime() - new Date((a as any).signup_date || a.date).getTime())
       .slice(0, 5);
 
     return {
