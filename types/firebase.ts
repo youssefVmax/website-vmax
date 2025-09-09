@@ -25,6 +25,56 @@ export interface Sale {
   updated_at?: Timestamp;
 }
 
+// Enhanced Deal interface for comprehensive tracking with all required columns
+export interface Deal {
+  id?: string;
+  DealID: string;
+  signup_date: string;
+  end_date: string;
+  customer_name: string;
+  email: string;
+  phone_number: string;
+  country: string;
+  amount_paid: number;
+  paid_per_month: number;
+  duration_months: number;
+  sales_agent: string;
+  closing_agent: string;
+  sales_team: string;
+  product_type: string;
+  service_tier: string;
+  data_month: number;
+  data_year: number;
+  invoice_link?: string;
+  is_ibo_player: boolean;
+  is_bob_player: boolean;
+  is_smarters: boolean;
+  is_ibo_pro: boolean;
+  days_remaining: number;
+  paid_per_day: number;
+  duration_mean_paid: number;
+  agent_avg_paid: number;
+  is_above_avg: boolean;
+  paid_rank: number;
+  end_year: number;
+  sales_agent_norm: string;
+  closing_agent_norm: string;
+  SalesAgentID: string;
+  ClosingAgentID: string;
+  
+  // Additional tracking fields
+  status: 'pending' | 'active' | 'completed' | 'cancelled' | 'refunded';
+  stage: 'lead' | 'qualified' | 'proposal' | 'negotiation' | 'closed-won' | 'closed-lost';
+  priority: 'low' | 'medium' | 'high';
+  notes?: string;
+  commission_sales?: number;
+  commission_closing?: number;
+  created_at?: Timestamp;
+  updated_at?: Timestamp;
+  created_by: string;
+  created_by_id: string;
+}
+
 export interface User {
   id?: string;
   name: string;
@@ -36,6 +86,9 @@ export interface User {
   created_at?: Timestamp;
   updated_at?: Timestamp;
   isActive?: boolean;
+  username?: string;
+  phone?: string;
+  created_by?: string;
 }
 
 export interface Notification {
