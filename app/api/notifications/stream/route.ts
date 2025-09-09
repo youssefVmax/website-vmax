@@ -1,25 +1,50 @@
 import { NextRequest } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
-import { USERS } from '@/lib/auth'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
-const dataFilePath = path.join(process.cwd(), 'public', 'data', 'notifications.json')
-
-async function readNotifications() {
+async function getNotifications(userId: string | null, role: string | null) {
   try {
-    const fileContent = await fs.readFile(dataFilePath, 'utf-8')
-    return JSON.parse(fileContent)
-  } catch {
+    const notificationsRef = collection(db, 'notifications')
+    
+    // If not manager, only get notifications for this user
+    if (role !== 'manager' && userId) {
+      const q = query(notificationsRef, where('userId', '==', userId))
+      const querySnapshot = await getDocs(q)
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+    }
+    
+    // For managers or when no userId, get all notifications
+    const querySnapshot = await getDocs(notificationsRef)
+    const notifications = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+    return notifications
+  } catch (error) {
+    console.error('Error reading notifications:', error)
     return []
   }
 }
 
 function filterForUser(all: any[], userId?: string | null, role?: string | null) {
-  const validIds = new Set<string>(USERS.map(u => u.id))
-  const sanitized = all.filter((n) => Array.isArray(n.to) && n.to.every((t: any) => typeof t === 'string' && (t === 'ALL' || validIds.has(t))))
-  if (role === 'manager') return sanitized
-  if (!userId) return []
-  return sanitized.filter((n) => n.to.includes('ALL') || n.to.includes(userId))
+  // If user is a manager, they can see all notifications
+  if (role === 'manager') {
+    return all.filter((n) => Array.isArray(n.to));
+  }
+  
+  // If no user ID, return empty array
+  if (!userId) return [];
+  
+  // For non-managers, filter notifications that are either:
+  // 1. Addressed to 'ALL'
+  // 2. Specifically addressed to this user
+  return all.filter((n) => 
+    Array.isArray(n.to) && 
+    (n.to.includes('ALL') || n.to.includes(userId))
+  );
 }
 
 export async function GET(req: Request) {
@@ -37,8 +62,8 @@ export async function GET(req: Request) {
       const send = async () => {
         if (closed || !controllerRef) return
         try {
-          const all = await readNotifications()
-          const data = filterForUser(all, userId, role)
+          const notifications = await getNotifications(userId, role)
+          const data = filterForUser(notifications, userId, role)
           const payload = `data: ${JSON.stringify(data)}\n\n`
           try {
             controllerRef.enqueue(encoder.encode(payload))
