@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { Eye, EyeOff, Shield, Lock, User } from "lucide-react"
+import React, { useState } from 'react'
+import { Eye, EyeOff, Shield, Users, Headphones, TrendingUp, DollarSign, Target, BarChart3, Lock, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { authenticateUser } from "@/lib/auth"
 
@@ -16,10 +17,10 @@ interface UnifiedLoginProps {
 export default function UnifiedLogin({ onLogin }: UnifiedLoginProps) {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("manager")
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,130 +28,104 @@ export default function UnifiedLogin({ onLogin }: UnifiedLoginProps) {
     setError("")
 
     try {
-      const user = await authenticateUser(username, password)
-      
+      const user = await authenticateUser(username, password, activeTab as any)
       if (user) {
-        // Verify role matches selected tab
-        if (activeTab === "manager" && user.role !== "manager") {
-          setError("Manager credentials required for manager login")
-          return
-        }
-        if (activeTab === "salesman" && user.role === "manager") {
-          setError("Please use the Manager tab to login as manager")
-          return
-        }
-        
         onLogin(user)
       } else {
-        setError("Invalid credentials. Please check your username and password.")
+        setError("Invalid credentials")
       }
     } catch (err) {
-      setError("Login failed. Please try again.")
+      setError("Authentication failed")
     } finally {
       setLoading(false)
     }
   }
 
-  const resetForm = () => {
-    setUsername("")
-    setPassword("")
-    setError("")
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center">
-          <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
-            <Shield className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">IPTV Sales Portal</h1>
-          <p className="text-gray-600 mt-2">
-            Access your sales dashboard and manage accounts
-          </p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="w-5 h-5" />
-              Login to Your Account
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <Card className="backdrop-blur-sm bg-white/10 border-white/20 shadow-2xl">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto mb-4 p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full w-fit">
+              <Lock className="h-8 w-8 text-white" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-white">
+              IPTV Sales Dashboard
             </CardTitle>
-            <CardDescription>
-              Choose your role and enter your credentials
+            <CardDescription className="text-slate-300">
+              Sign in to access your dashboard
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="grid w-full grid-cols-2 gap-2 p-1 bg-muted rounded-md">
-                <Button
-                  type="button"
-                  variant={activeTab === "manager" ? "default" : "ghost"}
-                  className="flex items-center gap-2"
-                  onClick={() => { setActiveTab("manager"); resetForm(); }}
+          
+          <CardContent className="space-y-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-3 bg-white/10 border-white/20">
+                <TabsTrigger 
+                  value="manager" 
+                  className="data-[state=active]:bg-blue-500 data-[state=active]:text-white text-slate-300"
                 >
-                  <Shield className="w-4 h-4" />
+                  <Shield className="w-4 h-4 mr-1" />
                   Manager
-                </Button>
-                <Button
-                  type="button"
-                  variant={activeTab === "salesman" ? "default" : "ghost"}
-                  className="flex items-center gap-2"
-                  onClick={() => { setActiveTab("salesman"); resetForm(); }}
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="salesman"
+                  className="data-[state=active]:bg-green-500 data-[state=active]:text-white text-slate-300"
                 >
-                  <User className="w-4 h-4" />
+                  <User className="w-4 h-4 mr-1" />
                   Salesman
-                </Button>
-              </div>
-              
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="customer-service"
+                  className="data-[state=active]:bg-purple-500 data-[state=active]:text-white text-slate-300"
+                >
+                  <Headphones className="w-4 h-4 mr-1" />
+                  Support
+                </TabsTrigger>
+              </TabsList>
+
               {activeTab === "manager" && (
                 <div className="space-y-4 mt-4">
-                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-800 font-medium">Manager Access</p>
-                    <p className="text-xs text-blue-600 mt-1">
-                      Full system access including user management and analytics
+                  <div className="bg-blue-500/20 p-3 rounded-lg border border-blue-400/30">
+                    <p className="text-sm text-blue-200 font-medium">Manager Access</p>
+                    <p className="text-xs text-blue-300 mt-1">
+                      Full dashboard access, team management, and analytics
                     </p>
                   </div>
                   
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="manager-username">Username</Label>
+                      <Label htmlFor="manager-username" className="text-slate-200">Username</Label>
                       <Input
                         id="manager-username"
                         type="text"
+                        placeholder="Enter your username"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Enter manager username"
                         required
-                        disabled={loading}
+                        className="bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-blue-400"
                       />
                     </div>
-
+                    
                     <div className="space-y-2">
-                      <Label htmlFor="manager-password">Password</Label>
+                      <Label htmlFor="manager-password" className="text-slate-200">Password</Label>
                       <div className="relative">
                         <Input
                           id="manager-password"
                           type={showPassword ? "text" : "password"}
+                          placeholder="Enter your password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Enter manager password"
                           required
-                          disabled={loading}
+                          className="bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-blue-400 pr-10"
                         />
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full px-3 text-slate-400 hover:text-white"
                           onClick={() => setShowPassword(!showPassword)}
-                          disabled={loading}
                         >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                       </div>
                     </div>
@@ -161,66 +136,57 @@ export default function UnifiedLogin({ onLogin }: UnifiedLoginProps) {
                       </Alert>
                     )}
 
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button type="submit" className="w-full bg-blue-500 hover:bg-blue-600" disabled={loading}>
                       {loading ? "Signing in..." : "Sign In as Manager"}
                     </Button>
                   </form>
 
-                  <div className="text-center text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                    <p>Default Manager Credentials:</p>
-                    <p className="font-mono">Username: manager | Password: manage@Vmax</p>
-                  </div>
                 </div>
               )}
 
               {activeTab === "salesman" && (
                 <div className="space-y-4 mt-4">
-                  <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                    <p className="text-sm text-green-800 font-medium">Salesman Access</p>
-                    <p className="text-xs text-green-600 mt-1">
+                  <div className="bg-green-500/20 p-3 rounded-lg border border-green-400/30">
+                    <p className="text-sm text-green-200 font-medium">Salesman Access</p>
+                    <p className="text-xs text-green-300 mt-1">
                       Access to deals, targets, and personal analytics
                     </p>
                   </div>
                   
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="salesman-username">Username</Label>
+                      <Label htmlFor="salesman-username" className="text-slate-200">Username</Label>
                       <Input
                         id="salesman-username"
                         type="text"
+                        placeholder="Enter your username"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Enter your username (e.g., Agent-001)"
                         required
-                        disabled={loading}
+                        className="bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-green-400"
                       />
                     </div>
-
+                    
                     <div className="space-y-2">
-                      <Label htmlFor="salesman-password">Password</Label>
+                      <Label htmlFor="salesman-password" className="text-slate-200">Password</Label>
                       <div className="relative">
                         <Input
                           id="salesman-password"
                           type={showPassword ? "text" : "password"}
+                          placeholder="Enter your password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Enter your password"
                           required
-                          disabled={loading}
+                          className="bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-green-400 pr-10"
                         />
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full px-3 text-slate-400 hover:text-white"
                           onClick={() => setShowPassword(!showPassword)}
-                          disabled={loading}
                         >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                       </div>
                     </div>
@@ -231,16 +197,95 @@ export default function UnifiedLogin({ onLogin }: UnifiedLoginProps) {
                       </Alert>
                     )}
 
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button type="submit" className="w-full bg-green-500 hover:bg-green-600" disabled={loading}>
                       {loading ? "Signing in..." : "Sign In as Salesman"}
                     </Button>
                   </form>
-
-                  <div className="text-center text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                    <p>Contact your manager if you don't have login credentials</p>
-                  </div>
                 </div>
               )}
+
+              {activeTab === "customer-service" && (
+                <div className="space-y-4 mt-4">
+                  <div className="bg-purple-500/20 p-3 rounded-lg border border-purple-400/30">
+                    <p className="text-sm text-purple-200 font-medium">Customer Service Access</p>
+                    <p className="text-xs text-purple-300 mt-1">
+                      Customer support tools and order management
+                    </p>
+                  </div>
+                  
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="cs-username" className="text-slate-200">Username</Label>
+                      <Input
+                        id="cs-username"
+                        type="text"
+                        placeholder="Enter your username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                        className="bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-400"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="cs-password" className="text-slate-200">Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="cs-password"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Enter your password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          className="bg-white/10 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-400 pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full px-3 text-slate-400 hover:text-white"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {error && (
+                      <Alert variant="destructive">
+                        <AlertDescription>{error}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    <Button type="submit" className="w-full bg-purple-500 hover:bg-purple-600" disabled={loading}>
+                      {loading ? "Signing in..." : "Sign In as Support"}
+                    </Button>
+                  </form>
+                </div>
+              )}
+            </Tabs>
+
+            {/* Features showcase */}
+            <div className="pt-4 border-t border-white/10">
+              <p className="text-xs text-slate-400 text-center mb-3">Platform Features</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center space-x-2 text-xs text-slate-300">
+                  <TrendingUp className="h-3 w-3 text-blue-400" />
+                  <span>Analytics</span>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-slate-300">
+                  <DollarSign className="h-3 w-3 text-green-400" />
+                  <span>Sales Tracking</span>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-slate-300">
+                  <Target className="h-3 w-3 text-purple-400" />
+                  <span>Target Management</span>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-slate-300">
+                  <BarChart3 className="h-3 w-3 text-orange-400" />
+                  <span>Reporting</span>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
