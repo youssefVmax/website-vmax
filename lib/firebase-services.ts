@@ -24,18 +24,20 @@ export const salesService = {
     try {
       let q = query(collection(db, COLLECTIONS.SALES), orderBy('created_at', 'desc'));
       
-      // Apply role-based filtering
+      // Apply role-based filtering - MANAGERS see ALL sales for KPIs
       if (userRole === 'salesman' && (userId || userName)) {
         if (userName) {
           const normalizedUserName = userName.toLowerCase().trim();
           q = query(
             collection(db, COLLECTIONS.SALES),
-            where('sales_agent_norm', '==', normalizedUserName)
+            where('sales_agent_norm', '==', normalizedUserName),
+            orderBy('created_at', 'desc')
           );
         } else if (userId) {
           q = query(
             collection(db, COLLECTIONS.SALES),
-            where('SalesAgentID', '==', userId)
+            where('SalesAgentID', '==', userId),
+            orderBy('created_at', 'desc')
           );
         }
       } else if (userRole === 'customer-service' && (userId || userName)) {
@@ -43,15 +45,18 @@ export const salesService = {
           const normalizedUserName = userName.toLowerCase().trim();
           q = query(
             collection(db, COLLECTIONS.SALES),
-            where('closing_agent_norm', '==', normalizedUserName)
+            where('closing_agent_norm', '==', normalizedUserName),
+            orderBy('created_at', 'desc')
           );
         } else if (userId) {
           q = query(
             collection(db, COLLECTIONS.SALES),
-            where('ClosingAgentID', '==', userId)
+            where('ClosingAgentID', '==', userId),
+            orderBy('created_at', 'desc')
           );
         }
       }
+      // For managers (userRole === 'manager') or no role specified, return ALL sales
       
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
@@ -105,18 +110,20 @@ export const salesService = {
   onSalesChange(callback: (sales: Sale[]) => void, userRole?: string, userId?: string, userName?: string) {
     let q = query(collection(db, COLLECTIONS.SALES), orderBy('created_at', 'desc'));
     
-    // Apply role-based filtering
+    // Apply role-based filtering - MANAGERS see ALL sales for real-time KPIs
     if (userRole === 'salesman' && (userId || userName)) {
       if (userName) {
         const normalizedUserName = userName.toLowerCase().trim();
         q = query(
           collection(db, COLLECTIONS.SALES),
-          where('sales_agent_norm', '==', normalizedUserName)
+          where('sales_agent_norm', '==', normalizedUserName),
+          orderBy('created_at', 'desc')
         );
       } else if (userId) {
         q = query(
           collection(db, COLLECTIONS.SALES),
-          where('SalesAgentID', '==', userId)
+          where('SalesAgentID', '==', userId),
+          orderBy('created_at', 'desc')
         );
       }
     } else if (userRole === 'customer-service' && (userId || userName)) {
@@ -124,15 +131,18 @@ export const salesService = {
         const normalizedUserName = userName.toLowerCase().trim();
         q = query(
           collection(db, COLLECTIONS.SALES),
-          where('closing_agent_norm', '==', normalizedUserName)
+          where('closing_agent_norm', '==', normalizedUserName),
+          orderBy('created_at', 'desc')
         );
       } else if (userId) {
         q = query(
           collection(db, COLLECTIONS.SALES),
-          where('ClosingAgentID', '==', userId)
+          where('ClosingAgentID', '==', userId),
+          orderBy('created_at', 'desc')
         );
       }
     }
+    // For managers (userRole === 'manager') or no role specified, listen to ALL sales
 
     return onSnapshot(q, (snapshot) => {
       const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));

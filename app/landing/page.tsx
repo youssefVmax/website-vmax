@@ -3,12 +3,15 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, BarChart3, Users, Database, Bell, Shield, Zap, TrendingUp, Star, CheckCircle, Tv } from "lucide-react"
+import { ArrowRight, BarChart3, Users, Database, Bell, Shield, Zap, TrendingUp, Star, CheckCircle, Tv, Sun, Moon } from "lucide-react"
 import Link from "next/link"
 import { useState, useRef, useEffect } from "react"
+import { useSettings } from "@/hooks/use-settings"
 
 export default function LandingPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const { settings, updateSettings } = useSettings()
+  const isDark = settings.theme === 'dark'
 
   // Animated background particles (matching dashboard)
   useEffect(() => {
@@ -55,7 +58,7 @@ export default function LandingPage() {
 
         ctx.beginPath()
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(6, 182, 212, ${particle.opacity})`
+        ctx.fillStyle = isDark ? `rgba(6, 182, 212, ${particle.opacity})` : `rgba(59, 130, 246, ${particle.opacity})`
         ctx.fill()
       })
 
@@ -74,16 +77,26 @@ export default function LandingPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 relative">
+    <div className={`min-h-screen relative transition-colors duration-300 ${
+      isDark 
+        ? 'bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900' 
+        : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100'
+    }`}>
       <canvas
         ref={canvasRef}
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          background: "radial-gradient(ellipse at center, rgba(15, 23, 42, 0.8) 0%, rgba(2, 6, 23, 1) 100%)",
+          background: isDark 
+            ? "radial-gradient(ellipse at center, rgba(15, 23, 42, 0.8) 0%, rgba(2, 6, 23, 1) 100%)"
+            : "radial-gradient(ellipse at center, rgba(248, 250, 252, 0.8) 0%, rgba(241, 245, 249, 1) 100%)",
         }}
       />
       {/* Header */}
-      <header className="border-b border-slate-800/50 backdrop-blur-sm bg-slate-950/50 sticky top-0 z-50">
+      <header className={`border-b backdrop-blur-sm sticky top-0 z-50 transition-colors duration-300 ${
+        isDark 
+          ? 'border-slate-800/50 bg-slate-950/50' 
+          : 'border-slate-200/50 bg-white/50'
+      }`}>
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
@@ -91,26 +104,48 @@ export default function LandingPage() {
             </div>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Vmax Sales</h1>
           </div>
-          <Link href="/auth/signin">
-            <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white">
-              Sign In
-              <ArrowRight className="ml-2 h-4 w-4" />
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => updateSettings({ theme: isDark ? 'light' : 'dark' })}
+              className={`transition-colors duration-300 ${
+                isDark 
+                  ? 'text-slate-300 hover:text-white hover:bg-slate-800' 
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-          </Link>
+            <Link href="/auth/signin">
+              <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white">
+                Sign In
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
       {/* Hero Section */}
       <section className="py-20 px-4 relative z-10">
         <div className="container mx-auto text-center">
-          <Badge className="mb-6 bg-cyan-500/10 text-cyan-400 border-cyan-500/20 backdrop-blur-sm">
+          <Badge className={`mb-6 backdrop-blur-sm transition-colors duration-300 ${
+            isDark 
+              ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' 
+              : 'bg-cyan-500/10 text-cyan-600 border-cyan-500/30'
+          }`}>
             Professional Sales Management Platform
           </Badge>
-          <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
+          <h2 className={`text-5xl md:text-6xl font-bold mb-6 leading-tight transition-colors duration-300 ${
+            isDark ? 'text-white' : 'text-slate-900'
+          }`}>
             Supercharge Your
             <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent"> IPTV Sales</span>
           </h2>
-          <p className="text-xl text-slate-300 mb-8 max-w-3xl mx-auto leading-relaxed">
+          <p className={`text-xl mb-8 max-w-3xl mx-auto leading-relaxed transition-colors duration-300 ${
+            isDark ? 'text-slate-300' : 'text-slate-600'
+          }`}>
             Complete sales management platform with real-time analytics, team collaboration, 
             and automated workflows designed specifically for IPTV businesses.
           </p>
@@ -121,7 +156,11 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-800 px-8 py-4 text-lg">
+            <Button size="lg" variant="outline" className={`px-8 py-4 text-lg transition-colors duration-300 ${
+              isDark 
+                ? 'border-slate-600 text-slate-300 hover:bg-slate-800' 
+                : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+            }`}>
               Watch Demo
             </Button>
           </div>
@@ -135,19 +174,29 @@ export default function LandingPage() {
             <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
               Everything You Need to Scale
             </h3>
-            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+            <p className={`text-lg max-w-2xl mx-auto transition-colors duration-300 ${
+              isDark ? 'text-slate-400' : 'text-slate-600'
+            }`}>
               Powerful features designed to streamline your sales process and maximize revenue
             </p>
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <Card className="bg-slate-900/50 border-slate-700 hover:border-cyan-500/50 transition-all duration-300 group backdrop-blur-sm">
+            <Card className={`backdrop-blur-sm hover:border-cyan-500/50 transition-all duration-300 group ${
+              isDark 
+                ? 'bg-slate-900/50 border-slate-700' 
+                : 'bg-white/50 border-slate-200 hover:bg-white/70'
+            }`}>
               <CardContent className="p-6">
                 <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <BarChart3 className="h-6 w-6 text-white" />
                 </div>
-                <h4 className="text-xl font-semibold text-white mb-2">Real-time Analytics</h4>
-                <p className="text-slate-400">
+                <h4 className={`text-xl font-semibold mb-2 transition-colors duration-300 ${
+                  isDark ? 'text-white' : 'text-slate-900'
+                }`}>Real-time Analytics</h4>
+                <p className={`transition-colors duration-300 ${
+                  isDark ? 'text-slate-400' : 'text-slate-600'
+                }`}>
                   Track sales performance, revenue trends, and team metrics with live dashboards and detailed reports.
                 </p>
               </CardContent>
