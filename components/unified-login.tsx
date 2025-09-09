@@ -28,7 +28,7 @@ export default function UnifiedLogin({ onLogin }: UnifiedLoginProps) {
     setError("")
 
     try {
-      const user = await authenticateUser(username, password, activeTab as any)
+      const user = await authenticateUser(username, password)
       if (user) {
         onLogin(user)
       } else {
