@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import UnifiedLogin from "@/components/unified-login"
 import FullPageDashboard from "@/components/full-page-dashboard"
 import { User } from "@/lib/auth"
@@ -8,6 +9,7 @@ import { User } from "@/lib/auth"
 export default function CompleteApp() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     // Check if user is already logged in (from localStorage)
@@ -37,6 +39,9 @@ export default function CompleteApp() {
   const handleLogout = () => {
     setUser(null)
     localStorage.removeItem('current-user')
+    localStorage.removeItem('vmax_user')
+    // Navigate to landing page
+    router.push('/')
   }
 
   if (loading) {
