@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { showDealAdded, showError, showLoading } from "@/lib/sweetalert";
@@ -46,10 +47,15 @@ export function AddDealPage() {
   const teamOptions = useMemo(() => {
     const set = new Set<string>()
     ;(sales || []).forEach(s => { if (s.team) set.add(s.team) })
-    // Ensure current default exists
+    // Ensure current defaults exist
     set.add("CS TEAM")
+    set.add("ALI ASHRAF")
+    set.add("SAIF MOHAMED")
+    set.add("OTHER")
+    // Add user's team if available
+    if (user?.team) set.add(user.team)
     return Array.from(set).sort()
-  }, [sales])
+  }, [sales, user?.team])
 
   const serviceOptions = useMemo(() => {
     const set = new Set<string>()
@@ -98,10 +104,9 @@ export function AddDealPage() {
     email: "",
     amount: "",
     username: "",
-    address: "",
     sales_agent: user?.name || "",
     closing_agent: "",
-    team: "CS TEAM",
+    team: user?.team || "Un Known", // Auto-populate with user's team
     duration: "TWO YEAR",
     type_program: "IBO PLAYER",
     type_service: "SLIVER",
@@ -169,17 +174,7 @@ export function AddDealPage() {
     setLoading(true);
 
     try {
-      // Validate dynamic fields against options
-      const errors: string[] = []
-      if (!teamOptions.includes(formData.team)) errors.push('Invalid Team selected')
-      if (!serviceOptions.includes(formData.type_service)) errors.push('Invalid Service selected')
-      if (!programOptions.includes((formData.type_program || '').toUpperCase())) errors.push('Invalid Program selected')
-      if (!durationOptions.includes((formData.duration || '').toUpperCase())) errors.push('Invalid Duration selected')
-      if (errors.length) {
-        showError('Validation Error', errors.join(', '))
-        setLoading(false)
-        return
-      }
+      // Skip validation for dynamic fields since we allow custom values
 
       const timestamp = new Date().getTime();
       const random = Math.floor(Math.random() * 1000);
@@ -244,10 +239,9 @@ export function AddDealPage() {
         email: "",
         amount: "",
         username: "",
-        address: "",
         sales_agent: user?.name || "",
         closing_agent: "",
-        team: "CS TEAM",
+        team: user?.team || "CS TEAM",
         duration: "TWO YEAR",
         type_program: "IBO PLAYER",
         type_service: "SLIVER",
@@ -285,78 +279,70 @@ export function AddDealPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="customer_name">Customer Name *</Label>
-                <Input
-                  id="customer_name"
-                  name="customer_name"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.customer_name).filter(Boolean))].sort()}
                   value={formData.customer_name}
-                  onChange={handleChange}
-                  required
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, customer_name: value }))}
+                  placeholder="Select or type customer name"
+                  searchPlaceholder="Search customers..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number *</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.phone).filter(Boolean))].sort()}
                   value={formData.phone}
-                  onChange={handleChange}
-                  required
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, phone: value }))}
+                  placeholder="Select or type phone number"
+                  searchPlaceholder="Search phone numbers..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address *</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.email).filter(Boolean))].sort()}
                   value={formData.email}
-                  onChange={handleChange}
-                  required
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, email: value }))}
+                  placeholder="Select or type email address"
+                  searchPlaceholder="Search emails..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="amount">Amount ($) *</Label>
-                <Input
-                  id="amount"
-                  name="amount"
-                  type="number"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.amount?.toString()).filter(Boolean))].sort((a, b) => parseFloat(a) - parseFloat(b))}
                   value={formData.amount}
-                  onChange={handleChange}
-                  required
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, amount: value }))}
+                  placeholder="Select or type amount"
+                  searchPlaceholder="Search amounts..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="username">Username *</Label>
-                <Input
-                  id="username"
-                  name="username"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.username).filter(Boolean))].sort()}
                   value={formData.username}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address">Address *</Label>
-                <Input
-                  id="address"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  required
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, username: value }))}
+                  placeholder="Select or type username"
+                  searchPlaceholder="Search usernames..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="sales_agent">Sales Agent *</Label>
                 {isSalesman ? (
-                  <div className="flex items-center h-10 px-3 rounded-md border text-sm">
+                  <div className="flex items-center h-10 px-3 rounded-md border text-sm bg-muted">
                     <span className="capitalize">{formData.sales_agent || user?.name}</span>
+                    <Badge variant="secondary" className="ml-2">Auto-filled</Badge>
                   </div>
                 ) : (
                   <Select 
@@ -368,7 +354,7 @@ export function AddDealPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {salesmanOptions.map((a: User) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        <SelectItem key={a.id} value={a.id}>{a.name} - {a.team}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -386,7 +372,7 @@ export function AddDealPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {allUserOptions.map((a: User) => (
-                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                      <SelectItem key={a.id} value={a.id}>{a.name} - {a.role} - {a.team}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -394,111 +380,104 @@ export function AddDealPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="team">Team *</Label>
-                <Select 
-                  value={formData.team} 
-                  onValueChange={(value) => handleSelectChange("team", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teamOptions.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isSalesman ? (
+                  <div className="flex items-center h-10 px-3 rounded-md border text-sm bg-muted">
+                    <span className="capitalize">{formData.team || user?.team}</span>
+                    <Badge variant="secondary" className="ml-2">Auto-filled</Badge>
+                  </div>
+                ) : (
+                  <Combobox
+                    options={teamOptions}
+                    value={formData.team}
+                    onValueChange={(value) => handleSelectChange("team", value)}
+                    placeholder="Select or type team name"
+                    searchPlaceholder="Search teams..."
+                    allowCustom={true}
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="duration">Duration *</Label>
-                <Select 
-                  value={formData.duration} 
+                <Combobox
+                  options={durationOptions}
+                  value={formData.duration}
                   onValueChange={(value) => handleSelectChange("duration", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select duration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {durationOptions.map(d => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Select or type duration"
+                  searchPlaceholder="Search durations..."
+                  allowCustom={true}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="type_program">Type Program *</Label>
-                <Select 
-                  value={formData.type_program} 
+                <Combobox
+                  options={programOptions}
+                  value={formData.type_program}
                   onValueChange={(value) => handleSelectChange("type_program", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select program type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {programOptions.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Select or type program type"
+                  searchPlaceholder="Search programs..."
+                  allowCustom={true}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="type_service">Type Service *</Label>
-                <Select 
-                  value={formData.type_service} 
+                <Combobox
+                  options={serviceOptions}
+                  value={formData.type_service}
                   onValueChange={(value) => handleSelectChange("type_service", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select service type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {serviceOptions.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Select or type service type"
+                  searchPlaceholder="Search services..."
+                  allowCustom={true}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="invoice">Invoice Reference</Label>
-                <Input
-                  id="invoice"
-                  name="invoice"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.invoice).filter(Boolean))].sort()}
                   value={formData.invoice}
-                  onChange={handleChange}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, invoice: value }))}
+                  placeholder="Select or type invoice reference"
+                  searchPlaceholder="Search invoices..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="device_id">Device ID</Label>
-                <Input
-                  id="device_id"
-                  name="device_id"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.device_id).filter(Boolean))].sort()}
                   value={formData.device_id}
-                  onChange={handleChange}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, device_id: value }))}
+                  placeholder="Select or type device ID"
+                  searchPlaceholder="Search device IDs..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="device_key">Device Key</Label>
-                <Input
-                  id="device_key"
-                  name="device_key"
+                <Combobox
+                  options={[...new Set((sales || []).map(s => s.device_key).filter(Boolean))].sort()}
                   value={formData.device_key}
-                  onChange={handleChange}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, device_key: value }))}
+                  placeholder="Select or type device key"
+                  searchPlaceholder="Search device keys..."
+                  allowCustom={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="no_user">Number of Users *</Label>
-                <Input
-                  id="no_user"
-                  name="no_user"
-                  type="number"
+                <Combobox
+                  options={["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}
                   value={formData.no_user}
-                  onChange={handleChange}
-                  required
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, no_user: value }))}
+                  placeholder="Select or type number of users"
+                  searchPlaceholder="Search user count..."
+                  allowCustom={true}
                 />
               </div>
 

@@ -48,6 +48,20 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const [users, setUsers] = useState<any[]>([])
   const [userLoading, setUserLoading] = useState(true)
   const { sales = [] } = useFirebaseSalesData(userRole, user.id, user.name)
+
+  // Restrict access to managers only
+  if (userRole !== 'manager') {
+    return (
+      <Card className="w-full max-w-2xl mx-auto mt-8">
+        <CardHeader>
+          <CardTitle className="text-center text-red-600">Access Restricted</CardTitle>
+          <CardDescription className="text-center">
+            Data Center management is only available to managers.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
   const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
 
   const [newAssignment, setNewAssignment] = useState({
@@ -437,11 +451,6 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                       <Download className="h-3 w-3 mr-1" />
                       Export
                     </Button>
-                    {userRole === 'salesman' && assignment.status === 'assigned' && (
-                      <Button size="sm" variant="default">
-                        Use Numbers
-                      </Button>
-                    )}
                     {isManager && (
                       <Button 
                         variant="outline" 

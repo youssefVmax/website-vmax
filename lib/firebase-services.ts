@@ -22,44 +22,77 @@ export const salesService = {
   // Get all sales with optional filtering
   async getSales(userRole?: string, userId?: string, userName?: string): Promise<Sale[]> {
     try {
-      let q = query(collection(db, COLLECTIONS.SALES), orderBy('created_at', 'desc'));
-      
-      // Apply role-based filtering - MANAGERS see ALL sales for KPIs
-      if (userRole === 'salesman' && (userId || userName)) {
-        if (userName) {
-          const normalizedUserName = userName.toLowerCase().trim();
-          q = query(
-            collection(db, COLLECTIONS.SALES),
-            where('sales_agent_norm', '==', normalizedUserName),
-            orderBy('created_at', 'desc')
-          );
-        } else if (userId) {
-          q = query(
-            collection(db, COLLECTIONS.SALES),
-            where('SalesAgentID', '==', userId),
-            orderBy('created_at', 'desc')
-          );
-        }
-      } else if (userRole === 'customer-service' && (userId || userName)) {
-        if (userName) {
-          const normalizedUserName = userName.toLowerCase().trim();
-          q = query(
-            collection(db, COLLECTIONS.SALES),
-            where('closing_agent_norm', '==', normalizedUserName),
-            orderBy('created_at', 'desc')
-          );
-        } else if (userId) {
-          q = query(
-            collection(db, COLLECTIONS.SALES),
-            where('ClosingAgentID', '==', userId),
-            orderBy('created_at', 'desc')
-          );
-        }
+      // For managers, get all sales without filtering to avoid index issues
+      if (userRole === 'manager') {
+        const q = query(collection(db, COLLECTIONS.SALES));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
       }
-      // For managers (userRole === 'manager') or no role specified, return ALL sales
       
+      // For salesmen and customer service, use simple queries without orderBy to avoid composite index
+      if (userRole === 'salesman' && (userId || userName)) {
+        let q;
+        if (userName) {
+          const normalizedUserName = userName.toLowerCase().trim();
+          q = query(
+            collection(db, COLLECTIONS.SALES),
+            where('sales_agent_norm', '==', normalizedUserName)
+          );
+        } else if (userId) {
+          q = query(
+            collection(db, COLLECTIONS.SALES),
+            where('SalesAgentID', '==', userId)
+          );
+        } else {
+          q = query(collection(db, COLLECTIONS.SALES));
+        }
+        
+        const snapshot = await getDocs(q);
+        const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+        // Sort in memory instead of using orderBy to avoid index issues
+        return sales.sort((a, b) => {
+          const aTime = a.created_at?.toMillis() || 0;
+          const bTime = b.created_at?.toMillis() || 0;
+          return bTime - aTime;
+        });
+      } 
+      
+      if (userRole === 'customer-service' && (userId || userName)) {
+        let q;
+        if (userName) {
+          const normalizedUserName = userName.toLowerCase().trim();
+          q = query(
+            collection(db, COLLECTIONS.SALES),
+            where('closing_agent_norm', '==', normalizedUserName)
+          );
+        } else if (userId) {
+          q = query(
+            collection(db, COLLECTIONS.SALES),
+            where('ClosingAgentID', '==', userId)
+          );
+        } else {
+          q = query(collection(db, COLLECTIONS.SALES));
+        }
+        
+        const snapshot = await getDocs(q);
+        const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+        // Sort in memory instead of using orderBy to avoid index issues
+        return sales.sort((a, b) => {
+          const aTime = a.created_at?.toMillis() || 0;
+          const bTime = b.created_at?.toMillis() || 0;
+          return bTime - aTime;
+        });
+      }
+      
+      // Default case - get all sales
+      const q = query(collection(db, COLLECTIONS.SALES));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+      const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+      return sales.sort((a, b) => {
+        const aTime = a.created_at?.toMillis() || 0;
+        const bTime = b.created_at?.toMillis() || 0;
+        return bTime - aTime;
+      });
     } catch (error) {
       console.error('Error fetching sales:', error);
       throw error;

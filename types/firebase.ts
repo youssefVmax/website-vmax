@@ -115,12 +115,35 @@ export interface Notification {
 
 export interface Target {
   id?: string;
-  agentId: string;
-  agentName: string;
-  team: string;
+  type: 'individual' | 'team';
+  // For individual targets
+  agentId?: string;
+  agentName?: string;
+  // For team targets
+  teamId?: string;
+  teamName?: string;
+  // Common fields
   monthlyTarget: number;
   dealsTarget: number;
   period: string;
+  description?: string;
+  managerId: string;
+  managerName: string;
+  created_at?: Timestamp;
+  updated_at?: Timestamp;
+}
+
+export interface TeamTarget {
+  id?: string;
+  teamId: string;
+  teamName: string;
+  monthlyTarget: number;
+  dealsTarget: number;
+  period: string;
+  description?: string;
+  managerId: string;
+  managerName: string;
+  members: string[]; // Array of user IDs in the team
   created_at?: Timestamp;
   updated_at?: Timestamp;
 }

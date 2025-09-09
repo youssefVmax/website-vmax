@@ -38,7 +38,8 @@ import SalesAnalysisDashboard from '@/components/sales-dashboard'
 import NotificationsPage from "@/components/notifications-page"
 import { AddDealPage } from "@/components/add-deal"
 import { DataCenter } from "@/components/data-center"
-import { SalesTargets } from "@/components/sales-targets"
+import { SalesTargets } from "./sales-targets"
+import { EnhancedTargetsManagement } from "./enhanced-targets-management"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import EnhancedAnalytics from "@/components/enhanced-analytics"
@@ -157,8 +158,6 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
   const getNavItems = () => {
     const baseItems = [
       { id: "dashboard", icon: Home, label: "Dashboard" },
-      { id: "analytics", icon: BarChart3, label: "Analytics" },
-      { id: "enhanced-analytics", icon: PieChart, label: "Enhanced Analytics" },
       { id: "notifications", icon: Bell, label: "Notifications" },
     ]
 
@@ -169,7 +168,6 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
         { id: "team-targets", icon: Target, label: "Team Targets" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         
-        { id: "team-management", icon: UserCheck, label: "Team Management" },
         { id: "settings", icon: Settings, label: "Settings" },
       ]
     } else if (user.role === 'salesman') {
@@ -450,8 +448,6 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "Notifications"
     case "user-management":
       return "User Management"
-    case "team-management":
-      return "Team Management"
     case "competition":
       return "Sales Competition"
     case "settings":
@@ -481,8 +477,6 @@ function PageContent({
       return <SalesAnalysisDashboard userRole={user.role} user={user} />
     case "analytics":
       return <AdvancedAnalytics userRole={user.role} user={user} />
-    case "enhanced-analytics":
-      return <EnhancedAnalytics userRole={user.role} user={user} />
     case "all-deals":
     case "my-deals":
     case "support-deals":
@@ -492,7 +486,7 @@ function PageContent({
     case "add-deal":
       return <AddDealPage />
     case "team-targets":
-      return <SalesTargets userRole={user.role} user={user} />
+      return <EnhancedTargetsManagement userRole={user.role} user={user} />
     case "my-targets":
       return <SalesTargets userRole={user.role} user={user} />
     case "datacenter":
@@ -504,9 +498,7 @@ function PageContent({
       if (user.role !== 'manager') {
         return <AccessDenied feature="User Management" />
       }
-      return <UserManagement />
-    case "team-management":
-      return <TeamManagement user={user} />
+      return <UserManagement userRole={user.role} user={user} />
     case "competition":
       return <CompetitionDashboard />
     case "settings":
@@ -628,10 +620,6 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {user.role === 'manager' ? (
               <>
-                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("team-management")}>
-                  <Users className="h-6 w-6 mb-2" />
-                  Team Overview
-                </Button>
                 <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("team-targets")}>
                   <Target className="h-6 w-6 mb-2" />
                   Set Targets

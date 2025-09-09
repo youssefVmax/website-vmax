@@ -26,7 +26,12 @@ const ROLES = [
   { value: 'customer-service', label: 'Customer Service' }
 ];
 
-export default function UserManagement() {
+interface UserManagementProps {
+  userRole: 'manager' | 'salesman' | 'customer-service'
+  user: { name: string; username: string; id: string }
+}
+
+export default function UserManagement({ userRole, user }: UserManagementProps) {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +40,20 @@ export default function UserManagement() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [showPassword, setShowPassword] = useState<{[key: string]: boolean}>({})
+
+  // Restrict access to managers only
+  if (userRole !== 'manager') {
+    return (
+      <Card className="w-full max-w-2xl mx-auto mt-8">
+        <CardHeader>
+          <CardTitle className="text-center text-red-600">Access Restricted</CardTitle>
+          <CardDescription className="text-center">
+            User management is only available to managers.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
 
   // Form state
   const [formData, setFormData] = useState({
