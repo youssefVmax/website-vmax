@@ -134,15 +134,21 @@ export class FirebaseUserService {
     try {
       const q = query(
         collection(db, COLLECTIONS.USERS), 
-        where('role', '==', role),
-        orderBy('created_at', 'desc')
+        where('role', '==', role)
       );
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map((doc: any) => ({
+      const users = querySnapshot.docs.map((doc: any) => ({
         id: doc.id,
         ...doc.data()
       } as User));
+      
+      // Sort in memory instead of using Firestore orderBy
+      return users.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateB - dateA; // desc order
+      });
     } catch (error) {
       console.error('Error fetching users by role:', error);
       return [];
