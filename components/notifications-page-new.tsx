@@ -108,7 +108,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={markAllAsRead}>
+          <Button variant="outline" size="sm" onClick={() => markAllAsRead()}>
             <CheckCircle className="mr-2 h-4 w-4" />
             Mark all as read
           </Button>

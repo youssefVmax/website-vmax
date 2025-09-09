@@ -198,27 +198,30 @@ export const userService = {
 export const notificationService = {
   async getNotifications(userId?: string, userRole?: string): Promise<Notification[]> {
     try {
-      let q = query(collection(db, COLLECTIONS.NOTIFICATIONS), orderBy('created_at', 'desc'));
+      // Use simple query without composite index requirement
+      const q = query(
+        collection(db, COLLECTIONS.NOTIFICATIONS),
+        orderBy('created_at', 'desc'),
+        limit(100)
+      );
       
+      const snapshot = await getDocs(q);
+      let notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      
+      // Filter on client side to avoid index requirements
       if (userId) {
-        q = query(
-          collection(db, COLLECTIONS.NOTIFICATIONS),
-          where('userId', 'in', [userId, null]),
-          orderBy('created_at', 'desc')
-        );
-      } else if (userRole) {
-        q = query(
-          collection(db, COLLECTIONS.NOTIFICATIONS),
-          where('userRole', '==', userRole),
-          orderBy('created_at', 'desc')
+        notifications = notifications.filter(notification => 
+          !notification.to || 
+          notification.to.includes(userId) || 
+          notification.to.includes('all')
         );
       }
       
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      return notifications;
     } catch (error) {
       console.error('Error fetching notifications:', error);
-      throw error;
+      // Return empty array to prevent app crash
+      return [];
     }
   },
 

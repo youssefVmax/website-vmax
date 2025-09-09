@@ -763,6 +763,8 @@ function TeamManagement({ user }: { user: any }) {
 
   // Group users by team and calculate performance metrics
   const teamStats = useMemo(() => {
+    if (!users || users.length === 0 || !sales) return [];
+    
     const teams = users.reduce((acc: Record<string, { members: any[], sales: any[] }>, user: any) => {
       const teamName = user.team || 'OTHER'
       if (!acc[teamName]) {
