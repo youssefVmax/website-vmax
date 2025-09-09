@@ -871,7 +871,7 @@ function TeamManagement({ user }: { user: any }) {
     }, {})
 
     return Object.entries(teams).map(([teamName, data]) => {
-      const totalRevenue = data.sales.reduce((sum: number, sale: any) => sum + (sale.amount || 0), 0)
+      const totalRevenue = data.sales.reduce((sum: number, sale: any) => sum + (sale.amount_paid || sale.amount || 0), 0)
       const avgDealSize = data.sales.length > 0 ? totalRevenue / data.sales.length : 0
       const performance = Math.min(100, Math.max(0, (avgDealSize / 1000) * 10)) // Simple performance calculation
       
