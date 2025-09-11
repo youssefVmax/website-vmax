@@ -145,33 +145,31 @@ export const salesService = {
     
     // Apply role-based filtering - MANAGERS see ALL sales for real-time KPIs
     if (userRole === 'salesman' && (userId || userName)) {
-      if (userName) {
-        const normalizedUserName = userName.toLowerCase().trim();
-        q = query(
-          collection(db, COLLECTIONS.SALES),
-          where('sales_agent_norm', '==', normalizedUserName),
-          orderBy('created_at', 'desc')
-        );
-      } else if (userId) {
+      if (userId) {
         q = query(
           collection(db, COLLECTIONS.SALES),
           where('SalesAgentID', '==', userId),
           orderBy('created_at', 'desc')
         );
-      }
-    } else if (userRole === 'customer-service' && (userId || userName)) {
-      if (userName) {
-        const normalizedUserName = userName.toLowerCase().trim();
+      } else if (userName) {
+        // Use simple query without orderBy to avoid composite index requirement
         q = query(
           collection(db, COLLECTIONS.SALES),
-          where('closing_agent_norm', '==', normalizedUserName),
-          orderBy('created_at', 'desc')
+          where('sales_agent_norm', '==', userName.toLowerCase().trim())
         );
-      } else if (userId) {
+      }
+    } else if (userRole === 'customer-service' && (userId || userName)) {
+      if (userId) {
         q = query(
           collection(db, COLLECTIONS.SALES),
           where('ClosingAgentID', '==', userId),
           orderBy('created_at', 'desc')
+        );
+      } else if (userName) {
+        // Use simple query without orderBy to avoid composite index requirement
+        q = query(
+          collection(db, COLLECTIONS.SALES),
+          where('closing_agent_norm', '==', userName.toLowerCase().trim())
         );
       }
     }
