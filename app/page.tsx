@@ -212,13 +212,8 @@ function LandingPageContent({ onGetStarted }: { onGetStarted: () => void }) {
       <footer className="p-8 text-center border-t border-slate-800/50 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto">
           <p className="text-slate-400 mb-4">
-            2024 Vmax Sales Analytics Platform. Empowering sales teams worldwide with advanced analytics.
+            2025 Vmax Sales Management. Empowering sales teams worldwide with advanced analytics.
           </p>
-          <div className="flex justify-center space-x-6 text-sm text-slate-500">
-            <a href="#" className="hover:text-indigo-400 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-purple-400 transition-colors">Terms of Service</a>
-            <a href="#" className="hover:text-cyan-400 transition-colors">Contact Support</a>
-          </div>
         </div>
       </footer>
     </div>
