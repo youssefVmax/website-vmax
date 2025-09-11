@@ -23,12 +23,12 @@ export function SimpleAddDeal() {
     phone_number: "",
     email: "",
     amount_paid: 0,
-    duration_months: 12,
+    duration_months: 0,
+    duration_years: 1,
+    number_of_users: 1,
     sales_agent: user?.name || "",
     closing_agent: user?.name || "",
     sales_team: user?.team || "",
-    product_type: "IPTV Premium",
-    service_tier: "Gold",
     country: "",
     signup_date: new Date().toISOString().split('T')[0],
     notes: "",
@@ -41,19 +41,36 @@ export function SimpleAddDeal() {
     is_ibo_pro: false
   });
 
+  // Calculate derived values
+  const totalDurationMonths = formData.duration_years * 12 + formData.duration_months;
+  const endDate = new Date(formData.signup_date);
+  endDate.setMonth(endDate.getMonth() + totalDurationMonths);
+  
+  const paidPerMonth = totalDurationMonths > 0 ? formData.amount_paid / totalDurationMonths : 0;
+  const paidPerDay = paidPerMonth / 30.44; // Average days per month
+  
+  const today = new Date();
+  const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     if (name === 'amount_paid') {
       setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
     } else if (name === 'duration_months') {
-      setFormData(prev => ({ ...prev, [name]: parseInt(value) || 12 }));
+      setFormData(prev => ({ ...prev, [name]: parseInt(value) || 0 }));
+    } else if (name === 'duration_years') {
+      setFormData(prev => ({ ...prev, [name]: parseInt(value) || 1 }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
   const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'number_of_users' || name === 'duration_months' || name === 'duration_years') {
+      setFormData(prev => ({ ...prev, [name]: parseInt(value) }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,12 +114,12 @@ export function SimpleAddDeal() {
         phone_number: "",
         email: "",
         amount_paid: 0,
-        duration_months: 12,
+        duration_months: 0,
+        duration_years: 1,
+        number_of_users: 1,
         sales_agent: user?.name || "",
         closing_agent: user?.name || "",
         sales_team: user?.team || "",
-        product_type: "IPTV Premium",
-        service_tier: "Gold",
         country: "",
         signup_date: new Date().toISOString().split('T')[0],
         notes: "",
@@ -207,46 +224,43 @@ export function SimpleAddDeal() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="duration_months">Duration (Months) *</Label>
-              <Input
-                id="duration_months"
-                name="duration_months"
-                type="number"
-                min="1"
-                value={formData.duration_months}
-                onChange={handleChange}
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="product_type">Product Type *</Label>
-              <Select value={formData.product_type} onValueChange={(value) => handleSelectChange('product_type', value)}>
+              <Label htmlFor="number_of_users">Number of Users *</Label>
+              <Select value={formData.number_of_users.toString()} onValueChange={(value) => handleSelectChange('number_of_users', value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select product type" />
+                  <SelectValue placeholder="Select number of users" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="IPTV Premium">IPTV Premium</SelectItem>
-                  <SelectItem value="IPTV Standard">IPTV Standard</SelectItem>
-                  <SelectItem value="IPTV Basic">IPTV Basic</SelectItem>
-                  <SelectItem value="Sports Package">Sports Package</SelectItem>
-                  <SelectItem value="Movie Package">Movie Package</SelectItem>
+                  {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,50,100].map(num => (
+                    <SelectItem key={num} value={num.toString()}>{num} {num === 1 ? 'User' : 'Users'}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="service_tier">Service Tier *</Label>
-              <Select value={formData.service_tier} onValueChange={(value) => handleSelectChange('service_tier', value)}>
+              <Label htmlFor="duration_months">Duration - Months (0-12) *</Label>
+              <Select value={formData.duration_months.toString()} onValueChange={(value) => handleSelectChange('duration_months', value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select service tier" />
+                  <SelectValue placeholder="Select months" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Bronze">Bronze</SelectItem>
-                  <SelectItem value="Silver">Silver</SelectItem>
-                  <SelectItem value="Gold">Gold</SelectItem>
-                  <SelectItem value="Platinum">Platinum</SelectItem>
+                  {Array.from({length: 13}, (_, i) => (
+                    <SelectItem key={i} value={i.toString()}>{i} {i === 1 ? 'Month' : 'Months'}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="duration_years">Duration - Years *</Label>
+              <Select value={formData.duration_years.toString()} onValueChange={(value) => handleSelectChange('duration_years', value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select years" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({length: 10}, (_, i) => i + 1).map(year => (
+                    <SelectItem key={year} value={year.toString()}>{year} {year === 1 ? 'Year' : 'Years'}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -273,6 +287,46 @@ export function SimpleAddDeal() {
                 disabled={true}
                 className="bg-muted"
               />
+            </div>
+          </div>
+
+          {/* Calculated Information Section */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
+            <h3 className="text-lg font-semibold text-blue-900 mb-4">📊 Calculated Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
+                <div className="text-sm font-medium text-gray-600">End Date</div>
+                <div className="text-lg font-bold text-blue-600">
+                  {endDate.toLocaleDateString()}
+                </div>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-green-100">
+                <div className="text-sm font-medium text-gray-600">Paid per Month</div>
+                <div className="text-lg font-bold text-green-600">
+                  ${paidPerMonth.toFixed(2)}
+                </div>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-purple-100">
+                <div className="text-sm font-medium text-gray-600">Paid per Day</div>
+                <div className="text-lg font-bold text-purple-600">
+                  ${paidPerDay.toFixed(2)}
+                </div>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-orange-100">
+                <div className="text-sm font-medium text-gray-600">Days Remaining</div>
+                <div className="text-lg font-bold text-orange-600">
+                  {daysRemaining} days
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-100 rounded-lg">
+              <div className="text-sm font-medium text-blue-800">
+                Total Duration: {totalDurationMonths} months ({formData.duration_years} years, {formData.duration_months} months)
+              </div>
             </div>
           </div>
 

@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { User, getUsersByRole } from "@/lib/auth";
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
-import { notificationService } from "@/lib/firebase-services";
+import { dealsService } from "@/lib/firebase-deals-service";
 
 export function AddDealPage() {
   const { user } = useAuth();
@@ -174,61 +174,62 @@ export function AddDealPage() {
     setLoading(true);
 
     try {
-      // Skip validation for dynamic fields since we allow custom values
-
-      const timestamp = new Date().getTime();
-      const random = Math.floor(Math.random() * 1000);
-      const dealId = `Deal-${timestamp.toString().slice(-4)}${random.toString().padStart(3, '0')}`;
-
-      const generateId = (prefix: string) => {
-        const randomString = Math.random().toString(36).slice(2, 10);
-        return `${prefix}-${randomString}`;
-      };
-
-      const newDeal = {
-        ...formData,
-        date: new Date().toISOString().split('T')[0],
-        amount: parseFloat(formData.amount) || 0,
-        no_user: parseInt(formData.no_user) || 1,
-        DealID: dealId,
-        SalesAgentID: formData.SalesAgentID || user?.id || generateId('agent'),
-        ClosingAgentID: formData.ClosingAgentID || generateId('agent'),
-        sales_agent_norm: formData.sales_agent.toLowerCase(),
-        closing_agent_norm: formData.closing_agent.toLowerCase(),
-      };
-
-      // Save to Firebase directly
-      await addSale(newDeal);
-
-      // Create notification for managers using Firebase service directly
-      await notificationService.addNotification({
-        title: 'New Deal Created',
-        message: `${user?.name || 'Unknown'} created new deal ${dealId} for ${formData.customer_name} worth $${formData.amount}`,
-        type: 'deal',
-        priority: 'medium',
-        from: user?.name || 'System',
-        userRole: 'manager',
-        isRead: false,
-        dealId: dealId,
-        dealName: formData.customer_name,
-        dealValue: parseFloat(formData.amount) || 0,
-        actionRequired: false
-      });
-
-      // Update salesman's target progress
-      try {
-        await fetch('/api/targets', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: user?.id,
-            dealAmount: parseFloat(formData.amount) || 0
-          })
-        });
-      } catch (targetError) {
-        console.warn('Failed to update target progress:', targetError);
-        // Don't fail the deal creation if target update fails
+      // Validate required fields
+      if (!formData.customer_name || !formData.email || !formData.phone || !formData.amount) {
+        showError("Missing Information", "Please fill in all required fields: Customer Name, Email, Phone, and Amount.");
+        setLoading(false);
+        return;
       }
+
+      // Convert duration to months
+      const getDurationMonths = (duration: string) => {
+        switch (duration.toUpperCase()) {
+          case 'YEAR': return 12;
+          case 'TWO YEAR': return 24;
+          case '2Y+6M': return 30;
+          case '2Y+5M': return 29;
+          case '2Y+4M': return 28;
+          case '2Y+3M': return 27;
+          case '2Y+2M': return 26;
+          case '2Y+1M': return 25;
+          default: return 12;
+        }
+      };
+
+      // Prepare deal data for Firebase deals service
+      const dealData = {
+        customer_name: formData.customer_name,
+        phone_number: formData.phone,
+        email: formData.email,
+        amount_paid: parseFloat(formData.amount) || 0,
+        duration_months: getDurationMonths(formData.duration),
+        sales_agent: formData.sales_agent,
+        closing_agent: formData.closing_agent,
+        sales_team: formData.team,
+        product_type: formData.type_program,
+        service_tier: formData.type_service,
+        signup_date: formData.date,
+        notes: formData.comment,
+        status: 'active' as const,
+        stage: 'closed-won' as const,
+        priority: 'medium' as const,
+        SalesAgentID: formData.SalesAgentID || user?.id || '',
+        ClosingAgentID: formData.ClosingAgentID || user?.id || '',
+        created_by: user?.name || 'Unknown',
+        created_by_id: user?.id || '',
+        // Additional fields from original form
+        username: formData.username,
+        invoice: formData.invoice,
+        device_id: formData.device_id,
+        device_key: formData.device_key,
+        no_user: parseInt(formData.no_user) || 1
+      };
+
+      console.log('Creating deal with Firebase service:', dealData);
+      
+      // Use Firebase deals service for proper integration with target progress
+      const dealId = await dealsService.createDeal(dealData, user);
+      console.log('Deal created successfully with ID:', dealId);
 
       await showDealAdded(parseFloat(formData.amount), formData.customer_name);
 
@@ -292,7 +293,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number *</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.phone).filter(Boolean))].sort()}
+                  options={[...new Set((sales || []).map(s => s.phone).filter(Boolean) as string[])].sort()}
                   value={formData.phone}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, phone: value }))}
                   placeholder="Select or type phone number"
@@ -304,7 +305,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address *</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.email).filter(Boolean))].sort()}
+                  options={[...new Set((sales || []).map(s => s.email).filter(Boolean) as string[])].sort()}
                   value={formData.email}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, email: value }))}
                   placeholder="Select or type email address"
@@ -328,7 +329,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="username">Username *</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.username).filter(Boolean))].sort()}
+                  options={[...new Set((sales || []).map(s => (s as any).username).filter(Boolean) as string[])].sort()}
                   value={formData.username}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, username: value }))}
                   placeholder="Select or type username"
@@ -436,7 +437,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="invoice">Invoice Reference</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.invoice).filter(Boolean))].sort()}
+                  options={[...new Set((sales || []).map(s => (s as any).invoice).filter(Boolean) as string[])].sort()}
                   value={formData.invoice}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, invoice: value }))}
                   placeholder="Select or type invoice reference"
@@ -448,7 +449,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="device_id">Device ID</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.device_id).filter(Boolean))].sort()}
+                  options={[...new Set((sales || []).map(s => (s as any).device_id).filter(Boolean) as string[])].sort()}
                   value={formData.device_id}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, device_id: value }))}
                   placeholder="Select or type device ID"
@@ -460,7 +461,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="device_key">Device Key</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.device_key).filter(Boolean))].sort()}
+                  options={[...new Set((sales || []).map(s => (s as any).device_key).filter(Boolean) as string[])].sort()}
                   value={formData.device_key}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, device_key: value }))}
                   placeholder="Select or type device key"

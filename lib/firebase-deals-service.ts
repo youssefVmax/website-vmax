@@ -148,7 +148,14 @@ export class FirebaseDealsService {
       const docRef = await addDoc(collection(db, this.COLLECTION), dealWithTimestamp);
       
       // Update target progress for the sales agent
-      await this.updateTargetProgress(processedDeal.SalesAgentID, processedDeal.amount_paid, processedDeal.data_month, processedDeal.data_year);
+      await this.updateTargetProgress(
+        processedDeal.SalesAgentID, 
+        processedDeal.amount_paid, 
+        processedDeal.data_month, 
+        processedDeal.data_year,
+        processedDeal.DealID,
+        processedDeal.customer_name
+      );
 
       // Create notifications for sales and closing agents
       const notifications = [
@@ -203,7 +210,7 @@ export class FirebaseDealsService {
   }
 
   // Update target progress when a deal is created
-  private async updateTargetProgress(agentId: string, dealAmount: number, month: number, year: number): Promise<void> {
+  private async updateTargetProgress(agentId: string, dealAmount: number, month: number, year: number, dealId?: string, customerName?: string): Promise<void> {
     try {
       // Find current period targets for the agent
       const currentPeriod = `${this.getMonthName(month)} ${year}`;
@@ -213,22 +220,34 @@ export class FirebaseDealsService {
       const currentTargets = targets.filter(target => target.period === currentPeriod);
       
       if (currentTargets.length > 0) {
+        // Import target progress service
+        const { targetProgressService } = await import('./firebase-target-progress-service');
+        
+        // Update target progress in Firebase for each matching target
+        for (const target of currentTargets) {
+          await targetProgressService.updateProgressOnDealCreation(
+            agentId,
+            dealAmount,
+            dealId || `deal-${Date.now()}`,
+            customerName || 'Unknown Customer',
+            currentPeriod
+          );
+          
+          console.log(`Updated target progress for agent ${agentId}, target ${target.id}, amount: $${dealAmount}`);
+        }
+
         // Create notification about target progress update
-        const progressNotifications = currentTargets.map(target => {
-          // Get current progress from target service
-          const targetProgress = targetsService.getTargetProgress(agentId, target.period);
-          return {
-            title: 'Target Progress Updated',
-            message: `Your deal of $${dealAmount} has been added to your ${target.period} target. Keep up the great work!`,
-            type: 'info' as const,
-            priority: 'low' as const,
-            from: 'System',
-            to: [agentId],
-            targetId: target.id,
-            isRead: false,
-            actionRequired: false
-          };
-        });
+        const progressNotifications = currentTargets.map(target => ({
+          title: 'Target Progress Updated',
+          message: `Your deal of $${dealAmount} for ${customerName || 'a customer'} has been deducted from your ${target.period} target. Keep up the great work!`,
+          type: 'info' as const,
+          priority: 'low' as const,
+          from: 'System',
+          to: [agentId],
+          targetId: target.id,
+          isRead: false,
+          actionRequired: false
+        }));
 
         // Send notifications
         for (const notification of progressNotifications) {

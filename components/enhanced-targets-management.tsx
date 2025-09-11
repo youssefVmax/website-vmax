@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { Target, Users, Plus, Edit, Trash2, BarChart3, TrendingUp } from "lucide-react"
+import { Target, Users, Plus, Edit, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { targetsService } from "@/lib/firebase-targets-service"
 import { Target as TargetType, TeamTarget } from "@/types/firebase"
@@ -30,15 +30,34 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
   const [activeTab, setActiveTab] = useState("individual")
   const [targetProgress, setTargetProgress] = useState<Record<string, {currentSales: number, currentDeals: number}>>({})
   const [editingTarget, setEditingTarget] = useState<TargetType | null>(null)
-  const [editingTeamTarget, setEditingTeamTarget] = useState<TeamTarget | null>(null)
 
-  // Form states
+  // Generate dynamic periods (months and years)
+  const generatePeriods = () => {
+    const currentYear = new Date().getFullYear()
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ]
+    const years = [currentYear, currentYear + 1, currentYear + 2] // Current year + 2 future years
+    
+    const periods = []
+    for (const year of years) {
+      for (const month of months) {
+        periods.push(`${month} ${year}`)
+      }
+    }
+    return periods
+  }
+
+  const availablePeriods = generatePeriods()
+  const currentPeriod = `${new Date().toLocaleString('default', { month: 'long' })} ${new Date().getFullYear()}`
+
   const [newIndividualTarget, setNewIndividualTarget] = useState({
     agentId: '',
     agentName: '',
     monthlyTarget: '',
     dealsTarget: '',
-    period: 'January 2025',
+    period: currentPeriod,
     description: ''
   })
 
@@ -47,7 +66,7 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
     teamName: '',
     monthlyTarget: '',
     dealsTarget: '',
-    period: 'January 2025',
+    period: currentPeriod,
     description: '',
     members: [] as string[]
   })
@@ -202,13 +221,12 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
       const createdTarget = await targetsService.addTarget(targetData)
       setTargets(prev => [...prev, createdTarget])
-      
       setNewIndividualTarget({
         agentId: '',
         agentName: '',
         monthlyTarget: '',
         dealsTarget: '',
-        period: 'January 2025',
+        period: currentPeriod,
         description: ''
       })
 
@@ -258,13 +276,12 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
       // Optionally create individual targets for team members
       const individualTargets = await targetsService.createIndividualTargetsFromTeamTarget(createdTeamTarget)
       setTargets(prev => [...prev, ...individualTargets])
-      
       setNewTeamTarget({
         teamId: '',
         teamName: '',
         monthlyTarget: '',
         dealsTarget: '',
-        period: 'January 2025',
+        period: currentPeriod,
         description: '',
         members: []
       })
@@ -292,14 +309,253 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            {isManager ? 'Enhanced Target Management' : 'My Sales Targets'}
+            {isManager ? 'Target Management Dashboard' : 'My Sales Targets'}
           </h2>
           <p className="text-muted-foreground">
             {isManager 
-              ? 'Set and monitor targets for teams and individual members'
+              ? 'Create and monitor sales targets for teams and individual members'
               : 'Track your personal sales targets and progress'}
           </p>
         </div>
+        
+        {/* Quick Action Buttons for Managers */}
+        {isManager && (
+          <div className="flex gap-3">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 shadow-lg">
+                  <Target className="h-4 w-4 mr-2" />
+                  Set Individual Target
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold">Create Individual Target</DialogTitle>
+                  <p className="text-sm text-muted-foreground">Set a sales target for a specific team member</p>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium">Select Team Member *</Label>
+                    <Select value={newIndividualTarget.agentId} onValueChange={(value) => {
+                      const allMembers = teams.flatMap(team => team.members)
+                      const member = allMembers.find(m => m.id === value)
+                      if (member) {
+                        setNewIndividualTarget(prev => ({
+                          ...prev,
+                          agentId: value,
+                          agentName: member.name
+                        }))
+                      }
+                    }}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a team member..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map(team => (
+                          <div key={team.id}>
+                            <div className="px-2 py-1 text-sm font-medium text-muted-foreground bg-muted/50">
+                              {team.name} Team
+                            </div>
+                            {team.members.map(member => (
+                              <SelectItem key={member.id} value={member.id} className="pl-6">
+                                {member.name}
+                              </SelectItem>
+                            ))}
+                          </div>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-sm font-medium">Revenue Target ($) *</Label>
+                      <Input
+                        type="number"
+                        value={newIndividualTarget.monthlyTarget}
+                        onChange={(e) => setNewIndividualTarget(prev => ({ ...prev, monthlyTarget: e.target.value }))}
+                        placeholder="15,000"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Deals Target *</Label>
+                      <Input
+                        type="number"
+                        value={newIndividualTarget.dealsTarget}
+                        onChange={(e) => setNewIndividualTarget(prev => ({ ...prev, dealsTarget: e.target.value }))}
+                        placeholder="20"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">Target Period *</Label>
+                    <Select value={newIndividualTarget.period} onValueChange={(value) => 
+                      setNewIndividualTarget(prev => ({ ...prev, period: value }))
+                    }>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availablePeriods.map(period => (
+                          <SelectItem key={period} value={period}>
+                            {period}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">Description (Optional)</Label>
+                    <Textarea
+                      value={newIndividualTarget.description}
+                      onChange={(e) => setNewIndividualTarget(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Add notes about this target..."
+                      className="mt-1 resize-none"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <DialogFooter className="gap-2">
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DialogClose>
+                  <Button onClick={handleCreateIndividualTarget} className="bg-gradient-to-r from-cyan-500 to-blue-500">
+                    Create Individual Target
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 shadow-lg">
+                  <Users className="h-4 w-4 mr-2" />
+                  Set Team Target
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-semibold">Create Team Target</DialogTitle>
+                  <p className="text-sm text-muted-foreground">Set a collective sales target for an entire team</p>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium">Select Team *</Label>
+                    <Select value={newTeamTarget.teamId} onValueChange={(value) => {
+                      const team = teams.find(t => t.id === value)
+                      if (team) {
+                        setNewTeamTarget(prev => ({
+                          ...prev,
+                          teamId: value,
+                          teamName: team.name,
+                          members: team.members.map(m => m.id)
+                        }))
+                      }
+                    }}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a team..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map(team => (
+                          <SelectItem key={team.id} value={team.id}>
+                            <div className="flex items-center justify-between w-full">
+                              <span>{team.name}</span>
+                              <Badge variant="secondary" className="ml-2">
+                                {team.members.length} members
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-sm font-medium">Team Revenue Target ($) *</Label>
+                      <Input
+                        type="number"
+                        value={newTeamTarget.monthlyTarget}
+                        onChange={(e) => setNewTeamTarget(prev => ({ ...prev, monthlyTarget: e.target.value }))}
+                        placeholder="100,000"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Team Deals Target *</Label>
+                      <Input
+                        type="number"
+                        value={newTeamTarget.dealsTarget}
+                        onChange={(e) => setNewTeamTarget(prev => ({ ...prev, dealsTarget: e.target.value }))}
+                        placeholder="150"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium">Target Period *</Label>
+                    <Select value={newTeamTarget.period} onValueChange={(value) => 
+                      setNewTeamTarget(prev => ({ ...prev, period: value }))
+                    }>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availablePeriods.map(period => (
+                          <SelectItem key={period} value={period}>
+                            {period}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {newTeamTarget.teamId && (
+                    <div>
+                      <Label className="text-sm font-medium">Team Members</Label>
+                      <div className="mt-2 p-3 bg-muted/50 rounded-md">
+                        <div className="flex flex-wrap gap-1">
+                          {teams.find(t => t.id === newTeamTarget.teamId)?.members.map(member => (
+                            <Badge key={member.id} variant="secondary" className="text-xs">
+                              {member.name}
+                            </Badge>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Individual targets will be automatically created for each member
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <Label className="text-sm font-medium">Description (Optional)</Label>
+                    <Textarea
+                      value={newTeamTarget.description}
+                      onChange={(e) => setNewTeamTarget(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Team goals and objectives..."
+                      className="mt-1 resize-none"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <DialogFooter className="gap-2">
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DialogClose>
+                  <Button onClick={handleCreateTeamTarget} className="bg-gradient-to-r from-purple-500 to-pink-500">
+                    Create Team Target
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
       </div>
 
       {isManager ? (

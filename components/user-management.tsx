@@ -89,8 +89,8 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       setError(null)
       
       // Validate required fields
-      if (!formData.username || !formData.password || !formData.name || !formData.role) {
-        setError('Please fill in all required fields')
+      if (!formData.username || !formData.password || !formData.name || !formData.role || !formData.team) {
+        setError('Please fill in all required fields (username, password, name, role, and team)')
         return
       }
 
@@ -284,11 +284,11 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="team" className="text-right">
-                  Team
+                  Team *
                 </Label>
                 <Select value={formData.team} onValueChange={(value) => setFormData(prev => ({ ...prev, team: value }))}>
                   <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select team" />
+                    <SelectValue placeholder="Select team (required)" />
                   </SelectTrigger>
                   <SelectContent>
                     {TEAMS.map(team => (
