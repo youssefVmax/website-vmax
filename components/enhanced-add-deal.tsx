@@ -49,6 +49,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     is_bob_player: false,
     is_smarters: false,
     is_ibo_pro: false,
+    is_iboss: false,
     
     // Additional Information
     invoice_link: '',
@@ -187,6 +188,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         is_bob_player: false,
         is_smarters: false,
         is_ibo_pro: false,
+        is_iboss: false,
         invoice_link: '',
         notes: '',
         status: 'active' as const,
@@ -312,44 +314,25 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                   <Input
                     id="duration_months"
                     type="number"
-                    min="1"
+                    min="0"
                     value={formData.duration_months}
-                    onChange={(e) => handleInputChange('duration_months', parseInt(e.target.value) || 1)}
+                    onChange={(e) => handleInputChange('duration_months', parseInt(e.target.value) || 0)}
                     required
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                 <div>
-                  <Label htmlFor="product_type">Product Type *</Label>
-                  <Select value={formData.product_type} onValueChange={(value) => handleInputChange('product_type', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select product type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="IPTV Premium">IPTV Premium</SelectItem>
-                      <SelectItem value="IPTV Standard">IPTV Standard</SelectItem>
-                      <SelectItem value="IPTV Basic">IPTV Basic</SelectItem>
-                      <SelectItem value="Sports Package">Sports Package</SelectItem>
-                      <SelectItem value="Movie Package">Movie Package</SelectItem>
-                      <SelectItem value="International Package">International Package</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor="service_tier">Service Tier *</Label>
+                  <Label htmlFor="service_tier">Service Tier</Label>
                   <Select value={formData.service_tier} onValueChange={(value) => handleInputChange('service_tier', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select service tier" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Bronze">Bronze</SelectItem>
                       <SelectItem value="Silver">Silver</SelectItem>
                       <SelectItem value="Gold">Gold</SelectItem>
                       <SelectItem value="Platinum">Platinum</SelectItem>
-                      <SelectItem value="Diamond">Diamond</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -451,6 +434,14 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                     onCheckedChange={(checked) => handleInputChange('is_ibo_pro', checked)}
                   />
                   <Label htmlFor="is_ibo_pro">IBO Pro</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_iboss"
+                    checked={formData.is_iboss}
+                    onCheckedChange={(checked) => handleInputChange('is_iboss', checked)}
+                  />
+                  <Label htmlFor="is_iboss">IBOSS</Label>
                 </div>
               </div>
             </div>
