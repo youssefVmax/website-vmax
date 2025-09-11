@@ -112,10 +112,10 @@ export class FirebaseDealsService {
       paid_per_month: dealData.paid_per_month || dealData.amount_paid / dealData.duration_months,
       sales_agent_norm: dealData.sales_agent.toLowerCase().replace(/\s+/g, '_'),
       closing_agent_norm: dealData.closing_agent.toLowerCase().replace(/\s+/g, '_'),
-      SalesAgentID: dealData.SalesAgentID || currentUser.id,
-      ClosingAgentID: dealData.ClosingAgentID || currentUser.id,
-      created_by: currentUser.name,
-      created_by_id: currentUser.id,
+      SalesAgentID: dealData.SalesAgentID || currentUser?.id || '',
+      ClosingAgentID: dealData.ClosingAgentID || currentUser?.id || '',
+      created_by: dealData.created_by || currentUser?.name || 'Unknown',
+      created_by_id: dealData.created_by_id || currentUser?.id || '',
       status: dealData.status || 'active',
       stage: dealData.stage || 'closed-won',
       priority: dealData.priority || 'medium'
@@ -161,10 +161,10 @@ export class FirebaseDealsService {
       const notifications = [
         {
           title: 'New Deal Created',
-          message: `A new deal "${processedDeal.customer_name}" worth $${processedDeal.amount_paid} has been created.`,
+          message: `${processedDeal.created_by} created new deal ${processedDeal.DealID} for ${processedDeal.customer_name} worth $${processedDeal.amount_paid}`,
           type: 'deal' as const,
           priority: 'medium' as const,
-          from: processedDeal.created_by,
+          from: processedDeal.created_by || 'System',
           to: [processedDeal.SalesAgentID],
           dealId: docRef.id,
           dealName: processedDeal.customer_name,

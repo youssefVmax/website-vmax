@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,12 +11,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { dealsService } from "@/lib/firebase-deals-service";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { userService } from "@/lib/firebase-user-service";
 
 export function SimpleAddDeal() {
   const { toast } = useToast();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const [salesmenUsers, setSalesmenUsers] = useState<Array<{id: string, name: string, username: string}>>([]);
   
   const [formData, setFormData] = useState({
     customer_name: "",
@@ -28,6 +31,7 @@ export function SimpleAddDeal() {
     number_of_users: 1,
     sales_agent: user?.name || "",
     closing_agent: user?.name || "",
+    closing_agent_id: user?.id || "",
     sales_team: user?.team || "",
     country: "",
     signup_date: new Date().toISOString().split('T')[0],
@@ -35,11 +39,26 @@ export function SimpleAddDeal() {
     status: "active" as const,
     stage: "closed-won" as const,
     priority: "medium" as const,
+    service_feature: "" as string, // Single selection for service features
     is_ibo_player: false,
     is_bob_player: false,
     is_smarters: false,
-    is_ibo_pro: false
+    is_ibo_pro: false,
+    is_iboss: false
   });
+
+  // Load salesmen users on component mount
+  useEffect(() => {
+    const loadSalesmen = async () => {
+      try {
+        const users = await userService.getUsersByRole('salesman');
+        setSalesmenUsers(users.map(u => ({ id: u.id, name: u.name, username: u.username })));
+      } catch (error) {
+        console.error('Error loading salesmen:', error);
+      }
+    };
+    loadSalesmen();
+  }, []);
 
   // Calculate derived values
   const totalDurationMonths = formData.duration_years * 12 + formData.duration_months;
@@ -70,6 +89,33 @@ export function SimpleAddDeal() {
       setFormData(prev => ({ ...prev, [name]: parseInt(value) }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  // Handle service feature checkbox selection (only one can be selected)
+  const handleServiceFeatureChange = (feature: string, checked: boolean) => {
+    if (checked) {
+      // Reset all service features and set only the selected one
+      setFormData(prev => ({
+        ...prev,
+        service_feature: feature,
+        is_ibo_player: feature === 'ibo_player',
+        is_bob_player: feature === 'bob_player', 
+        is_smarters: feature === 'smarters',
+        is_ibo_pro: feature === 'ibo_pro',
+        is_iboss: feature === 'iboss'
+      }));
+    } else {
+      // If unchecking, clear all selections
+      setFormData(prev => ({
+        ...prev,
+        service_feature: '',
+        is_ibo_player: false,
+        is_bob_player: false,
+        is_smarters: false,
+        is_ibo_pro: false,
+        is_iboss: false
+      }));
     }
   };
 
@@ -119,6 +165,7 @@ export function SimpleAddDeal() {
         number_of_users: 1,
         sales_agent: user?.name || "",
         closing_agent: user?.name || "",
+        closing_agent_id: user?.id || "",
         sales_team: user?.team || "",
         country: "",
         signup_date: new Date().toISOString().split('T')[0],
@@ -126,10 +173,12 @@ export function SimpleAddDeal() {
         status: "active" as const,
         stage: "closed-won" as const,
         priority: "medium" as const,
+        service_feature: "",
         is_ibo_player: false,
         is_bob_player: false,
         is_smarters: false,
-        is_ibo_pro: false
+        is_ibo_pro: false,
+        is_iboss: false
       });
 
       // Refresh and redirect
@@ -238,7 +287,7 @@ export function SimpleAddDeal() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="duration_months">Duration - Months (0-12) *</Label>
+              <Label htmlFor="duration_months">Duration (Months) *</Label>
               <Select value={formData.duration_months.toString()} onValueChange={(value) => handleSelectChange('duration_months', value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select months" />
@@ -252,7 +301,7 @@ export function SimpleAddDeal() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="duration_years">Duration - Years *</Label>
+              <Label htmlFor="duration_years">Duration (Years) *</Label>
               <Select value={formData.duration_years.toString()} onValueChange={(value) => handleSelectChange('duration_years', value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select years" />
@@ -266,28 +315,120 @@ export function SimpleAddDeal() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sales_agent">Sales Agent</Label>
+              <Label htmlFor="sales_agent">Sales Agent *</Label>
               <Input
                 id="sales_agent"
                 name="sales_agent"
                 value={formData.sales_agent}
                 onChange={handleChange}
                 disabled={true}
-                className="bg-muted"
+                className="bg-muted font-medium"
+                placeholder="Cannot be changed"
               />
+              <p className="text-xs text-muted-foreground">Agent Information - Cannot be changed</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="closing_agent">Closing Agent</Label>
-              <Input
-                id="closing_agent"
-                name="closing_agent"
-                value={formData.closing_agent}
-                onChange={handleChange}
-                disabled={true}
-                className="bg-muted"
-              />
+              <Label htmlFor="closing_agent">Closing Agent *</Label>
+              <Select 
+                value={formData.closing_agent_id} 
+                onValueChange={(value) => {
+                  const selectedUser = salesmenUsers.find(u => u.id === value);
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    closing_agent_id: value,
+                    closing_agent: selectedUser?.name || ''
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select closing agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  {salesmenUsers.map(salesman => (
+                    <SelectItem key={salesman.id} value={salesman.id}>
+                      {salesman.name} {salesman.id === user?.id ? '(You)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          {/* Service Features Section */}
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg border border-purple-200">
+            <h3 className="text-lg font-semibold text-purple-900 mb-4">🛠️ Service Features</h3>
+            <p className="text-sm text-purple-700 mb-4">Select one service feature (only one can be selected at a time):</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-purple-100 hover:border-purple-300 transition-colors">
+                <Checkbox
+                  id="ibo_player"
+                  checked={formData.is_ibo_player}
+                  onCheckedChange={(checked) => handleServiceFeatureChange('ibo_player', checked as boolean)}
+                  className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
+                />
+                <Label htmlFor="ibo_player" className="text-sm font-medium cursor-pointer">
+                  IBO Player
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-purple-100 hover:border-purple-300 transition-colors">
+                <Checkbox
+                  id="bob_player"
+                  checked={formData.is_bob_player}
+                  onCheckedChange={(checked) => handleServiceFeatureChange('bob_player', checked as boolean)}
+                  className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
+                />
+                <Label htmlFor="bob_player" className="text-sm font-medium cursor-pointer">
+                  BOB Player
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-purple-100 hover:border-purple-300 transition-colors">
+                <Checkbox
+                  id="smarters"
+                  checked={formData.is_smarters}
+                  onCheckedChange={(checked) => handleServiceFeatureChange('smarters', checked as boolean)}
+                  className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
+                />
+                <Label htmlFor="smarters" className="text-sm font-medium cursor-pointer">
+                  Smarters
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-purple-100 hover:border-purple-300 transition-colors">
+                <Checkbox
+                  id="ibo_pro"
+                  checked={formData.is_ibo_pro}
+                  onCheckedChange={(checked) => handleServiceFeatureChange('ibo_pro', checked as boolean)}
+                  className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
+                />
+                <Label htmlFor="ibo_pro" className="text-sm font-medium cursor-pointer">
+                  IBO Pro
+                </Label>
+              </div>
+
+              <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-purple-100 hover:border-purple-300 transition-colors">
+                <Checkbox
+                  id="iboss"
+                  checked={formData.is_iboss}
+                  onCheckedChange={(checked) => handleServiceFeatureChange('iboss', checked as boolean)}
+                  className="data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
+                />
+                <Label htmlFor="iboss" className="text-sm font-medium cursor-pointer">
+                  IBOSS
+                </Label>
+              </div>
+            </div>
+
+            {formData.service_feature && (
+              <div className="mt-4 p-3 bg-purple-100 rounded-lg">
+                <div className="text-sm font-medium text-purple-800">
+                  Selected Feature: <span className="capitalize">{formData.service_feature.replace('_', ' ')}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Calculated Information Section */}
