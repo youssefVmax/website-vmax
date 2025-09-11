@@ -156,6 +156,31 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     }
   }
 
+  const handleViewDetails = (notification: Notification) => {
+    if (notification.dealId) {
+      // Navigate to deal details or open deal modal
+      // For now, we'll dispatch a custom event to switch to deals tab and show deal details
+      const event = new CustomEvent('setActiveTab', { 
+        detail: 'deals' 
+      });
+      window.dispatchEvent(event);
+      
+      // Also store the deal ID for the deals component to show details
+      sessionStorage.setItem('selectedDealId', notification.dealId);
+      
+      toast({
+        title: "Opening Deal Details",
+        description: `Viewing details for ${notification.dealName || 'deal'}`
+      });
+    } else {
+      toast({
+        title: "No Deal Details",
+        description: "This notification doesn't have associated deal information",
+        variant: "destructive"
+      });
+    }
+  }
+
   const getPriorityColor = (priority: PriorityType) => {
     switch (priority) {
       case 'high': return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
@@ -393,12 +418,31 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
                         </Badge>
                       </div>
                     </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDetails(notification);
+                        }}
+                      >
+                        View Deal Details
+                      </Button>
+                    </div>
                   </div>
                 )}
                 
-                {notification.actionRequired && (
+                {notification.actionRequired && !notification.dealId && (
                   <div className="mt-3 flex justify-end">
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(notification);
+                      }}
+                    >
                       View Details
                     </Button>
                   </div>

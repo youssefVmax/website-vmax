@@ -15,6 +15,7 @@ import { userService } from "@/lib/firebase-user-service"
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { dataFilesService, numberAssignmentsService } from "@/lib/firebase-data-services"
 import { useFirebaseDataFiles } from "@/hooks/useFirebaseDataFiles"
+import { showInfo, showSuccess } from "@/lib/sweetalert"
 
 interface DataFile {
   id: string
@@ -535,18 +536,18 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col"
-                onClick={() => {
+                onClick={async () => {
                   // Create file input for bulk upload
                   const input = document.createElement('input');
                   input.type = 'file';
                   input.accept = '.csv,.xlsx,.json';
                   input.multiple = true;
-                  input.onchange = (e) => {
+                  input.onchange = async (e) => {
                     const files = (e.target as HTMLInputElement).files;
                     if (files && files.length > 0) {
                       console.log('Files selected for bulk upload:', files);
                       // TODO: Implement bulk upload functionality
-                      alert(`Selected ${files.length} file(s) for upload. Upload functionality will be implemented.`);
+                      await showInfo('Bulk Upload', `Selected ${files.length} file(s) for upload. Upload functionality will be implemented.`);
                     }
                   };
                   input.click();
@@ -558,11 +559,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col"
-                onClick={() => {
+                onClick={async () => {
                   // Export all data
                   console.log('Exporting all data...');
                   // TODO: Implement export functionality
-                  alert('Export functionality will be implemented. This will download all data as CSV/Excel.');
+                  await showInfo('Export Data', 'Export functionality will be implemented. This will download all data as CSV/Excel.');
                 }}
               >
                 <Download className="h-6 w-6 mb-2" />
@@ -571,11 +572,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col"
-                onClick={() => {
+                onClick={async () => {
                   // Assign data to users
                   console.log('Opening data assignment dialog...');
                   // TODO: Implement data assignment functionality
-                  alert('Data assignment functionality will be implemented. This will allow assigning leads/deals to team members.');
+                  await showInfo('Assign Data', 'Data assignment functionality will be implemented. This will allow assigning leads/deals to team members.');
                 }}
               >
                 <Users className="h-6 w-6 mb-2" />
@@ -584,11 +585,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               <Button 
                 variant="outline" 
                 className="h-20 flex flex-col"
-                onClick={() => {
+                onClick={async () => {
                   // Archive old data
                   console.log('Starting data archival process...');
                   // TODO: Implement archival functionality
-                  alert('Archive functionality will be implemented. This will move old data to archive storage.');
+                  await showInfo('Archive Data', 'Archive functionality will be implemented. This will move old data to archive storage.');
                 }}
               >
                 <Database className="h-6 w-6 mb-2" />

@@ -16,6 +16,7 @@ import {
 import { db } from './firebase';
 import { notificationService } from './firebase-services';
 import { targetsService } from './firebase-targets-service';
+import { COLLECTIONS } from '@/types/firebase';
 
 export interface Deal {
   id?: string;
@@ -146,6 +147,32 @@ export class FirebaseDealsService {
       };
       
       const docRef = await addDoc(collection(db, this.COLLECTION), dealWithTimestamp);
+      
+      // ALSO save to sales collection for dashboard compatibility
+      const saleData = {
+        date: processedDeal.signup_date,
+        customer_name: processedDeal.customer_name,
+        amount: processedDeal.amount_paid,
+        sales_agent: processedDeal.sales_agent,
+        closing_agent: processedDeal.closing_agent,
+        team: processedDeal.sales_team,
+        type_service: processedDeal.service_tier,
+        sales_agent_norm: processedDeal.sales_agent_norm,
+        closing_agent_norm: processedDeal.closing_agent_norm,
+        SalesAgentID: processedDeal.SalesAgentID,
+        ClosingAgentID: processedDeal.ClosingAgentID,
+        DealID: processedDeal.DealID,
+        email: processedDeal.email,
+        phone: processedDeal.phone_number,
+        country: processedDeal.country,
+        duration_months: processedDeal.duration_months,
+        type_program: processedDeal.product_type,
+        invoice: processedDeal.invoice_link,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+      };
+      
+      await addDoc(collection(db, COLLECTIONS.SALES), saleData);
       
       // Update target progress for the sales agent
       await this.updateTargetProgress(

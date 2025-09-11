@@ -13,6 +13,7 @@ import { CalendarIcon, DollarSign, User, Building, Package, Settings, Save, X } 
 import { dealsService } from "@/lib/firebase-deals-service"
 import { userService } from "@/lib/firebase-user-service"
 import { User as UserType } from "@/lib/auth"
+import { showDealAdded, showError, showLoading } from "@/lib/sweetalert"
 
 interface EnhancedAddDealProps {
   currentUser: UserType
@@ -29,12 +30,14 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     email: '',
     phone_number: '',
     country: '',
+    custom_country: '',
     
     // Deal Information
     signup_date: new Date().toISOString().split('T')[0],
     amount_paid: 0,
     duration_months: 12,
     duration_years: 0,
+    number_of_users: 1,
     product_type: '',
     service_tier: '',
     
@@ -136,8 +139,10 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
 
     try {
       // Validate required fields
-      if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.amount_paid) {
-        alert('Please fill in all required fields: Customer Name, Email, Phone, and Amount Paid')
+      const isProgramTypeSelected = formData.is_ibo_player || formData.is_bob_player || formData.is_smarters || formData.is_ibo_pro || formData.is_iboss;
+      
+      if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.amount_paid || !isProgramTypeSelected) {
+        await showError('Missing Information', 'Please fill in all required fields: Customer Name, Email, Phone, Amount Paid, and Program Type')
         setLoading(false)
         return
       }
@@ -164,7 +169,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
       console.log('Deal created successfully with ID:', dealId)
       
       // Show success message
-      alert(`Deal for "${formData.customer_name}" created successfully! Deal ID: ${dealId}`)
+      await showDealAdded(formData.amount_paid, formData.customer_name)
       
       if (onSuccess) {
         onSuccess(dealId)
@@ -176,10 +181,12 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         email: '',
         phone_number: '',
         country: '',
+        custom_country: '',
         signup_date: new Date().toISOString().split('T')[0],
         amount_paid: 0,
         duration_months: 12,
         duration_years: 0,
+        number_of_users: 1,
         product_type: '',
         service_tier: '',
         sales_agent: currentUser.name,
@@ -201,7 +208,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
 
     } catch (error) {
       console.error('Error creating deal:', error)
-      alert('Failed to create deal. Please try again.')
+      await showError('Deal Creation Failed', 'Failed to create deal. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -238,7 +245,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="customer_name">Customer Name *</Label>
+                  <Label htmlFor="customer_name">Customer Name</Label>
                   <Input
                     id="customer_name"
                     value={formData.customer_name}
@@ -248,7 +255,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 </div>
                 
                 <div>
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
                     type="email"
@@ -259,7 +266,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 </div>
                 
                 <div>
-                  <Label htmlFor="phone_number">Phone Number *</Label>
+                  <Label htmlFor="phone_number">Phone Number</Label>
                   <Input
                     id="phone_number"
                     value={formData.phone_number}
@@ -269,13 +276,26 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 </div>
                 
                 <div>
-                  <Label htmlFor="country">Country *</Label>
-                  <Input
-                    id="country"
-                    value={formData.country}
-                    onChange={(e) => handleInputChange('country', e.target.value)}
-                    required
-                  />
+                  <Label htmlFor="country">Country</Label>
+                  <Select value={formData.country} onValueChange={(value) => handleInputChange('country', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USA">USA</SelectItem>
+                      <SelectItem value="Canada">Canada</SelectItem>
+                      <SelectItem value="Other">Other (specify below)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {formData.country === 'Other' && (
+                    <Input
+                      className="mt-2"
+                      placeholder="Enter country name"
+                      value={formData.custom_country || ''}
+                      onChange={(e) => handleInputChange('custom_country', e.target.value)}
+                      required
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -289,7 +309,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="signup_date">Signup Date *</Label>
+                  <Label htmlFor="signup_date">Signup Date </Label>
                   <Input
                     id="signup_date"
                     type="date"
@@ -300,26 +320,31 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 </div>
                 
                 <div>
-                  <Label htmlFor="amount_paid">Amount Paid ($) *</Label>
+                  <Label htmlFor="amount_paid">Amount Paid ($)</Label>
                   <Input
                     id="amount_paid"
-                    type="number"
-                    min=""
-                    step="10"
-                    value={formData.amount_paid}
-                    onChange={(e) => handleInputChange('amount_paid', parseFloat(e.target.value) || 0)}
+                    type="text"
+                    value={formData.amount_paid === 0 ? '' : formData.amount_paid.toString()}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      // Allow empty string or valid numbers
+                      if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                        handleInputChange('amount_paid', value === '' ? 0 : parseFloat(value))
+                      }
+                    }}
+                    placeholder="Enter amount"
                     required
                   />
                 </div>
                 
                 <div>
-                  <Label htmlFor="duration_months">Duration (Months) *</Label>
+                  <Label htmlFor="duration_months">Duration (Months)</Label>
                   <Select value={formData.duration_months.toString()} onValueChange={(value) => handleInputChange('duration_months', parseInt(value))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select months" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.from({length: 13}, (_, i) => (
+                      {Array.from({length: 12}, (_, i) => (
                         <SelectItem key={i} value={i.toString()}>{i} months</SelectItem>
                       ))}
                     </SelectContent>
@@ -341,7 +366,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="service_tier">Service Tier</Label>
                   <Select value={formData.service_tier} onValueChange={(value) => handleInputChange('service_tier', value)}>
@@ -355,6 +380,125 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                     </SelectContent>
                   </Select>
                 </div>
+                
+                <div>
+                  <Label htmlFor="number_of_users">Number of Users</Label>
+                  <Select value={formData.number_of_users.toString()} onValueChange={(value) => handleInputChange('number_of_users', parseInt(value))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select number of users" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({length: 10}, (_, i) => (
+                        <SelectItem key={i + 1} value={(i + 1).toString()}>{i + 1} user{i + 1 > 1 ? 's' : ''}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Service Features - Program Type */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-4">
+                  <Settings className="h-4 w-4" />
+                  <Label className="text-lg font-semibold">Service Features - Program Type *</Label>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="IBO Player"
+                      checked={formData.is_ibo_player}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', true)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBO Player</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="BOB Player"
+                      checked={formData.is_bob_player}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', true)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">BOB Player</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="Smarters"
+                      checked={formData.is_smarters}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', true)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">Smarters</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="IBO Pro"
+                      checked={formData.is_ibo_pro}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', true)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBO Pro</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="IBOSS"
+                      checked={formData.is_iboss}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', true)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBOSS</span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -367,23 +511,15 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="sales_agent">Sales Agent *</Label>
-                  <Select value={formData.sales_agent} onValueChange={(value) => handleAgentChange('sales_agent', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select sales agent" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.name}>
-                          {user.name} ({user.team})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="sales_agent">Sales Agent </Label>
+                  <div className="flex items-center h-10 px-3 rounded-md border text-sm bg-muted">
+                    <span className="capitalize">{formData.sales_agent || currentUser.name}</span>
+                    <Badge variant="secondary" className="ml-2">{currentUser.team}</Badge>
+                  </div>
                 </div>
                 
                 <div>
-                  <Label htmlFor="closing_agent">Closing Agent *</Label>
+                  <Label htmlFor="closing_agent">Closing Agent </Label>
                   <Select value={formData.closing_agent} onValueChange={(value) => handleAgentChange('closing_agent', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select closing agent" />
@@ -408,109 +544,6 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                   placeholder="Team will be auto-filled based on sales agent"
                   readOnly
                 />
-              </div>
-            </div>
-
-            {/* Service Features */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Settings className="h-4 w-4" />
-                <h3 className="text-lg font-semibold">Service Features</h3>
-              </div>
-              
-              <div className="space-y-3">
-                <Label>Program Type *</Label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="program_type"
-                      value="IBO Player"
-                      checked={formData.is_ibo_player}
-                      onChange={() => {
-                        handleInputChange('is_ibo_player', true)
-                        handleInputChange('is_bob_player', false)
-                        handleInputChange('is_smarters', false)
-                        handleInputChange('is_ibo_pro', false)
-                        handleInputChange('is_iboss', false)
-                      }}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBO Player</span>
-                  </label>
-                  
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="program_type"
-                      value="BOB Player"
-                      checked={formData.is_bob_player}
-                      onChange={() => {
-                        handleInputChange('is_ibo_player', false)
-                        handleInputChange('is_bob_player', true)
-                        handleInputChange('is_smarters', false)
-                        handleInputChange('is_ibo_pro', false)
-                        handleInputChange('is_iboss', false)
-                      }}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">BOB Player</span>
-                  </label>
-                  
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="program_type"
-                      value="Smarters"
-                      checked={formData.is_smarters}
-                      onChange={() => {
-                        handleInputChange('is_ibo_player', false)
-                        handleInputChange('is_bob_player', false)
-                        handleInputChange('is_smarters', true)
-                        handleInputChange('is_ibo_pro', false)
-                        handleInputChange('is_iboss', false)
-                      }}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">Smarters</span>
-                  </label>
-                  
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="program_type"
-                      value="IBO Pro"
-                      checked={formData.is_ibo_pro}
-                      onChange={() => {
-                        handleInputChange('is_ibo_player', false)
-                        handleInputChange('is_bob_player', false)
-                        handleInputChange('is_smarters', false)
-                        handleInputChange('is_ibo_pro', true)
-                        handleInputChange('is_iboss', false)
-                      }}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBO Pro</span>
-                  </label>
-                  
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="program_type"
-                      value="IBOSS"
-                      checked={formData.is_iboss}
-                      onChange={() => {
-                        handleInputChange('is_ibo_player', false)
-                        handleInputChange('is_bob_player', false)
-                        handleInputChange('is_smarters', false)
-                        handleInputChange('is_ibo_pro', false)
-                        handleInputChange('is_iboss', true)
-                      }}
-                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBOSS</span>
-                  </label>
-                </div>
               </div>
             </div>
 
@@ -548,56 +581,6 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
             {/* Additional Information */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Additional Information</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <Select value={formData.status} onValueChange={(value: any) => handleInputChange('status', value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                      <SelectItem value="refunded">Refunded</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor="stage">Stage</Label>
-                  <Select value={formData.stage} onValueChange={(value: any) => handleInputChange('stage', value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="lead">Lead</SelectItem>
-                      <SelectItem value="qualified">Qualified</SelectItem>
-                      <SelectItem value="proposal">Proposal</SelectItem>
-                      <SelectItem value="negotiation">Negotiation</SelectItem>
-                      <SelectItem value="closed-won">Closed Won</SelectItem>
-                      <SelectItem value="closed-lost">Closed Lost</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor="priority">Priority</Label>
-                  <Select value={formData.priority} onValueChange={(value: any) => handleInputChange('priority', value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
               <div>
                 <Label htmlFor="invoice_link">Invoice Link</Label>
                 <Input

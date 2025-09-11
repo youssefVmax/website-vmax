@@ -18,26 +18,33 @@ const SweetAlertWrapper = ({ children }: { children: React.ReactNode }) => {
         }
       } catch (error) {
         console.warn('SweetAlert2 could not be loaded. Using fallback alerts.');
-        // Fallback to browser alerts
+        // Fallback to enhanced browser alerts with better formatting
         if (typeof window !== 'undefined') {
-          (window as any).Swal = {
-            fire: (options: any) => {
-              if (options.icon === 'error') {
-                alert(`Error: ${options.title}\n${options.text || ''}`);
-              } else {
-                alert(`${options.title}\n${options.text || ''}`);
-              }
+          const createFallbackAlert = (options: any) => {
+            const iconEmojis: Record<string, string> = {
+              'success': '✅',
+              'error': '❌',
+              'warning': '⚠️',
+              'info': 'ℹ️',
+              'question': '❓'
+            };
+            const iconEmoji = iconEmojis[options.icon] || '';
+            
+            const message = `${iconEmoji} ${options.title}${options.text ? '\n\n' + options.text : ''}`;
+            
+            // Use confirm for questions, alert for others
+            if (options.icon === 'question' || options.showCancelButton) {
+              return Promise.resolve({ isConfirmed: confirm(message) });
+            } else {
+              alert(message);
               return Promise.resolve({ isConfirmed: true });
-            },
+            }
+          };
+
+          (window as any).Swal = {
+            fire: createFallbackAlert,
             mixin: () => ({
-              fire: (options: any) => {
-                if (options.icon === 'error') {
-                  alert(`Error: ${options.title}\n${options.text || ''}`);
-                } else {
-                  alert(`${options.title}\n${options.text || ''}`);
-                }
-                return Promise.resolve({ isConfirmed: true });
-              }
+              fire: createFallbackAlert
             })
           };
         }
