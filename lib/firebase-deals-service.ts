@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { notificationService } from './firebase-services';
+import { targetsService } from './firebase-targets-service';
 
 export interface Deal {
   id?: string;
@@ -146,6 +147,9 @@ export class FirebaseDealsService {
       
       const docRef = await addDoc(collection(db, this.COLLECTION), dealWithTimestamp);
       
+      // Update target progress for the sales agent
+      await this.updateTargetProgress(processedDeal.SalesAgentID, processedDeal.amount_paid, processedDeal.data_month, processedDeal.data_year);
+
       // Create notifications for sales and closing agents
       const notifications = [
         {
@@ -194,8 +198,55 @@ export class FirebaseDealsService {
   // Calculate paid rank
   private calculatePaidRank(amount: number, allDeals: Deal[]): number {
     const sortedAmounts = allDeals.map(d => d.amount_paid).sort((a, b) => b - a);
-    const rank = sortedAmounts.findIndex(a => a <= amount) + 1;
-    return rank || sortedAmounts.length + 1;
+    const rank = sortedAmounts.indexOf(amount) + 1;
+    return rank;
+  }
+
+  // Update target progress when a deal is created
+  private async updateTargetProgress(agentId: string, dealAmount: number, month: number, year: number): Promise<void> {
+    try {
+      // Find current period targets for the agent
+      const currentPeriod = `${this.getMonthName(month)} ${year}`;
+      
+      // Get agent's targets for the current period
+      const targets = await targetsService.getTargets(agentId, 'salesman');
+      const currentTargets = targets.filter(target => target.period === currentPeriod);
+      
+      if (currentTargets.length > 0) {
+        // Create notification about target progress update
+        const progressNotifications = currentTargets.map(target => {
+          // Get current progress from target service
+          const targetProgress = targetsService.getTargetProgress(agentId, target.period);
+          return {
+            title: 'Target Progress Updated',
+            message: `Your deal of $${dealAmount} has been added to your ${target.period} target. Keep up the great work!`,
+            type: 'info' as const,
+            priority: 'low' as const,
+            from: 'System',
+            to: [agentId],
+            targetId: target.id,
+            isRead: false,
+            actionRequired: false
+          };
+        });
+
+        // Send notifications
+        for (const notification of progressNotifications) {
+          await notificationService.addNotification(notification);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating target progress:', error);
+      // Don't throw error to avoid breaking deal creation
+    }
+  }
+
+  private getMonthName(monthNumber: number): string {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return months[monthNumber - 1] || 'January';
   }
 
   // Get all deals (for managers)

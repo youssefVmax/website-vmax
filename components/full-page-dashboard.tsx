@@ -37,9 +37,11 @@ import { useAuth } from "@/hooks/useAuth"
 import SalesAnalysisDashboard from '@/components/sales-dashboard'
 import NotificationsPage from "@/components/notifications-page"
 import { AddDealPage } from "@/components/add-deal"
+import EnhancedAddDeal from "@/components/enhanced-add-deal"
 import { DataCenter } from "@/components/data-center"
 import { SalesTargets } from "./sales-targets"
 import { EnhancedTargetsManagement } from "./enhanced-targets-management"
+import { EnhancedTargetDashboard } from "./enhanced-target-dashboard"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import EnhancedAnalytics from "@/components/enhanced-analytics"
@@ -484,9 +486,9 @@ function PageContent({
         ? <MyDealsTable user={user} />
         : <DealsManagement user={user} />
     case "add-deal":
-      return <AddDealPage />
+      return <EnhancedAddDeal currentUser={user} />
     case "team-targets":
-      return <EnhancedTargetsManagement userRole={user.role} user={user} />
+      return <EnhancedTargetDashboard userRole={user.role} user={user} />
     case "my-targets":
       return <SalesTargets userRole={user.role} user={user} />
     case "datacenter":

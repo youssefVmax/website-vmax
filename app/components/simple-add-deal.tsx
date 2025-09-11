@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { dealsService } from "@/lib/firebase-deals-service";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function SimpleAddDeal() {
   const { toast } = useToast();
@@ -18,16 +20,39 @@ export function SimpleAddDeal() {
   
   const [formData, setFormData] = useState({
     customer_name: "",
-    phone: "",
+    phone_number: "",
     email: "",
-    amount: "",
-    sales_agent: "",
-    closing_agent: "",
-    comment: "",
+    amount_paid: 0,
+    duration_months: 12,
+    sales_agent: user?.name || "",
+    closing_agent: user?.name || "",
+    sales_team: user?.team || "",
+    product_type: "IPTV Premium",
+    service_tier: "Gold",
+    country: "",
+    signup_date: new Date().toISOString().split('T')[0],
+    notes: "",
+    status: "active" as const,
+    stage: "closed-won" as const,
+    priority: "medium" as const,
+    is_ibo_player: false,
+    is_bob_player: false,
+    is_smarters: false,
+    is_ibo_pro: false
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    if (name === 'amount_paid') {
+      setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
+    } else if (name === 'duration_months') {
+      setFormData(prev => ({ ...prev, [name]: parseInt(value) || 12 }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -36,66 +61,64 @@ export function SimpleAddDeal() {
     setLoading(true);
 
     try {
-      // Generate a new DealID
-      const timestamp = new Date().getTime();
-      const random = Math.floor(Math.random() * 1000);
-      const dealId = `Deal-${timestamp.toString().slice(-4)}${random.toString().padStart(3, '0')}`;
+      // Validate required fields
+      if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.amount_paid) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in all required fields: Customer Name, Email, Phone, and Amount.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
 
+      // Use Firebase deals service for proper integration
       const dealData = {
         ...formData,
-        amount: parseFloat(formData.amount) || 0,
-        dealId,
-        date: new Date().toISOString(),
+        SalesAgentID: user?.id || '',
+        ClosingAgentID: user?.id || '',
+        created_by: user?.name || 'Unknown',
+        created_by_id: user?.id || ''
       };
 
-      const response = await fetch('/api/deals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(dealData),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add deal');
-      }
+      console.log('Creating deal with Firebase service:', dealData);
+      const dealId = await dealsService.createDeal(dealData, user);
+      console.log('Deal created successfully with ID:', dealId);
 
       // Show success message
       toast({
         title: "Deal added successfully!",
-        description: `Deal ID: ${dealId} has been created.`,
+        description: `Deal for "${formData.customer_name}" has been created with automatic notifications.`,
       });
 
-      // Fire a notification to the manager
-      try {
-        const notifyPayload = {
-          title: "New Deal Added",
-          message: `${user?.name || 'A salesman'} added a deal of $${(dealData.amount || 0).toLocaleString()}`,
-          type: "deal",
-          priority: "medium",
-          from: user?.id || "unknown",
-          to: ["manager-001"],
-          dealId,
-          dealName: formData.customer_name,
-          dealValue: dealData.amount,
-          isManagerMessage: false,
-          actionRequired: false,
-        } as any;
-        await fetch('/api/notifications', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(notifyPayload),
-        });
-      } catch (e) {
-        console.warn('Failed to notify manager about new deal', e);
-      }
+      // Reset form
+      setFormData({
+        customer_name: "",
+        phone_number: "",
+        email: "",
+        amount_paid: 0,
+        duration_months: 12,
+        sales_agent: user?.name || "",
+        closing_agent: user?.name || "",
+        sales_team: user?.team || "",
+        product_type: "IPTV Premium",
+        service_tier: "Gold",
+        country: "",
+        signup_date: new Date().toISOString().split('T')[0],
+        notes: "",
+        status: "active" as const,
+        stage: "closed-won" as const,
+        priority: "medium" as const,
+        is_ibo_player: false,
+        is_bob_player: false,
+        is_smarters: false,
+        is_ibo_pro: false
+      });
 
-      // Refresh the current route to refetch data and update the dashboard
+      // Refresh and redirect
       router.refresh();
-
-      // Redirect to the dashboard page after a short delay
       setTimeout(() => {
-        router.push('/dashboard');
+        router.push('/');
       }, 1500);
 
     } catch (error) {
@@ -119,7 +142,7 @@ export function SimpleAddDeal() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="customer_name">Customer Name</Label>
+              <Label htmlFor="customer_name">Customer Name *</Label>
               <Input
                 id="customer_name"
                 name="customer_name"
@@ -131,12 +154,12 @@ export function SimpleAddDeal() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
+              <Label htmlFor="phone_number">Phone Number *</Label>
               <Input
-                id="phone"
-                name="phone"
+                id="phone_number"
+                name="phone_number"
                 type="tel"
-                value={formData.phone}
+                value={formData.phone_number}
                 onChange={handleChange}
                 required
                 disabled={loading}
@@ -144,7 +167,7 @@ export function SimpleAddDeal() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 name="email"
@@ -157,16 +180,75 @@ export function SimpleAddDeal() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="amount">Amount</Label>
+              <Label htmlFor="country">Country *</Label>
               <Input
-                id="amount"
-                name="amount"
-                type="number"
-                value={formData.amount}
+                id="country"
+                name="country"
+                value={formData.country}
                 onChange={handleChange}
                 required
                 disabled={loading}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="amount_paid">Amount Paid ($) *</Label>
+              <Input
+                id="amount_paid"
+                name="amount_paid"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.amount_paid}
+                onChange={handleChange}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="duration_months">Duration (Months) *</Label>
+              <Input
+                id="duration_months"
+                name="duration_months"
+                type="number"
+                min="1"
+                value={formData.duration_months}
+                onChange={handleChange}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="product_type">Product Type *</Label>
+              <Select value={formData.product_type} onValueChange={(value) => handleSelectChange('product_type', value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select product type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="IPTV Premium">IPTV Premium</SelectItem>
+                  <SelectItem value="IPTV Standard">IPTV Standard</SelectItem>
+                  <SelectItem value="IPTV Basic">IPTV Basic</SelectItem>
+                  <SelectItem value="Sports Package">Sports Package</SelectItem>
+                  <SelectItem value="Movie Package">Movie Package</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="service_tier">Service Tier *</Label>
+              <Select value={formData.service_tier} onValueChange={(value) => handleSelectChange('service_tier', value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select service tier" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Bronze">Bronze</SelectItem>
+                  <SelectItem value="Silver">Silver</SelectItem>
+                  <SelectItem value="Gold">Gold</SelectItem>
+                  <SelectItem value="Platinum">Platinum</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -176,8 +258,8 @@ export function SimpleAddDeal() {
                 name="sales_agent"
                 value={formData.sales_agent}
                 onChange={handleChange}
-                required
-                disabled={loading}
+                disabled={true}
+                className="bg-muted"
               />
             </div>
 
@@ -188,18 +270,18 @@ export function SimpleAddDeal() {
                 name="closing_agent"
                 value={formData.closing_agent}
                 onChange={handleChange}
-                required
-                disabled={loading}
+                disabled={true}
+                className="bg-muted"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="comment">Comments</Label>
+            <Label htmlFor="notes">Notes</Label>
             <Textarea
-              id="comment"
-              name="comment"
-              value={formData.comment}
+              id="notes"
+              name="notes"
+              value={formData.notes}
               onChange={handleChange}
               rows={3}
               disabled={loading}
