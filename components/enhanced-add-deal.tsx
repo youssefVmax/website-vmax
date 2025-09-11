@@ -304,8 +304,8 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                   <Input
                     id="amount_paid"
                     type="number"
-                    min="0"
-                    step="0.01"
+                    min=""
+                    step="10"
                     value={formData.amount_paid}
                     onChange={(e) => handleInputChange('amount_paid', parseFloat(e.target.value) || 0)}
                     required
