@@ -146,10 +146,10 @@ export const salesService = {
     // Apply role-based filtering - MANAGERS see ALL sales for real-time KPIs
     if (userRole === 'salesman' && (userId || userName)) {
       if (userId) {
+        // Use simple query without orderBy to avoid composite index requirement
         q = query(
           collection(db, COLLECTIONS.SALES),
-          where('SalesAgentID', '==', userId),
-          orderBy('created_at', 'desc')
+          where('SalesAgentID', '==', userId)
         );
       } else if (userName) {
         // Use simple query without orderBy to avoid composite index requirement
@@ -160,10 +160,10 @@ export const salesService = {
       }
     } else if (userRole === 'customer-service' && (userId || userName)) {
       if (userId) {
+        // Use simple query without orderBy to avoid composite index requirement
         q = query(
           collection(db, COLLECTIONS.SALES),
-          where('ClosingAgentID', '==', userId),
-          orderBy('created_at', 'desc')
+          where('ClosingAgentID', '==', userId)
         );
       } else if (userName) {
         // Use simple query without orderBy to avoid composite index requirement
@@ -344,11 +344,10 @@ export const targetService = {
           orderBy('created_at', 'desc')
         );
       } else {
-        // Other users see only their targets
+        // Other users see only their targets - remove orderBy to avoid composite index
         q = query(
           collection(db, COLLECTIONS.TARGETS),
-          where('agentId', '==', userId),
-          orderBy('created_at', 'desc')
+          where('agentId', '==', userId)
         );
       }
       const snapshot = await getDocs(q);

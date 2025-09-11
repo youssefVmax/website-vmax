@@ -146,8 +146,7 @@ export class FirebaseTargetProgressService {
     try {
       let q = query(
         collection(db, this.COLLECTION),
-        where('agentId', '==', agentId),
-        orderBy('created_at', 'desc')
+        where('agentId', '==', agentId)
       );
 
       if (period) {
@@ -159,10 +158,17 @@ export class FirebaseTargetProgressService {
       }
 
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
+      const progressData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as TargetProgress));
+      
+      // Sort in memory to maintain order without composite index
+      return progressData.sort((a, b) => {
+        const dateA = a.created_at?.toDate?.() || new Date(0);
+        const dateB = b.created_at?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime(); // desc order
+      });
     } catch (error) {
       console.error('Error fetching agent target progress:', error);
       return [];

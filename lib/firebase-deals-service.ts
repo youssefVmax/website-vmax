@@ -284,20 +284,27 @@ export class FirebaseDealsService {
     }
   }
 
-  // Get deals by agent ID
+  // Get deals by agent
   async getDealsByAgent(agentId: string): Promise<Deal[]> {
     try {
+      // Use simple query without orderBy to avoid composite index requirement
       const q = query(
         collection(db, this.COLLECTION),
-        where('SalesAgentID', '==', agentId),
-        orderBy('created_at', 'desc')
+        where('SalesAgentID', '==', agentId)
       );
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map((doc) => ({
+      const deals = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data()
       } as Deal));
+      
+      // Sort in memory to maintain order without composite index
+      return deals.sort((a, b) => {
+        const dateA = a.created_at?.toDate?.() || new Date(0);
+        const dateB = b.created_at?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime(); // desc order
+      });
     } catch (error) {
       console.error('Error fetching deals by agent:', error);
       throw new Error('Failed to fetch deals by agent');

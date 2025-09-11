@@ -8,6 +8,11 @@ import { Toaster } from '@/components/ui/toaster'
 export const metadata: Metadata = {
   title: 'Vmax Sales Management',
   description: 'Created with Youssef',
+  icons: {
+    icon: '/logo.PNG',
+    shortcut: '/logo.PNG',
+    apple: '/logo.PNG',
+  },
 }
 
 export default function RootLayout({

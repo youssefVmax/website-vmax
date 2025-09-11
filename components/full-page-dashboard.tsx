@@ -221,13 +221,17 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
               isDark ? 'border-slate-700/50' : 'border-blue-200/50'
             }`}>
               <div className="flex items-center justify-between">
-                <div className={`flex items-center space-x-2 ${sidebarOpen ? '' : 'justify-center'}`}>
-                  <Tv className={`h-6 w-6 transition-colors duration-300 ${
-                    isDark ? 'text-cyan-500' : 'text-blue-600'
-                  }`} />
+                <div className={`flex items-center space-x-3 ${sidebarOpen ? '' : 'justify-center'}`}>
+                  <div className="relative">
+                    <img 
+                      src="/logo.PNG" 
+                      alt="VMAX Logo" 
+                      className="h-8 w-8 object-contain rounded-md shadow-sm transition-all duration-300 hover:shadow-md"
+                    />
+                  </div>
                   {sidebarOpen && (
                     <span className="font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                      Vmax Sales
+                      VMAX Sales
                     </span>
                   )}
                 </div>
