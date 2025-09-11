@@ -332,7 +332,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                     <SelectContent>
                       <SelectItem value="Silver">Silver</SelectItem>
                       <SelectItem value="Gold">Gold</SelectItem>
-                      <SelectItem value="Platinum">Platinum</SelectItem>
+                      <SelectItem value="Premium">Premium</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -399,49 +399,98 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 <h3 className="text-lg font-semibold">Service Features</h3>
               </div>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="is_ibo_player"
-                    checked={formData.is_ibo_player}
-                    onCheckedChange={(checked) => handleInputChange('is_ibo_player', checked)}
-                  />
-                  <Label htmlFor="is_ibo_player">IBO Player</Label>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="is_bob_player"
-                    checked={formData.is_bob_player}
-                    onCheckedChange={(checked) => handleInputChange('is_bob_player', checked)}
-                  />
-                  <Label htmlFor="is_bob_player">BOB Player</Label>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="is_smarters"
-                    checked={formData.is_smarters}
-                    onCheckedChange={(checked) => handleInputChange('is_smarters', checked)}
-                  />
-                  <Label htmlFor="is_smarters">Smarters</Label>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="is_ibo_pro"
-                    checked={formData.is_ibo_pro}
-                    onCheckedChange={(checked) => handleInputChange('is_ibo_pro', checked)}
-                  />
-                  <Label htmlFor="is_ibo_pro">IBO Pro</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="is_iboss"
-                    checked={formData.is_iboss}
-                    onCheckedChange={(checked) => handleInputChange('is_iboss', checked)}
-                  />
-                  <Label htmlFor="is_iboss">IBOSS</Label>
+              <div className="space-y-3">
+                <Label>Program Type *</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="IBO Player"
+                      checked={formData.is_ibo_player}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', true)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBO Player</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="BOB Player"
+                      checked={formData.is_bob_player}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', true)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">BOB Player</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="Smarters"
+                      checked={formData.is_smarters}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', true)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">Smarters</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="IBO Pro"
+                      checked={formData.is_ibo_pro}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', true)
+                        handleInputChange('is_iboss', false)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBO Pro</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="program_type"
+                      value="IBOSS"
+                      checked={formData.is_iboss}
+                      onChange={() => {
+                        handleInputChange('is_ibo_player', false)
+                        handleInputChange('is_bob_player', false)
+                        handleInputChange('is_smarters', false)
+                        handleInputChange('is_ibo_pro', false)
+                        handleInputChange('is_iboss', true)
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-300">IBOSS</span>
+                  </label>
                 </div>
               </div>
             </div>

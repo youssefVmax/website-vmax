@@ -229,12 +229,6 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                 </TabsTrigger>
               </TabsList>
 
-              {roleMessage && (
-                <div className="mt-3 p-3 bg-green-500/20 border border-green-400/30 rounded-lg">
-                  <p className="text-sm text-green-200 font-medium">{roleMessage}</p>
-                  <p className="text-xs text-green-300 mt-1">Role automatically selected based on username</p>
-                </div>
-              )}
 
               <TabsContent value="manager">
                 <div className="space-y-4 mt-4">

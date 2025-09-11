@@ -516,6 +516,24 @@ function PageContent({
 
 function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
   const { sales = [], metrics, loading, error } = useFirebaseSalesData(user.role, user.id, user.name)
+  const [totalAgents, setTotalAgents] = useState(0)
+
+  useEffect(() => {
+    const loadAgentCount = async () => {
+      if (user.role === 'manager') {
+        try {
+          const { userService } = await import('@/lib/firebase-user-service')
+          const allUsers = await userService.getAllUsers()
+          const agentCount = allUsers.filter(u => u.role === 'salesman').length
+          setTotalAgents(agentCount)
+        } catch (error) {
+          console.error('Error loading agent count:', error)
+          setTotalAgents(0)
+        }
+      }
+    }
+    loadAgentCount()
+  }, [user.role])
 
   if (loading) {
     return (
@@ -592,8 +610,8 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
         />
         <AnimatedMetricCard
           title={user.role === 'manager' ? "Active Agents" : "Performance Score"}
-          value={user.role === 'manager' ? Object.keys(metrics?.salesByAgent || {}).length : Math.min(100, (sales.length * 10))}
-          previousValue={user.role === 'manager' ? Math.max(1, Object.keys(metrics?.salesByAgent || {}).length - 1) : Math.min(95, (sales.length * 10) - 5)}
+          value={user.role === 'manager' ? totalAgents : Math.min(100, (sales.length * 10))}
+          previousValue={user.role === 'manager' ? Math.max(0, totalAgents - 1) : Math.min(95, (sales.length * 10) - 5)}
           icon={Users}
           format={user.role === 'manager' ? "number" : "percentage"}
           color="purple"
