@@ -22,6 +22,8 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
   const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("manager")
   const [showPassword, setShowPassword] = useState(false)
+  const [detectedRole, setDetectedRole] = useState<string | null>(null)
+  const [roleMessage, setRoleMessage] = useState("")
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   // Animated background particles (matching dashboard and landing)
@@ -87,6 +89,52 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
+  // Auto-detect role based on username
+  const detectUserRole = async (username: string) => {
+    if (!username) {
+      setDetectedRole(null)
+      setRoleMessage("")
+      return
+    }
+
+    try {
+      // Check if it's manager
+      if (username === 'manager') {
+        setDetectedRole('manager')
+        setActiveTab('manager')
+        setRoleMessage("Manager account detected")
+        return
+      }
+
+      // Check Firebase users for salesmen and customer service
+      const { userService } = await import('@/lib/firebase-user-service')
+      const user = await userService.getUserByUsername(username)
+      
+      if (user) {
+        setDetectedRole(user.role)
+        if (user.role === 'salesman') {
+          setActiveTab('agent')
+          setRoleMessage(`Sales agent account detected: ${user.name}`)
+        } else if (user.role === 'customer-service') {
+          setActiveTab('support')
+          setRoleMessage(`Customer service account detected: ${user.name}`)
+        }
+      } else {
+        setDetectedRole(null)
+        setRoleMessage("")
+      }
+    } catch (error) {
+      setDetectedRole(null)
+      setRoleMessage("")
+    }
+  }
+
+  // Handle username change with role detection
+  const handleUsernameChange = (value: string) => {
+    setUsername(value)
+    detectUserRole(value)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -95,6 +143,16 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
     try {
       const user = await authenticateUser(username, password)
       if (user) {
+        // Validate that the selected tab matches the user's actual role
+        const expectedTab = user.role === 'manager' ? 'manager' : 
+                           user.role === 'salesman' ? 'agent' : 'support'
+        
+        if (activeTab !== expectedTab) {
+          setError(`Please select the correct role: ${user.role === 'salesman' ? 'Agent' : user.role === 'customer-service' ? 'Support' : 'Manager'}`)
+          setActiveTab(expectedTab)
+          return
+        }
+        
         onLogin(user)
       } else {
         setError("Invalid credentials")
@@ -148,6 +206,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                 <TabsTrigger 
                   value="manager" 
                   className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300"
+                  disabled={!!detectedRole && detectedRole !== 'manager'}
                 >
                   <Shield className="h-4 w-4 mr-2" />
                   Manager
@@ -155,6 +214,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                 <TabsTrigger 
                   value="agent" 
                   className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300"
+                  disabled={!!detectedRole && detectedRole !== 'salesman'}
                 >
                   <Users className="h-4 w-4 mr-2" />
                   Agent
@@ -162,11 +222,19 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                 <TabsTrigger 
                   value="support" 
                   className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300"
+                  disabled={!!detectedRole && detectedRole !== 'customer-service'}
                 >
                   <Headphones className="h-4 w-4 mr-2" />
                   Support
                 </TabsTrigger>
               </TabsList>
+
+              {roleMessage && (
+                <div className="mt-3 p-3 bg-green-500/20 border border-green-400/30 rounded-lg">
+                  <p className="text-sm text-green-200 font-medium">{roleMessage}</p>
+                  <p className="text-xs text-green-300 mt-1">Role automatically selected based on username</p>
+                </div>
+              )}
 
               <TabsContent value="manager">
                 <div className="space-y-4 mt-4">
@@ -184,7 +252,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                         id="username"
                         type="text"
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        onChange={(e) => handleUsernameChange(e.target.value)}
                         className="bg-slate-800/50 border-slate-600/50 text-white placeholder:text-slate-400 focus:border-cyan-500/50 focus:ring-cyan-500/20"
                         placeholder="Enter your username"
                         required
@@ -251,7 +319,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                         id="agent-username"
                         type="text"
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        onChange={(e) => handleUsernameChange(e.target.value)}
                         className="bg-slate-800/50 border-slate-600/50 text-white placeholder:text-slate-400 focus:border-green-500/50 focus:ring-green-500/20"
                         placeholder="Enter your username"
                         required
@@ -318,7 +386,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                         id="support-username"
                         type="text"
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        onChange={(e) => handleUsernameChange(e.target.value)}
                         className="bg-slate-800/50 border-slate-600/50 text-white placeholder:text-slate-400 focus:border-purple-500/50 focus:ring-purple-500/20"
                         placeholder="Enter your username"
                         required

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose, DialogDescription } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -375,12 +375,13 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
               </Select>
               {formData.selectedMemberName && (
                 <div className="p-3 bg-muted/50 rounded-lg">
-                  <p className="text-sm">
-                    <span className="font-medium">Selected:</span> {formData.selectedMemberName}
+                  <div className="text-sm flex items-center">
+                    <span className="font-medium">Selected:</span> 
+                    <span className="ml-1">{formData.selectedMemberName}</span>
                     <Badge variant="secondary" className="ml-2">
                       {formData.selectedMemberTeam}
                     </Badge>
-                  </p>
+                  </div>
                 </div>
               )}
             </div>

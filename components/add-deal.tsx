@@ -58,12 +58,9 @@ export function AddDealPage() {
   }, [sales, user?.team])
 
   const serviceOptions = useMemo(() => {
-    const set = new Set<string>()
-    ;(sales || []).forEach(s => { if (s.type_service) set.add(s.type_service) })
-    // Ensure current defaults exist
-    ;["SLIVER","GOLD","PERMIUM"].forEach(v => set.add(v))
-    return Array.from(set).sort()
-  }, [sales])
+    // Fixed service options only
+    return ["GOLD", "PREMIUM", "SILVER"]
+  }, [])
 
   // Program and Duration options derived from Firebase data
   const programOptions = useMemo(() => {
@@ -109,7 +106,7 @@ export function AddDealPage() {
     team: user?.team || "Un Known", // Auto-populate with user's team
     duration: "TWO YEAR",
     type_program: "IBO PLAYER",
-    type_service: "SLIVER",
+    type_service: "SILVER",
     invoice: "",
     device_id: "",
     device_key: "",
@@ -245,7 +242,7 @@ export function AddDealPage() {
         team: user?.team || "CS TEAM",
         duration: "TWO YEAR",
         type_program: "IBO PLAYER",
-        type_service: "SLIVER",
+        type_service: "SILVER",
         invoice: "",
         device_id: "",
         device_key: "",
@@ -346,19 +343,10 @@ export function AddDealPage() {
                     <Badge variant="secondary" className="ml-2">Auto-filled</Badge>
                   </div>
                 ) : (
-                  <Select 
-                    value={formData.SalesAgentID || ''}
-                    onValueChange={(v) => handleSelectChange('sales_agent', v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select sales agent" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {salesmanOptions.map((a: User) => (
-                        <SelectItem key={a.id} value={a.id}>{a.name} - {a.team}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center h-10 px-3 rounded-md border text-sm bg-red-100 dark:bg-red-900/20 border-red-300 dark:border-red-700">
+                    <span className="text-red-600 dark:text-red-400">Sales Agent Selection Forbidden</span>
+                    <Badge variant="destructive" className="ml-2">Restricted</Badge>
+                  </div>
                 )}
               </div>
 
@@ -410,28 +398,26 @@ export function AddDealPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="type_program">Type Program *</Label>
-                <Combobox
-                  options={programOptions}
-                  value={formData.type_program}
-                  onValueChange={(value) => handleSelectChange("type_program", value)}
-                  placeholder="Select or type program type"
-                  searchPlaceholder="Search programs..."
-                  allowCustom={true}
-                />
-              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="type_service">Type Service *</Label>
-                <Combobox
-                  options={serviceOptions}
-                  value={formData.type_service}
-                  onValueChange={(value) => handleSelectChange("type_service", value)}
-                  placeholder="Select or type service type"
-                  searchPlaceholder="Search services..."
-                  allowCustom={true}
-                />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    {serviceOptions.map((service) => (
+                      <label key={service} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="type_service"
+                          value={service}
+                          checked={formData.type_service === service}
+                          onChange={(e) => handleSelectChange("type_service", e.target.value)}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                        />
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-300">{service}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
