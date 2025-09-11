@@ -34,6 +34,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     signup_date: new Date().toISOString().split('T')[0],
     amount_paid: 0,
     duration_months: 12,
+    duration_years: 0,
     product_type: '',
     service_tier: '',
     
@@ -76,7 +77,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
 
   useEffect(() => {
     calculateFields()
-  }, [formData.signup_date, formData.amount_paid, formData.duration_months])
+  }, [formData.signup_date, formData.amount_paid, formData.duration_months, formData.duration_years])
 
   const loadUsers = async () => {
     try {
@@ -88,16 +89,17 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
   }
 
   const calculateFields = () => {
-    if (!formData.signup_date || !formData.amount_paid || !formData.duration_months) return
+    const totalMonths = formData.duration_months + (formData.duration_years * 12)
+    if (!formData.signup_date || !formData.amount_paid || totalMonths === 0) return
 
     const signupDate = new Date(formData.signup_date)
     const endDate = new Date(signupDate)
-    endDate.setMonth(endDate.getMonth() + formData.duration_months)
+    endDate.setMonth(endDate.getMonth() + totalMonths)
     
     const today = new Date()
     const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)))
-    const paidPerMonth = formData.amount_paid / formData.duration_months
-    const paidPerDay = formData.amount_paid / (formData.duration_months * 30)
+    const paidPerMonth = formData.amount_paid / totalMonths
+    const paidPerDay = formData.amount_paid / (totalMonths * 30)
 
     setCalculatedFields({
       end_date: endDate.toISOString().split('T')[0],
@@ -177,6 +179,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         signup_date: new Date().toISOString().split('T')[0],
         amount_paid: 0,
         duration_months: 12,
+        duration_years: 0,
         product_type: '',
         service_tier: '',
         sales_agent: currentUser.name,
@@ -311,14 +314,30 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 
                 <div>
                   <Label htmlFor="duration_months">Duration (Months) *</Label>
-                  <Input
-                    id="duration_months"
-                    type="number"
-                    min="0"
-                    value={formData.duration_months}
-                    onChange={(e) => handleInputChange('duration_months', parseInt(e.target.value) || 0)}
-                    required
-                  />
+                  <Select value={formData.duration_months.toString()} onValueChange={(value) => handleInputChange('duration_months', parseInt(value))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select months" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({length: 13}, (_, i) => (
+                        <SelectItem key={i} value={i.toString()}>{i} months</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="duration_years">Duration (Years)</Label>
+                  <Select value={formData.duration_years?.toString() || '0'} onValueChange={(value) => handleInputChange('duration_years', parseInt(value))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({length: 7}, (_, i) => (
+                        <SelectItem key={i} value={i.toString()}>{i} years</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -496,32 +515,32 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
             </div>
 
             {/* Calculated Fields Display */}
-            <div className="space-y-4">
+            <div className="space-y-4 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
               <div className="flex items-center gap-2 mb-4">
-                <CalendarIcon className="h-4 w-4" />
-                <h3 className="text-lg font-semibold">Calculated Information</h3>
-                <Badge variant="secondary">Auto-calculated</Badge>
+                <CalendarIcon className="h-4 w-4 text-blue-600" />
+                <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200">Calculated Information</h3>
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">Auto-calculated</Badge>
               </div>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <Label>End Date</Label>
-                  <Input value={calculatedFields.end_date} readOnly className="bg-gray-50" />
+                  <Label className="text-blue-700 dark:text-blue-300">End Date</Label>
+                  <Input value={calculatedFields.end_date} readOnly className="bg-white/70 dark:bg-gray-800/70 border-blue-200 dark:border-blue-600" />
                 </div>
                 
                 <div>
-                  <Label>Paid per Month</Label>
-                  <Input value={`$${calculatedFields.paid_per_month}`} readOnly className="bg-gray-50" />
+                  <Label className="text-blue-700 dark:text-blue-300">Paid per Month</Label>
+                  <Input value={`$${calculatedFields.paid_per_month}`} readOnly className="bg-white/70 dark:bg-gray-800/70 border-blue-200 dark:border-blue-600" />
                 </div>
                 
                 <div>
-                  <Label>Paid per Day</Label>
-                  <Input value={`$${calculatedFields.paid_per_day}`} readOnly className="bg-gray-50" />
+                  <Label className="text-blue-700 dark:text-blue-300">Paid per Day</Label>
+                  <Input value={`$${calculatedFields.paid_per_day}`} readOnly className="bg-white/70 dark:bg-gray-800/70 border-blue-200 dark:border-blue-600" />
                 </div>
                 
                 <div>
-                  <Label>Days Remaining</Label>
-                  <Input value={calculatedFields.days_remaining} readOnly className="bg-gray-50" />
+                  <Label className="text-blue-700 dark:text-blue-300">Days Remaining</Label>
+                  <Input value={calculatedFields.days_remaining} readOnly className="bg-white/70 dark:bg-gray-800/70 border-blue-200 dark:border-blue-600" />
                 </div>
               </div>
             </div>
