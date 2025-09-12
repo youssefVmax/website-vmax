@@ -52,14 +52,16 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
 
   const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
 
-  // Restrict access to managers only
-  if (userRole !== 'manager') {
+  // Role-based access control - salespeople can view their assigned data
+  const hasDataAccess = userRole === 'manager' || userRole === 'salesman';
+  
+  if (!hasDataAccess) {
     return (
       <Card className="w-full max-w-2xl mx-auto mt-8">
         <CardHeader>
           <CardTitle className="text-center text-red-600">Access Restricted</CardTitle>
           <CardDescription className="text-center">
-            Data Center management is only available to managers.
+            Data Center access is limited to managers and sales team members.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -319,12 +321,15 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
   }
 
-  // Filter data based on user role and team assignments
+  // Enhanced role-based data filtering
   const visibleFiles = isManager ? uploadedFiles : uploadedFiles.filter(file => {
     if (!file.assignedTo || file.assignedTo.length === 0) return false;
     
-    // Check if user is directly assigned
+    // Check if user is directly assigned by name
     if (file.assignedTo.includes(user.name)) return true;
+    
+    // Check if user is assigned by ID
+    if (file.assignedTo.includes(user.id)) return true;
     
     // Check if user's team is assigned
     const userTeamMap = {
@@ -336,12 +341,25 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     const userTeam = userTeamMap[userRole as keyof typeof userTeamMap];
     if (userTeam && file.assignedTo.includes(userTeam)) return true;
     
+    // Check for role-based assignments
+    if (file.assignedTo.includes(`role:${userRole}`)) return true;
+    
     return false;
   })
 
-  const visibleAssignments = isManager ? numberAssignments : numberAssignments.filter(assignment =>
-    assignment.assignedTo.toLowerCase() === user.name.toLowerCase()
-  )
+  // Enhanced assignment filtering for salespeople
+  const visibleAssignments = isManager ? numberAssignments : numberAssignments.filter(assignment => {
+    // Check by name (case insensitive)
+    if (assignment.assignedTo.toLowerCase() === user.name.toLowerCase()) return true;
+    
+    // Check by user ID
+    if (assignment.assignedTo === user.id) return true;
+    
+    // Check by username
+    if (assignment.assignedTo.toLowerCase() === user.username?.toLowerCase()) return true;
+    
+    return false;
+  })
 
   // Show error state if Firebase connection fails
   if (error) {
@@ -571,7 +589,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               ))}
             </div>
           ) : (
-            // Non-manager view - Table layout for better data viewing
+            // Salesperson view - Enhanced card layout with detailed information
             <div className="space-y-4">
               {visibleFiles.length === 0 ? (
                 <div className="text-center py-8">
@@ -582,44 +600,65 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                   </p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>File Name</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Records</TableHead>
-                      <TableHead>Upload Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visibleFiles.map((file) => (
-                      <TableRow key={file.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center space-x-2">
-                            <FileText className="h-4 w-4 text-blue-500" />
-                            <span>{file.name}</span>
+                <div className="grid gap-4">
+                  {visibleFiles.map((file) => (
+                    <Card key={file.id} className="border-l-4 border-l-blue-500">
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-4">
+                            <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                              <FileText className="h-6 w-6 text-blue-600" />
+                            </div>
+                            <div className="space-y-2">
+                              <h3 className="font-semibold text-lg">{file.name}</h3>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                  <span className="text-muted-foreground">Size:</span>
+                                  <p className="font-medium">{file.size}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Records:</span>
+                                  <p className="font-medium">{file.recordCount.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Uploaded:</span>
+                                  <p className="font-medium">{formatTimestamp(file.uploadDate)}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Status:</span>
+                                  <Badge className={getStatusColor(file.status)}>
+                                    {file.status}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="mt-3">
+                                <span className="text-sm text-muted-foreground">Assigned to: </span>
+                                <span className="text-sm font-medium">
+                                  {file.assignedTo?.join(', ') || 'Unassigned'}
+                                </span>
+                              </div>
+                              {file.notes && (
+                                <div className="mt-2 p-3 bg-muted/50 rounded-md">
+                                  <p className="text-sm text-muted-foreground">{file.notes}</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </TableCell>
-                        <TableCell>{file.size}</TableCell>
-                        <TableCell>{file.recordCount.toLocaleString()}</TableCell>
-                        <TableCell>{formatTimestamp(file.uploadDate)}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(file.status)}>
-                            {file.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm">
-                            <Download className="h-4 w-4 mr-1" />
-                            Download
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          <div className="flex flex-col space-y-2">
+                            <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700">
+                              <Download className="h-4 w-4 mr-2" />
+                              Download
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <FileText className="h-4 w-4 mr-2" />
+                              Preview
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -677,85 +716,126 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         {/* Number Assignments List */}
         <Card className={isManager ? '' : 'lg:col-span-2'}>
           <CardHeader>
-            <CardTitle>
-              {isManager ? 'All Number Assignments' : 'My Assigned Numbers'}
+            <CardTitle className="flex items-center justify-between">
+              <span>{isManager ? 'All Number Assignments' : 'My Assigned Numbers'}</span>
+              {!isManager && visibleAssignments.length > 0 && (
+                <Badge variant="secondary">
+                  {visibleAssignments.reduce((sum, assignment) => sum + assignment.numbers.length, 0)} Total Numbers
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription>
               {isManager 
                 ? 'View and manage all number assignments across teams'
-                : 'Phone numbers assigned to you for sales activities'}
+                : 'Phone numbers assigned to you for sales activities - Use these for outbound calls'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {visibleAssignments.map((assignment) => (
-                <div key={assignment.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h4 className="font-medium">
-                        Assignment #{assignment.id}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        {assignment.numbers.length} numbers assigned to {assignment.assignedTo}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Assigned by {assignment.assignedBy} on {assignment.assignDate}
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge className={getStatusColor(assignment.status)}>
-                        {assignment.status}
-                      </Badge>
-                      {assignment.dealId && (
-                        <Badge variant="outline">
-                          Deal: {assignment.dealId}
+                <Card key={assignment.id} className={`border-l-4 ${assignment.status === 'assigned' ? 'border-l-green-500' : assignment.status === 'used' ? 'border-l-purple-500' : 'border-l-gray-400'}`}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="font-semibold text-lg">
+                          Assignment #{assignment.id.slice(-8)}
+                        </h4>
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-green-600">
+                            📞 {assignment.numbers.length} numbers ready for calling
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Assigned by {assignment.assignedBy} • {formatTimestamp(assignment.assignDate)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end space-y-2">
+                        <Badge className={getStatusColor(assignment.status)}>
+                          {assignment.status}
                         </Badge>
-                      )}
+                        {assignment.dealId && (
+                          <Badge variant="outline" className="text-xs">
+                            Deal: {assignment.dealId}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Assigned Numbers:</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {assignment.numbers.slice(0, 6).map((number: string, index: number) => (
-                        <div key={index} className="text-xs font-mono bg-muted p-2 rounded">
-                          {number}
+                    
+                    {!isManager && (
+                      <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
+                          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Your Active Lead List</span>
                         </div>
-                      ))}
-                      {assignment.numbers.length > 6 && (
-                        <div className="text-xs text-muted-foreground p-2">
-                          +{assignment.numbers.length - 6} more...
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end space-x-2 mt-3">
-                    <Button variant="outline" size="sm">
-                      <Download className="h-3 w-3 mr-1" />
-                      Export
-                    </Button>
-                    {isManager && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          These numbers are exclusively assigned to you. Start calling to generate leads and close deals!
+                        </p>
+                      </div>
                     )}
-                  </div>
-                </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Phone Numbers:</Label>
+                        <span className="text-xs text-muted-foreground">
+                          {assignment.numbers.length} total
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                        {assignment.numbers.map((number: string, index: number) => (
+                          <div key={index} className="flex items-center justify-between text-sm font-mono bg-muted p-2 rounded hover:bg-muted/80 transition-colors">
+                            <span>{number}</span>
+                            {!isManager && (
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                <span className="text-xs">📞</span>
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center mt-4 pt-3 border-t">
+                      <div className="text-xs text-muted-foreground">
+                        {assignment.notes && (
+                          <span>📝 {assignment.notes}</span>
+                        )}
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" size="sm">
+                          <Download className="h-3 w-3 mr-1" />
+                          Export CSV
+                        </Button>
+                        {!isManager && (
+                          <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700">
+                            <span className="mr-1">📞</span>
+                            Start Calling
+                          </Button>
+                        )}
+                        {isManager && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
 
               {visibleAssignments.length === 0 && (
-                <div className="text-center py-8">
-                  <Database className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <div className="text-center py-12">
+                  <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
+                    <Database className="h-12 w-12 text-muted-foreground" />
+                  </div>
                   <h3 className="text-lg font-medium mb-2">No assignments found</h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-muted-foreground max-w-md mx-auto">
                     {isManager 
-                      ? 'Create your first number assignment above'
-                      : 'No numbers have been assigned to you yet'}
+                      ? 'Create your first number assignment using the bulk assignment tool above'
+                      : 'No phone numbers have been assigned to you yet. Contact your manager to get your lead list assigned.'}
                   </p>
                 </div>
               )}
