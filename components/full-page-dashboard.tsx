@@ -168,6 +168,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
         ...baseItems,
         { id: "user-management", icon: Users, label: "User Management" },
         { id: "team-targets", icon: Target, label: "Team Targets" },
+        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         
         { id: "settings", icon: Settings, label: "Settings" },
@@ -178,6 +179,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
         { id: "my-deals", icon: FileText, label: "My Deals Table" },
         { id: "add-deal", icon: Plus, label: "Add Deal" },
         { id: "my-targets", icon: Target, label: "My Targets" },
+        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" },
         { id: "datacenter", icon: Database, label: "Data Center" },
         
       ]
@@ -185,7 +187,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
       return [
         ...baseItems,
         { id: "support-deals", icon: FileText, label: "Support Deals" },
-        
+        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" },
         { id: "datacenter", icon: Database, label: "Data Center" },
       ]
     }

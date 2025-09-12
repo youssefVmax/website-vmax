@@ -313,7 +313,8 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           </CardContent>
         </Card>
 
-        {/* Top Agents */}
+      {/* Top Agents - Manager Only */}
+      {userRole === 'manager' && (
         <Card>
           <CardHeader>
             <CardTitle>Top Performing Agents</CardTitle>
@@ -332,11 +333,12 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
             </div>
           </CardContent>
         </Card>
-      </div>
+      )}
+    </div>
 
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Sales by Service */}
+    {/* Charts Row 2 */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      {/* Sales by Service */}
         <Card>
           <CardHeader>
             <CardTitle>Sales by Service Type</CardTitle>
