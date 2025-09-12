@@ -16,7 +16,7 @@ import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { dataFilesService, numberAssignmentsService } from "@/lib/firebase-data-services"
 import { useFirebaseDataFiles } from "@/hooks/useFirebaseDataFiles"
 import { showInfo, showSuccess } from "@/lib/sweetalert"
-import { formatDisplayDate } from "@/lib/timestamp-utils"
+import { formatDisplayDate, sanitizeObject } from "@/lib/timestamp-utils"
 
 interface DataFile {
   id: string
@@ -60,6 +60,19 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     // Reset render error when data changes
     setRenderError(null)
   }, [uploadedFiles, numberAssignments])
+
+  // Defensive: sanitize incoming arrays one more time before usage in JSX
+  const sanitizedFiles = (uploadedFiles || []).map((f: any) => sanitizeObject(f))
+  const sanitizedAssignments = (numberAssignments || []).map((a: any) => sanitizeObject(a))
+
+  // Helper to avoid rendering raw objects by accident
+  const safeDisplay = (val: any): string => {
+    if (val == null) return "";
+    if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') return String(val)
+    if (val instanceof Date) return formatDisplayDate(val.toISOString())
+    // Last resort, stringify to avoid React child object error
+    try { return JSON.stringify(val) } catch { return String(val) }
+  }
 
   // Role-based access control - salespeople can view their assigned data
   const hasDataAccess = userRole === 'manager' || userRole === 'salesman';
@@ -302,7 +315,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   }
 
   // Enhanced role-based data filtering
-  const visibleFiles = isManager ? uploadedFiles : uploadedFiles.filter(file => {
+  const visibleFiles = isManager ? sanitizedFiles : sanitizedFiles.filter(file => {
     if (!file.assignedTo || file.assignedTo.length === 0) return false;
     
     // Check if user is directly assigned by name
@@ -328,7 +341,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   })
 
   // Enhanced assignment filtering for salespeople
-  const visibleAssignments = isManager ? numberAssignments : numberAssignments.filter(assignment => {
+  const visibleAssignments = isManager ? sanitizedAssignments : sanitizedAssignments.filter(assignment => {
     // Check by name (case insensitive)
     if (assignment.assignedTo.toLowerCase() === user.name.toLowerCase()) return true;
     
@@ -529,20 +542,20 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                   <div className="flex items-center space-x-4">
                     <FileText className="h-8 w-8 text-blue-500" />
                     <div>
-                      <h4 className="font-medium">{file.name}</h4>
+                      <h4 className="font-medium">{safeDisplay(file.name)}</h4>
                       <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                        <span>{file.size}</span>
+                        <span>{safeDisplay(file.size)}</span>
                         <span>•</span>
-                        <span>{file.recordCount} records</span>
+                        <span>{safeDisplay(file.recordCount?.toLocaleString?.() ?? file.recordCount)}</span>
                         <span>•</span>
-                        <span>Uploaded {formatTimestamp(file.uploadDate)}</span>
+                        <span>Uploaded {safeDisplay(formatTimestamp(file.uploadDate))}</span>
                       </div>
                       <div className="flex items-center space-x-2 mt-1">
                         <Badge className={getStatusColor(file.status)}>
                           {file.status}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          Assigned to: {file.assignedTo?.length > 0 ? file.assignedTo.join(', ') : 'Unassigned'}
+                          Assigned to: {file.assignedTo?.length > 0 ? safeDisplay(file.assignedTo.join(', ')) : 'Unassigned'}
                         </span>
                       </div>
                     </div>
@@ -597,19 +610,19 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                               <FileText className="h-6 w-6 text-blue-600" />
                             </div>
                             <div className="space-y-2">
-                              <h3 className="font-semibold text-lg">{file.name}</h3>
+                              <h3 className="font-semibold text-lg">{safeDisplay(file.name)}</h3>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                 <div>
                                   <span className="text-muted-foreground">Size:</span>
-                                  <p className="font-medium">{file.size}</p>
+                                  <p className="font-medium">{safeDisplay(file.size)}</p>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Records:</span>
-                                  <p className="font-medium">{file.recordCount.toLocaleString()}</p>
+                                  <p className="font-medium">{safeDisplay(file.recordCount?.toLocaleString?.() ?? file.recordCount)}</p>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Uploaded:</span>
-                                  <p className="font-medium">{formatTimestamp(file.uploadDate)}</p>
+                                  <p className="font-medium">{safeDisplay(formatTimestamp(file.uploadDate))}</p>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Status:</span>
@@ -621,12 +634,12 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                               <div className="mt-3">
                                 <span className="text-sm text-muted-foreground">Assigned to: </span>
                                 <span className="text-sm font-medium">
-                                  {file.assignedTo?.join(', ') || 'Unassigned'}
+                                  {safeDisplay(file.assignedTo?.join(', ') || 'Unassigned')}
                                 </span>
                               </div>
                               {file.notes && (
                                 <div className="mt-2 p-3 bg-muted/50 rounded-md">
-                                  <p className="text-sm text-muted-foreground">{file.notes}</p>
+                                  <p className="text-sm text-muted-foreground">{safeDisplay(file.notes)}</p>
                                 </div>
                               )}
                             </div>
@@ -725,14 +738,14 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <h4 className="font-semibold text-lg">
-                          Assignment #{assignment.id.slice(-8)}
+                          Assignment #{safeDisplay(assignment.id.slice(-8))}
                         </h4>
                         <div className="space-y-1">
                           <p className="text-sm font-medium text-green-600">
-                            📞 {assignment.numbers.length} numbers ready for calling
+                            {safeDisplay(assignment.numbers.length)} numbers assigned to {safeDisplay(assignment.assignedTo)}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Assigned by {assignment.assignedBy} • {formatTimestamp(assignment.assignDate)}
+                            Assigned by {safeDisplay(assignment.assignedBy)} on {safeDisplay(formatTimestamp(assignment.assignDate))}
                           </p>
                         </div>
                       </div>
@@ -742,7 +755,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                         </Badge>
                         {assignment.dealId && (
                           <Badge variant="outline" className="text-xs">
-                            Deal: {assignment.dealId}
+                            Deal: {safeDisplay(assignment.dealId)}
                           </Badge>
                         )}
                       </div>
@@ -764,13 +777,13 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Phone Numbers:</Label>
                         <span className="text-xs text-muted-foreground">
-                          {assignment.numbers.length} total
+                          {safeDisplay(assignment.numbers.length)} total
                         </span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
                         {assignment.numbers.map((number: string, index: number) => (
                           <div key={index} className="flex items-center justify-between text-sm font-mono bg-muted p-2 rounded hover:bg-muted/80 transition-colors">
-                            <span>{number}</span>
+                            <span>{safeDisplay(number)}</span>
                             {!isManager && (
                               <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
                                 <span className="text-xs">📞</span>
