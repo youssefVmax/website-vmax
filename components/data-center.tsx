@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Upload, Download, Database, FileText, Users, Trash2, Plus, Search, Filter } from "lucide-react"
+import { Upload, Download, Database, FileText, Users, Trash2, Plus, Search, Filter, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { userService } from "@/lib/firebase-user-service"
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
@@ -50,6 +50,8 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const [userLoading, setUserLoading] = useState(true)
   const { sales = [] } = useFirebaseSalesData(userRole, user.id, user.name)
 
+  const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
+
   // Restrict access to managers only
   if (userRole !== 'manager') {
     return (
@@ -63,7 +65,6 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       </Card>
     )
   }
-  const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
 
   const [newAssignment, setNewAssignment] = useState({
     numbers: '',
@@ -73,8 +74,20 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
 
   const [bulkNumbers, setBulkNumbers] = useState('')
   const [selectedAgent, setSelectedAgent] = useState('')
+  const [assignmentType, setAssignmentType] = useState<'individual' | 'team'>('individual')
+  const [selectedTeam, setSelectedTeam] = useState('')
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [selectedFileForAssign, setSelectedFileForAssign] = useState<string | null>(null)
 
   const isManager = userRole === 'manager'
+  
+  // Define available teams
+  const teams = [
+    { id: 'sales', name: 'Sales Team' },
+    { id: 'support', name: 'Customer Support' },
+    { id: 'closing', name: 'Closing Team' },
+    { id: 'management', name: 'Management' }
+  ]
 
   // Load users from Firebase
   useEffect(() => {
@@ -97,36 +110,70 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     loadUsers()
   }, [])
 
+  // Format Firestore timestamp to readable date
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return 'N/A';
+    
+    try {
+      // If it's a Firestore timestamp with seconds property
+      if (timestamp && typeof timestamp === 'object' && timestamp.seconds) {
+        return new Date(timestamp.seconds * 1000).toLocaleDateString();
+      }
+      
+      // If it's a Firestore timestamp with toDate method
+      if (timestamp && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate().toLocaleDateString();
+      }
+      
+      // If it's already a Date object or string
+      if (timestamp instanceof Date) {
+        return timestamp.toLocaleDateString();
+      }
+      
+      // If it's a string, try to parse it
+      if (typeof timestamp === 'string') {
+        return new Date(timestamp).toLocaleDateString();
+      }
+      
+      return 'N/A';
+    } catch (error) {
+      console.error('Error formatting timestamp:', error);
+      return 'N/A';
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+    const file = event.target.files?.[0];
+    if (!file) return;
 
     if (!isManager) {
       toast({
         title: "Access Denied",
         description: "Only managers can upload files.",
         variant: "destructive"
-      })
-      return
+      });
+      return;
     }
 
-    // Create file record in Firebase
+    // Create file record in Firebase (initially unassigned)
     const fileData = {
       name: file.name,
       type: file.name.endsWith('.csv') ? 'csv' as const : file.name.endsWith('.xlsx') ? 'xlsx' as const : 'txt' as const,
       size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-      assignedTo: ['All Teams'], // Default assignment
-      recordCount: Math.floor(Math.random() * 500) + 50, // In real app, parse file for actual count
+      uploadDate: new Date().toISOString(),
+      assignedTo: [], // Start with no assignments
+      recordCount: Math.floor(Math.random() * 500) + 50,
       uploadedBy: user.name,
       uploadedById: user.id,
-      notes: 'Uploaded via Data Center'
-    }
+      notes: 'Uploaded via Data Center - Ready for assignment',
+      status: 'active' as const
+    };
 
     try {
       await dataFilesService.createDataFile(fileData)
       toast({
         title: "File Uploaded Successfully",
-        description: `${file.name} has been uploaded and assigned to all teams.`
+        description: `${file.name} has been uploaded. You can now assign it to teams or individuals.`
       })
     } catch (error) {
       console.error('Error uploading file:', error)
@@ -135,6 +182,64 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         description: "Failed to upload file. Please try again.",
         variant: "destructive"
       })
+    }
+  }
+
+  const handleAssignFile = async () => {
+    if (!selectedFileForAssign) return;
+
+    const assignTo = assignmentType === 'team' ? selectedTeam : selectedAgent;
+    if (!assignTo) {
+      toast({
+        title: "Missing Selection",
+        description: `Please select a ${assignmentType} to assign to.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Get current file data
+      const currentFile = uploadedFiles.find(f => f.id === selectedFileForAssign);
+      if (!currentFile) return;
+
+      // Update assignments
+      const newAssignments = [...(currentFile.assignedTo || [])];
+      
+      if (assignmentType === 'team') {
+        // Add team assignment
+        const teamName = teams.find(t => t.id === selectedTeam)?.name || selectedTeam;
+        if (!newAssignments.includes(teamName)) {
+          newAssignments.push(teamName);
+        }
+      } else {
+        // Add individual assignment
+        const userName = users.find(u => u.id === selectedAgent)?.name || selectedAgent;
+        if (!newAssignments.includes(userName)) {
+          newAssignments.push(userName);
+        }
+      }
+
+      await dataFilesService.updateDataFile(selectedFileForAssign, {
+        assignedTo: newAssignments
+      });
+
+      setShowAssignModal(false);
+      setSelectedFileForAssign(null);
+      setSelectedAgent('');
+      setSelectedTeam('');
+
+      toast({
+        title: "Assignment Successful",
+        description: `File assigned to ${assignmentType === 'team' ? teams.find(t => t.id === assignTo)?.name : users.find(u => u.id === assignTo)?.name}.`
+      });
+    } catch (error) {
+      console.error('Error assigning file:', error);
+      toast({
+        title: "Assignment Failed",
+        description: "Failed to assign file. Please try again.",
+        variant: "destructive"
+      });
     }
   }
 
@@ -214,16 +319,48 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
   }
 
-  // Filter data based on user role
-  const visibleFiles = isManager ? uploadedFiles : uploadedFiles.filter(file => 
-    file.assignedTo.includes('All Teams') || 
-    file.assignedTo.includes(user.name) ||
-    file.assignedTo.some((team: string) => user.name.toLowerCase().includes(team.toLowerCase()))
-  )
+  // Filter data based on user role and team assignments
+  const visibleFiles = isManager ? uploadedFiles : uploadedFiles.filter(file => {
+    if (!file.assignedTo || file.assignedTo.length === 0) return false;
+    
+    // Check if user is directly assigned
+    if (file.assignedTo.includes(user.name)) return true;
+    
+    // Check if user's team is assigned
+    const userTeamMap = {
+      'salesman': 'Sales Team',
+      'customer-service': 'Customer Support',
+      'manager': 'Management'
+    };
+    
+    const userTeam = userTeamMap[userRole as keyof typeof userTeamMap];
+    if (userTeam && file.assignedTo.includes(userTeam)) return true;
+    
+    return false;
+  })
 
   const visibleAssignments = isManager ? numberAssignments : numberAssignments.filter(assignment =>
     assignment.assignedTo.toLowerCase() === user.name.toLowerCase()
   )
+
+  // Show error state if Firebase connection fails
+  if (error) {
+    return (
+      <Card className="w-full max-w-2xl mx-auto mt-8">
+        <CardHeader>
+          <CardTitle className="text-center text-red-600">Connection Error</CardTitle>
+          <CardDescription className="text-center">
+            Failed to connect to Firebase: {error}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <Button onClick={() => window.location.reload()}>
+            Retry Connection
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   if (loading || userLoading) {
     return (
@@ -246,7 +383,95 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      {/* Assignment Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-lg font-semibold">Assign Data File</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowAssignModal(false);
+                    setSelectedFileForAssign(null);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label>Assignment Type</Label>
+                  <Select value={assignmentType} onValueChange={(value: 'individual' | 'team') => setAssignmentType(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="individual">Individual User</SelectItem>
+                      <SelectItem value="team">Team</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {assignmentType === 'individual' ? (
+                  <div>
+                    <Label>Select User</Label>
+                    <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a user" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name} ({user.role})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div>
+                    <Label>Select Team</Label>
+                    <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowAssignModal(false);
+                      setSelectedFileForAssign(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleAssignFile}>
+                    Assign File
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -291,55 +516,113 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {visibleFiles.map((file) => (
-              <div key={file.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <FileText className="h-8 w-8 text-blue-500" />
-                  <div>
-                    <h4 className="font-medium">{file.name}</h4>
-                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                      <span>{file.size}</span>
-                      <span>•</span>
-                      <span>{file.recordCount} records</span>
-                      <span>•</span>
-                      <span>Uploaded {file.uploadDate}</span>
-                    </div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <Badge className={getStatusColor(file.status)}>
-                        {file.status}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Assigned to: {file.assignedTo.join(', ')}
-                      </span>
+          {isManager ? (
+            // Manager view - Card layout with assignment controls
+            <div className="space-y-4">
+              {visibleFiles.map((file) => (
+                <div key={file.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center space-x-4">
+                    <FileText className="h-8 w-8 text-blue-500" />
+                    <div>
+                      <h4 className="font-medium">{file.name}</h4>
+                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                        <span>{file.size}</span>
+                        <span>•</span>
+                        <span>{file.recordCount} records</span>
+                        <span>•</span>
+                        <span>Uploaded {formatTimestamp(file.uploadDate)}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <Badge className={getStatusColor(file.status)}>
+                          {file.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Assigned to: {file.assignedTo?.length > 0 ? file.assignedTo.join(', ') : 'Unassigned'}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    <Button variant="outline" size="sm">
+                      <Download className="h-4 w-4 mr-1" />
+                      Download
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedFileForAssign(file.id);
+                        setShowAssignModal(true);
+                      }}
+                    >
+                      <Users className="h-4 w-4 mr-1" />
+                      Assign
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleDeleteFile(file.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Button variant="outline" size="sm">
-                    <Download className="h-4 w-4 mr-1" />
-                    Download
-                  </Button>
-                  {isManager && (
-                    <>
-                      <Button variant="outline" size="sm">
-                        <Users className="h-4 w-4 mr-1" />
-                        Assign
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleDeleteFile(file.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
+              ))}
+            </div>
+          ) : (
+            // Non-manager view - Table layout for better data viewing
+            <div className="space-y-4">
+              {visibleFiles.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium">No Data Files Assigned</h3>
+                  <p className="text-sm text-muted-foreground">
+                    You don't have any data files assigned to you yet. Contact your manager for access.
+                  </p>
                 </div>
-              </div>
-            ))}
-          </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>File Name</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Records</TableHead>
+                      <TableHead>Upload Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleFiles.map((file) => (
+                      <TableRow key={file.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center space-x-2">
+                            <FileText className="h-4 w-4 text-blue-500" />
+                            <span>{file.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{file.size}</TableCell>
+                        <TableCell>{file.recordCount.toLocaleString()}</TableCell>
+                        <TableCell>{formatTimestamp(file.uploadDate)}</TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(file.status)}>
+                            {file.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm">
+                            <Download className="h-4 w-4 mr-1" />
+                            Download
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -599,6 +882,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
           </CardContent>
         </Card>
       )}
-    </div>
+      </div>
+    </>
   )
 }

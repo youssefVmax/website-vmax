@@ -254,7 +254,7 @@ export const notificationService = {
       const q = query(
         collection(db, COLLECTIONS.NOTIFICATIONS),
         orderBy('created_at', 'desc'),
-        limit(100)
+        limit(200) // Increased limit to ensure we get all relevant notifications
       );
       
       const snapshot = await getDocs(q);
@@ -264,13 +264,27 @@ export const notificationService = {
       if (userId || userRole) {
         notifications = notifications.filter(notification => {
           const to = (notification.to || []) as any[]
+          
+          // Managers should see all deal notifications
+          if (userRole === 'manager' && notification.type === 'deal') {
+            return true;
+          }
+          
           // Accept if broadcast to all
-          if (to.includes('all')) return true
+          if (to.includes('all')) return true;
+          
           // Accept if explicit user id match
-          if (userId && to.includes(userId)) return true
+          if (userId && to.includes(userId)) return true;
+          
           // Accept if role-based targeting
-          if (userRole && to.includes(userRole)) return true
-          return to.length === 0 // no 'to' means visible to all by default
+          if (userRole && to.includes(userRole)) return true;
+          
+          // For managers, also check if notification is for any manager role
+          if (userRole === 'manager' && to.includes('manager')) {
+            return true;
+          }
+          
+          return to.length === 0; // no 'to' means visible to all by default
         });
       }
       

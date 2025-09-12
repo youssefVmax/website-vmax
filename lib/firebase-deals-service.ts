@@ -184,11 +184,12 @@ export class FirebaseDealsService {
         processedDeal.customer_name
       );
 
-      // Create notifications for sales and closing agents
+      // Create notifications for sales agent, closing agent, and managers
       const notifications = [
+        // Notification for sales agent
         {
           title: 'New Deal Created',
-          message: `${processedDeal.created_by} created new deal ${processedDeal.DealID} for ${processedDeal.customer_name} worth $${processedDeal.amount_paid}`,
+          message: `You created a new deal for ${processedDeal.customer_name} worth $${processedDeal.amount_paid}`,
           type: 'deal' as const,
           priority: 'medium' as const,
           from: processedDeal.created_by || 'System',
@@ -196,8 +197,39 @@ export class FirebaseDealsService {
           dealId: docRef.id,
           dealName: processedDeal.customer_name,
           dealValue: processedDeal.amount_paid,
+          dealStage: processedDeal.stage,
+          isRead: false,
+          actionRequired: false
+        },
+        // Notification for closing agent (if different from sales agent)
+        ...(processedDeal.ClosingAgentID && processedDeal.ClosingAgentID !== processedDeal.SalesAgentID ? [{
+          title: 'New Deal Assigned',
+          message: `You've been assigned as closing agent for ${processedDeal.customer_name}'s deal`,
+          type: 'deal' as const,
+          priority: 'medium' as const,
+          from: processedDeal.created_by || 'System',
+          to: [processedDeal.ClosingAgentID],
+          dealId: docRef.id,
+          dealName: processedDeal.customer_name,
+          dealValue: processedDeal.amount_paid,
+          dealStage: processedDeal.stage,
           isRead: false,
           actionRequired: true
+        }] : []),
+        // Notification for all managers
+        {
+          title: 'New Deal Created',
+          message: `${processedDeal.created_by} created a new deal for ${processedDeal.customer_name} worth $${processedDeal.amount_paid}`,
+          type: 'deal' as const,
+          priority: 'medium' as const,
+          from: processedDeal.created_by || 'System',
+          to: ['manager'], // This will be expanded to all managers in notification service
+          dealId: docRef.id,
+          dealName: processedDeal.customer_name,
+          dealValue: processedDeal.amount_paid,
+          dealStage: processedDeal.stage,
+          isRead: false,
+          actionRequired: false
         }
       ];
 
@@ -208,6 +240,7 @@ export class FirebaseDealsService {
           type: 'deal' as const,
           priority: 'medium' as const,
           from: processedDeal.created_by,
+          dealStage: processedDeal.stage,
           to: [processedDeal.ClosingAgentID],
           dealId: docRef.id,
           dealName: processedDeal.customer_name,

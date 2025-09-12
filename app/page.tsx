@@ -6,6 +6,7 @@ import CompleteApp from "@/components/complete-app"
 import UnifiedLogin from "@/components/unified-login"
 import { Toaster } from "@/components/ui/toaster"
 import { NotificationsProvider } from "@/hooks/use-notifications"
+import { Logo } from "@/components/Logo"
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<'landing' | 'login' | 'app'>('landing')
@@ -84,20 +85,8 @@ function LandingPageContent({ onGetStarted }: { onGetStarted: () => void }) {
       {/* Header */}
       <header className="p-6 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className={`flex items-center space-x-3 transition-all duration-1000 ${isVisible ? 'translate-x-0 opacity-100' : '-translate-x-10 opacity-0'}`}>
-            <div className="relative">
-              <img 
-                src="/logo.PNG" 
-                alt="VMAX Logo" 
-                className="h-12 w-12 object-contain rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl hover:scale-105"
-              />
-            </div>
-            <div>
-              <span className="text-2xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                Vmax Sales
-              </span>
-              <div className="text-xs text-slate-400 font-medium">Analytics Platform</div>
-            </div>
+          <div className={`transition-all duration-1000 ${isVisible ? 'translate-x-0 opacity-100' : '-translate-x-10 opacity-0'}`}>
+            <Logo size="lg" />
           </div>
           <button 
             onClick={onGetStarted}

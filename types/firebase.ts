@@ -107,6 +107,11 @@ export interface Notification {
   dealName?: string;
   dealStage?: string;
   dealValue?: number;
+  salesAgent?: string;
+  salesAgentId?: string;
+  closingAgent?: string;
+  closingAgentId?: string;
+  createdBy?: string;
   isManagerMessage?: boolean;
   actionRequired?: boolean;
   created_at?: Timestamp;

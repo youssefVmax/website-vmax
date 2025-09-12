@@ -133,21 +133,52 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     }
   }
 
+  const validateForm = (): { isValid: boolean; message?: string } => {
+    // Required fields
+    const requiredFields = [
+      { field: 'customer_name', label: 'Customer Name' },
+      { field: 'email', label: 'Email' },
+      { field: 'phone_number', label: 'Phone Number' },
+      { field: 'amount_paid', label: 'Amount Paid' },
+      { field: 'country', label: 'Country' }
+    ];
+
+    // Check required fields
+    for (const { field, label } of requiredFields) {
+      if (!formData[field as keyof typeof formData]) {
+        return { isValid: false, message: `${label} is required` };
+      }
+    }
+
+    // Check if country is 'Other' but custom_country is not provided
+    if (formData.country === 'Other' && !formData.custom_country) {
+      return { isValid: false, message: 'Please specify a country' };
+    }
+
+    // Check if at least one program type is selected
+    const isProgramTypeSelected = formData.is_ibo_player || formData.is_bob_player || 
+                                 formData.is_smarters || formData.is_ibo_pro || formData.is_iboss;
+    if (!isProgramTypeSelected) {
+      return { isValid: false, message: 'Please select at least one program type' };
+    }
+
+    return { isValid: true };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    
+    // Validate form
+    const validation = validateForm();
+    if (!validation.isValid) {
+      await showError('Validation Error', validation.message || 'Please fill in all required fields');
+      return;
+    }
+    
+    setLoading(true);
 
     try {
-      // Validate required fields
-      const isProgramTypeSelected = formData.is_ibo_player || formData.is_bob_player || formData.is_smarters || formData.is_ibo_pro || formData.is_iboss;
-      
-      if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.amount_paid || !isProgramTypeSelected) {
-        await showError('Missing Information', 'Please fill in all required fields: Customer Name, Email, Phone, Amount Paid, and Program Type')
-        setLoading(false)
-        return
-      }
-
-      console.log('Creating deal with data:', formData)
+      console.log('Creating deal with data:', formData);
 
       // Combine form data with calculated fields
       const dealData = {
@@ -204,8 +235,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         status: 'active' as const,
         stage: 'closed-won' as const,
         priority: 'medium' as const
-      })
-
+      });
     } catch (error) {
       console.error('Error creating deal:', error)
       await showError('Deal Creation Failed', 'Failed to create deal. Please try again.')

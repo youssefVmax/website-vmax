@@ -220,16 +220,62 @@ export const showDealAdded = async (dealAmount: number, customerName: string) =>
     icon: 'success',
     title: '🎉 Deal Added Successfully!',
     html: `
-      <div class="deal-success-content">
-        <div class="deal-amount">$${dealAmount.toLocaleString()}</div>
-        <div class="deal-customer">${customerName}</div>
-        <div class="deal-message">Your deal has been added and all KPIs updated in real-time!</div>
+      <div style="
+        background: linear-gradient(145deg, #f8fafc, #f1f5f9);
+        border-radius: 12px;
+        padding: 20px;
+        border: 2px solid #dbeafe;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      ">
+        <div style="
+          font-size: 1.5rem;
+          font-weight: 600;
+          color: #1e40af;
+          margin-bottom: 12px;
+          text-align: center;
+        ">$${dealAmount.toLocaleString()}</div>
+        
+        <div style="
+          font-size: 1.25rem;
+          font-weight: 500;
+          color: #1f2937;
+          margin-bottom: 8px;
+          text-align: center;
+        ">${customerName}</div>
+        
+        <div style="
+          color: #4b5563;
+          text-align: center;
+          margin-top: 16px;
+          padding-top: 12px;
+          border-top: 1px solid #e5e7eb;
+        ">
+          <svg class="animate-bounce w-5 h-5 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+          </svg>
+          Deal has been added and all KPIs updated in real-time!
+        </div>
       </div>
     `,
-    timer: 4000,
+    timer: 4500,
     timerProgressBar: true,
     showConfirmButton: false,
-    width: '400px'
+    width: '380px',
+    padding: '0',
+    background: 'transparent',
+    backdrop: `
+      rgba(0, 0, 0, 0.7)
+      url("data:image/svg+xml,%3Csvg width='52' height='26' viewBox='0 0 52 26' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23dbeafe' fill-opacity='0.1' fill-rule='evenodd'%3E%3Cpath d='M10 10c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6 0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6 0 2.21 1.79 4 4 4v2c-3.314 0-6-2.686-6-6 0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6zm25.464-1.95l8.486 8.486-1.414 1.414-8.486-8.486 1.414-1.414z' /%3E%3C/g%3E%3C/svg%3E")
+    `,
+    customClass: {
+      popup: '!bg-transparent !shadow-none',
+      title: '!text-white !text-xl !font-bold !mb-4',
+      htmlContainer: '!overflow-visible',
+    },
+    didOpen: (toast: any) => {
+      toast.style.background = 'transparent';
+      toast.style.boxShadow = 'none';
+    }
   });
 };
 
