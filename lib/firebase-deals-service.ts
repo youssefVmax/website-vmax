@@ -465,7 +465,15 @@ export class FirebaseDealsService {
       }
       
       const querySnapshot = await getDocs(q);
-      const deals = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Deal));
+      const deals = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        } as Deal;
+      });
       
       return this.calculateAnalytics(deals);
     } catch (error) {
@@ -588,10 +596,16 @@ export class FirebaseDealsService {
     }
 
     return onSnapshot(q, (snapshot) => {
-      const deals = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Deal));
+      const deals = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        } as Deal;
+      });
       callback(deals);
     });
   }

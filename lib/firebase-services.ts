@@ -26,7 +26,15 @@ export const salesService = {
       if (userRole === 'manager') {
         const q = query(collection(db, COLLECTIONS.SALES));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+        return snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: data.created_at?.toDate?.() || data.created_at,
+            updated_at: data.updated_at?.toDate?.() || data.updated_at
+          } as Sale;
+        });
       }
       
       // For salesmen and customer service, use simple queries without orderBy to avoid composite index
@@ -48,7 +56,15 @@ export const salesService = {
         }
         
         const snapshot = await getDocs(q);
-        const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+        const sales = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: data.created_at?.toDate?.() || data.created_at,
+            updated_at: data.updated_at?.toDate?.() || data.updated_at
+          } as Sale;
+        });
         // Sort in memory instead of using orderBy to avoid index issues
         return sales.sort((a, b) => {
           const aTime = a.created_at?.toMillis() || 0;
@@ -75,7 +91,15 @@ export const salesService = {
         }
         
         const snapshot = await getDocs(q);
-        const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+        const sales = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: data.created_at?.toDate?.() || data.created_at,
+            updated_at: data.updated_at?.toDate?.() || data.updated_at
+          } as Sale;
+        });
         // Sort in memory instead of using orderBy to avoid index issues
         return sales.sort((a, b) => {
           const aTime = a.created_at?.toMillis() || 0;
@@ -176,7 +200,16 @@ export const salesService = {
     // For managers (userRole === 'manager') or no role specified, listen to ALL sales
 
     return onSnapshot(q, (snapshot) => {
-      const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
+      const sales = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        } as Sale;
+      });
       callback(sales);
     });
   }
@@ -188,7 +221,15 @@ export const userService = {
     try {
       const q = query(collection(db, COLLECTIONS.USERS), orderBy('name', 'asc'));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        } as User;
+      });
     } catch (error) {
       console.error('Error fetching users:', error);
       throw error;
@@ -258,7 +299,15 @@ export const notificationService = {
       );
       
       const snapshot = await getDocs(q);
-      let notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      let notifications = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          timestamp: data.timestamp?.toDate?.() || data.timestamp
+        } as unknown;
+      }) as Notification[];
       
       // Filter on client side to avoid index requirements
       if (userId || userRole) {
@@ -365,7 +414,15 @@ export const targetService = {
         );
       }
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Target));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        } as Target;
+      });
     } catch (error) {
       console.error('Error getting targets:', error);
       throw error;

@@ -67,10 +67,17 @@ export const dataFilesService = {
         orderBy('created_at', 'desc')
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          uploadDate: data.uploadDate?.toDate?.() || data.uploadDate,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        };
+      });
     } catch (error) {
       console.error('Error fetching data files:', error);
       throw error;
@@ -86,10 +93,17 @@ export const dataFilesService = {
         orderBy('created_at', 'desc')
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          uploadDate: data.uploadDate?.toDate?.() || data.uploadDate,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        };
+      });
     } catch (error) {
       console.error('Error fetching assigned data files:', error);
       throw error;
@@ -136,10 +150,17 @@ export const dataFilesService = {
     }
 
     return onSnapshot(q, (snapshot) => {
-      const files = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const files = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          uploadDate: data.uploadDate?.toDate?.() || data.uploadDate,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        };
+      });
       callback(files);
     });
   }
@@ -191,10 +212,17 @@ export const numberAssignmentsService = {
         orderBy('created_at', 'desc')
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          uploadDate: data.uploadDate?.toDate?.() || data.uploadDate,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        };
+      });
     } catch (error) {
       console.error('Error fetching number assignments:', error);
       throw error;
@@ -210,10 +238,17 @@ export const numberAssignmentsService = {
         orderBy('created_at', 'desc')
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          uploadDate: data.uploadDate?.toDate?.() || data.uploadDate,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        };
+      });
     } catch (error) {
       console.error('Error fetching user assignments:', error);
       throw error;
@@ -264,10 +299,17 @@ export const numberAssignmentsService = {
     }
 
     return onSnapshot(q, (snapshot) => {
-      const assignments = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const assignments = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore timestamps to serializable format
+        return {
+          id: doc.id,
+          ...data,
+          assignDate: data.assignDate?.toDate?.() || data.assignDate,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        };
+      });
       callback(assignments);
     });
   }

@@ -52,6 +52,14 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
 
   const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
 
+  // Add error boundary for timestamp issues
+  const [renderError, setRenderError] = useState<string | null>(null)
+  
+  useEffect(() => {
+    // Reset render error when data changes
+    setRenderError(null)
+  }, [uploadedFiles, numberAssignments])
+
   // Role-based access control - salespeople can view their assigned data
   const hasDataAccess = userRole === 'manager' || userRole === 'salesman';
   
@@ -112,7 +120,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     loadUsers()
   }, [])
 
-  // Format Firestore timestamp to readable date
+  // Format Firestore timestamp to readable date with enhanced error handling
   const formatTimestamp = (timestamp: any) => {
     if (!timestamp) return 'N/A';
     
@@ -127,19 +135,27 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         return timestamp.toDate().toLocaleDateString();
       }
       
-      // If it's already a Date object or string
+      // If it's already a Date object
       if (timestamp instanceof Date) {
         return timestamp.toLocaleDateString();
       }
       
       // If it's a string, try to parse it
       if (typeof timestamp === 'string') {
+        const parsed = new Date(timestamp);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toLocaleDateString();
+        }
+      }
+      
+      // If it's a number (milliseconds)
+      if (typeof timestamp === 'number') {
         return new Date(timestamp).toLocaleDateString();
       }
       
       return 'N/A';
     } catch (error) {
-      console.error('Error formatting timestamp:', error);
+      console.error('Error formatting timestamp:', error, timestamp);
       return 'N/A';
     }
   };
@@ -361,18 +377,23 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     return false;
   })
 
-  // Show error state if Firebase connection fails
-  if (error) {
+  // Show error state if Firebase connection fails or render error occurs
+  if (error || renderError) {
     return (
       <Card className="w-full max-w-2xl mx-auto mt-8">
         <CardHeader>
-          <CardTitle className="text-center text-red-600">Connection Error</CardTitle>
+          <CardTitle className="text-center text-red-600">
+            {renderError ? 'Render Error' : 'Connection Error'}
+          </CardTitle>
           <CardDescription className="text-center">
-            Failed to connect to Firebase: {error}
+            {renderError || `Failed to connect to Firebase: ${error}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center">
-          <Button onClick={() => window.location.reload()}>
+          <Button onClick={() => {
+            setRenderError(null);
+            window.location.reload();
+          }}>
             Retry Connection
           </Button>
         </CardContent>
@@ -400,9 +421,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     )
   }
 
-  return (
-    <>
-      {/* Assignment Modal */}
+  // Wrap render in try-catch to prevent timestamp serialization crashes
+  try {
+    return (
+      <>
+        {/* Assignment Modal */}
       {showAssignModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-md">
@@ -962,7 +985,26 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
           </CardContent>
         </Card>
       )}
-      </div>
-    </>
-  )
+        </div>
+      </>
+    )
+  } catch (renderErr: any) {
+    console.error('Data Center render error:', renderErr);
+    setRenderError('Failed to render data. This may be due to timestamp serialization issues.');
+    return (
+      <Card className="w-full max-w-2xl mx-auto mt-8">
+        <CardHeader>
+          <CardTitle className="text-center text-red-600">Render Error</CardTitle>
+          <CardDescription className="text-center">
+            Failed to render data center. Please refresh the page.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <Button onClick={() => window.location.reload()}>
+            Refresh Page
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 }
