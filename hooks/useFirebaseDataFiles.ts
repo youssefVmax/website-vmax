@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { dataFilesService, numberAssignmentsService } from '@/lib/firebase-data-services';
+import { sanitizeObject } from '@/lib/timestamp-utils';
 
 export function useFirebaseDataFiles(userRole: string, userName: string) {
   const [files, setFiles] = useState<any[]>([]);
@@ -13,54 +14,47 @@ export function useFirebaseDataFiles(userRole: string, userName: string) {
     setLoading(true);
     setError(null);
 
-    // Set up real-time listeners with error handling
-    const unsubscribeFiles = dataFilesService.onDataFilesChange(
-      (updatedFiles) => {
-        try {
-          // Ensure all timestamps are properly serialized
-          const serializedFiles = updatedFiles.map(file => ({
-            ...file,
-            uploadDate: file.uploadDate instanceof Date ? file.uploadDate : 
-                       file.uploadDate?.toDate?.() || file.uploadDate,
-            created_at: file.created_at instanceof Date ? file.created_at : 
-                       file.created_at?.toDate?.() || file.created_at,
-            updated_at: file.updated_at instanceof Date ? file.updated_at : 
-                       file.updated_at?.toDate?.() || file.updated_at
-          }));
-          setFiles(serializedFiles);
-          setLoading(false);
-        } catch (err) {
-          console.error('Error processing files data:', err);
-          setError('Failed to process files data');
-          setLoading(false);
-        }
-      },
-      userRole,
-      userName
-    );
+    let unsubscribeFiles: (() => void) | null = null;
+    let unsubscribeAssignments: (() => void) | null = null;
 
-    const unsubscribeAssignments = numberAssignmentsService.onAssignmentsChange(
-      (updatedAssignments) => {
-        try {
-          // Ensure all timestamps are properly serialized
-          const serializedAssignments = updatedAssignments.map(assignment => ({
-            ...assignment,
-            assignDate: assignment.assignDate instanceof Date ? assignment.assignDate : 
-                       assignment.assignDate?.toDate?.() || assignment.assignDate,
-            created_at: assignment.created_at instanceof Date ? assignment.created_at : 
-                       assignment.created_at?.toDate?.() || assignment.created_at,
-            updated_at: assignment.updated_at instanceof Date ? assignment.updated_at : 
-                       assignment.updated_at?.toDate?.() || assignment.updated_at
-          }));
-          setAssignments(serializedAssignments);
-        } catch (err) {
-          console.error('Error processing assignments data:', err);
-          setError('Failed to process assignments data');
-        }
-      },
-      userRole,
-      userName
-    );
+    try {
+      // Set up real-time listeners with comprehensive sanitization
+      unsubscribeFiles = dataFilesService.onDataFilesChange(
+        (updatedFiles) => {
+          try {
+            // Completely sanitize all data to prevent timestamp issues
+            const sanitizedFiles = updatedFiles.map(file => sanitizeObject(file));
+            setFiles(sanitizedFiles);
+            setLoading(false);
+          } catch (err) {
+            console.error('Error processing files data:', err);
+            setError('Failed to process files data');
+            setLoading(false);
+          }
+        },
+        userRole,
+        userName
+      );
+
+      unsubscribeAssignments = numberAssignmentsService.onAssignmentsChange(
+        (updatedAssignments) => {
+          try {
+            // Completely sanitize all data to prevent timestamp issues
+            const sanitizedAssignments = updatedAssignments.map(assignment => sanitizeObject(assignment));
+            setAssignments(sanitizedAssignments);
+          } catch (err) {
+            console.error('Error processing assignments data:', err);
+            setError('Failed to process assignments data');
+          }
+        },
+        userRole,
+        userName
+      );
+    } catch (err) {
+      console.error('Error setting up Firebase listeners:', err);
+      setError('Failed to connect to Firebase');
+      setLoading(false);
+    }
 
     // Error handling
     const handleError = (err: any) => {
@@ -71,8 +65,8 @@ export function useFirebaseDataFiles(userRole: string, userName: string) {
 
     return () => {
       try {
-        unsubscribeFiles();
-        unsubscribeAssignments();
+        if (unsubscribeFiles) unsubscribeFiles();
+        if (unsubscribeAssignments) unsubscribeAssignments();
       } catch (err) {
         handleError(err);
       }

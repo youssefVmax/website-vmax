@@ -16,6 +16,7 @@ import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { dataFilesService, numberAssignmentsService } from "@/lib/firebase-data-services"
 import { useFirebaseDataFiles } from "@/hooks/useFirebaseDataFiles"
 import { showInfo, showSuccess } from "@/lib/sweetalert"
+import { formatDisplayDate } from "@/lib/timestamp-utils"
 
 interface DataFile {
   id: string
@@ -120,45 +121,8 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     loadUsers()
   }, [])
 
-  // Format Firestore timestamp to readable date with enhanced error handling
-  const formatTimestamp = (timestamp: any) => {
-    if (!timestamp) return 'N/A';
-    
-    try {
-      // If it's a Firestore timestamp with seconds property
-      if (timestamp && typeof timestamp === 'object' && timestamp.seconds) {
-        return new Date(timestamp.seconds * 1000).toLocaleDateString();
-      }
-      
-      // If it's a Firestore timestamp with toDate method
-      if (timestamp && typeof timestamp.toDate === 'function') {
-        return timestamp.toDate().toLocaleDateString();
-      }
-      
-      // If it's already a Date object
-      if (timestamp instanceof Date) {
-        return timestamp.toLocaleDateString();
-      }
-      
-      // If it's a string, try to parse it
-      if (typeof timestamp === 'string') {
-        const parsed = new Date(timestamp);
-        if (!isNaN(parsed.getTime())) {
-          return parsed.toLocaleDateString();
-        }
-      }
-      
-      // If it's a number (milliseconds)
-      if (typeof timestamp === 'number') {
-        return new Date(timestamp).toLocaleDateString();
-      }
-      
-      return 'N/A';
-    } catch (error) {
-      console.error('Error formatting timestamp:', error, timestamp);
-      return 'N/A';
-    }
-  };
+  // Use the centralized timestamp formatting utility
+  const formatTimestamp = formatDisplayDate;
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
