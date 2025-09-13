@@ -93,10 +93,14 @@ export class FirebaseUserService {
   // Authenticate user with username and password
   async authenticateUser(username: string, password: string): Promise<User | null> {
     try {
+      console.log('Firebase: Looking for user with username:', username);
       const user = await this.getUserByUsername(username);
+      console.log('Firebase: Found user:', user ? user.name : 'null');
       if (user && user.password === password) {
+        console.log('Firebase: Password match successful');
         return user;
       }
+      console.log('Firebase: Password match failed or user not found');
       return null;
     } catch (error) {
       console.error('Error authenticating user:', error);

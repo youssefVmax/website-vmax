@@ -38,14 +38,26 @@ export function authenticateManager(username: string, password: string): User | 
 
 // Authenticate any user (manager or salesman from Firebase)
 export async function authenticateUser(username: string, password: string): Promise<User | null> {
+  console.log('Authenticating user:', username);
+  
   // First check if it's the manager
   const manager = authenticateManager(username, password);
-  if (manager) return manager;
+  if (manager) {
+    console.log('Manager authenticated successfully');
+    return manager;
+  }
   
   // For salesmen, check Firebase
   try {
+    console.log('Checking Firebase for user:', username);
     const { userService } = await import('./firebase-user-service');
-    return await userService.authenticateUser(username, password);
+    const user = await userService.authenticateUser(username, password);
+    if (user) {
+      console.log('Firebase user authenticated successfully:', user.name);
+    } else {
+      console.log('Firebase authentication failed for user:', username);
+    }
+    return user;
   } catch (error) {
     console.error('Error authenticating user:', error);
     return null;
