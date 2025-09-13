@@ -39,20 +39,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
+    console.log('useAuth: Starting login process for:', username);
     setLoading(true);
     
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     const authenticatedUser = await authenticateUser(username, password);
+    console.log('useAuth: Authentication result:', authenticatedUser ? 'SUCCESS' : 'FAILED');
     
     if (authenticatedUser) {
+      console.log('useAuth: Setting user and storing in localStorage');
       setUser(authenticatedUser);
       localStorage.setItem('vmax_user', JSON.stringify(authenticatedUser));
       setLoading(false);
+      console.log('useAuth: Login completed successfully');
       return true;
     }
     
+    console.log('useAuth: Login failed - no authenticated user');
     setLoading(false);
     return false;
   };

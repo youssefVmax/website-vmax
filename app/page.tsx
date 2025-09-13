@@ -24,6 +24,8 @@ function AppContent() {
   }, [searchParams, isAuthenticated, user])
 
   const handleLogin = () => {
+    // This will be called after successful authentication by UnifiedLogin
+    // The authentication is handled by useAuth hook, so we just need to set the view
     setCurrentView('app')
   }
 

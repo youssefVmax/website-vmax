@@ -8,14 +8,15 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { authenticateUser } from "@/lib/auth"
+import { useAuth } from "@/hooks/useAuth"
 
 interface UnifiedLoginProps {
-  onLogin: (user: any) => void
+  onLogin: () => void
   onBackToLanding?: () => void
 }
 
 export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginProps) {
+  const { login } = useAuth()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -141,23 +142,19 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
     setError("")
 
     try {
-      const user = await authenticateUser(username, password)
-      if (user) {
-        // Validate that the selected tab matches the user's actual role
-        const expectedTab = user.role === 'manager' ? 'manager' : 
-                           user.role === 'salesman' ? 'agent' : 'support'
-        
-        if (activeTab !== expectedTab) {
-          setError(`Please select the correct role: ${user.role === 'salesman' ? 'Agent' : user.role === 'customer-service' ? 'Support' : 'Manager'}`)
-          setActiveTab(expectedTab)
-          return
-        }
-        
-        onLogin(user)
+      console.log('UnifiedLogin: Attempting login with useAuth hook')
+      const success = await login(username, password)
+      console.log('UnifiedLogin: Login result:', success)
+      
+      if (success) {
+        console.log('UnifiedLogin: Login successful, calling onLogin callback')
+        onLogin()
       } else {
+        console.log('UnifiedLogin: Login failed')
         setError("Invalid credentials")
       }
     } catch (err) {
+      console.error('UnifiedLogin: Login error:', err)
       setError("Authentication failed")
     } finally {
       setLoading(false)
