@@ -298,6 +298,32 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
   }
 
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    if (!isManager) {
+      toast({
+        title: "Access Denied",
+        description: "Only managers can delete assignments.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      await numberAssignmentsService.deleteAssignment(assignmentId)
+      toast({
+        title: "Assignment Deleted",
+        description: "The number assignment has been removed."
+      })
+    } catch (error) {
+      console.error('Error deleting assignment:', error)
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete assignment. Please try again.",
+        variant: "destructive"
+      })
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800'
@@ -811,6 +837,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                           <Button 
                             variant="outline" 
                             size="sm" 
+                            onClick={() => handleDeleteAssignment(assignment.id)}
                             className="text-destructive hover:text-destructive"
                           >
                             <Trash2 className="h-3 w-3" />
