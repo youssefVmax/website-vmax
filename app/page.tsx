@@ -7,21 +7,23 @@ import UnifiedLogin from "@/components/unified-login"
 import { Toaster } from "@/components/ui/toaster"
 import { NotificationsProvider } from "@/hooks/use-notifications"
 import { Logo } from "@/components/Logo"
+import { useAuth } from "@/hooks/useAuth"
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<'landing' | 'login' | 'app'>('landing')
-  const [user, setUser] = useState<any>(null)
+  const { user, isAuthenticated, loading } = useAuth()
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    // Check if login parameter is present in URL
-    if (searchParams.get('login') === '1') {
+    // Check authentication state and URL parameters
+    if (isAuthenticated && user) {
+      setCurrentView('app')
+    } else if (searchParams.get('login') === '1') {
       setCurrentView('login')
     }
-  }, [searchParams])
+  }, [searchParams, isAuthenticated, user])
 
-  const handleLogin = (authenticatedUser: any) => {
-    setUser(authenticatedUser)
+  const handleLogin = () => {
     setCurrentView('app')
   }
 
@@ -33,11 +35,26 @@ function AppContent() {
     setCurrentView('landing')
   }
 
+  // Show loading while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-700 mx-auto mb-6"></div>
+            <div className="absolute inset-0 animate-spin rounded-full h-16 w-16 border-4 border-transparent border-t-indigo-500 border-r-purple-500 border-b-cyan-500 mx-auto"></div>
+          </div>
+          <p className="text-slate-400 text-lg font-medium">Loading your dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (currentView === 'login') {
     return <UnifiedLogin onLogin={handleLogin} onBackToLanding={handleBackToLanding} />
   }
 
-  if (currentView === 'app' && user) {
+  if (currentView === 'app' && isAuthenticated) {
     return (
       <>
         <NotificationsProvider>

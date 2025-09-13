@@ -406,10 +406,15 @@ export function SimpleAddDeal() {
             </div>
           </div>
 
-          {/* Callback/Deal Type Selection */}
-          <div className="space-y-4 p-6 border-2 border-dashed border-cyan-400 rounded-lg bg-white/10 backdrop-blur-sm shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
+          {/* Callback/Deal Type Selection - Enhanced Design */}
+          <div className="mb-8 p-8 border-2 border-dashed border-cyan-400 rounded-xl bg-gradient-to-br from-cyan-50/10 to-blue-50/10 backdrop-blur-sm shadow-xl">
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-2">📋 Choose Action Type</h3>
+              <p className="text-sm text-gray-600">Select whether you want to create a completed deal or schedule a callback</p>
+            </div>
+            
+            <div className="flex items-center justify-center mb-6">
+              <div className="flex items-center space-x-4 bg-white rounded-full p-2 shadow-lg border border-cyan-200">
                 <div className="relative">
                   <input
                     type="checkbox"
@@ -418,31 +423,36 @@ export function SimpleAddDeal() {
                     onChange={(e) => {
                       setFormData(prev => ({ ...prev, is_callback: e.target.checked }));
                     }}
-                    className="w-6 h-6 text-cyan-500 bg-slate-700 border-2 border-cyan-400 rounded focus:ring-cyan-500 focus:ring-2 cursor-pointer"
+                    className="w-8 h-8 text-cyan-500 bg-white border-3 border-cyan-400 rounded-lg focus:ring-cyan-500 focus:ring-4 cursor-pointer shadow-md"
                   />
                 </div>
-                <Label htmlFor="is_callback" className="text-lg font-bold text-cyan-300 cursor-pointer select-none">
+                <Label htmlFor="is_callback" className="text-lg font-bold text-gray-800 cursor-pointer select-none px-4 py-2 rounded-full transition-all duration-200 hover:bg-cyan-50">
                   📞 Schedule Callback (Not a completed deal)
                 </Label>
               </div>
+            </div>
+            
+            <div className="flex justify-center mb-4">
               <Badge 
                 variant={formData.is_callback ? "default" : "secondary"} 
-                className={`ml-2 px-3 py-1 text-sm font-semibold ${
+                className={`px-6 py-2 text-base font-bold rounded-full transition-all duration-300 ${
                   formData.is_callback 
-                    ? "bg-cyan-500 text-white" 
-                    : "bg-slate-600 text-slate-200"
+                    ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg transform scale-105" 
+                    : "bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-md"
                 }`}
               >
                 {formData.is_callback ? "🔔 Callback Mode" : "💰 Deal Mode"}
               </Badge>
             </div>
             
-            <div className={`p-4 rounded-lg ${
+            <div className={`p-6 rounded-xl transition-all duration-300 ${
               formData.is_callback 
-                ? "bg-cyan-500/20 border border-cyan-400/30" 
-                : "bg-slate-700/30 border border-slate-500/30"
+                ? "bg-gradient-to-r from-cyan-100 to-blue-100 border-2 border-cyan-300 shadow-lg" 
+                : "bg-gradient-to-r from-gray-100 to-gray-200 border-2 border-gray-300 shadow-md"
             }`}>
-              <p className="text-sm font-medium text-white">
+              <p className={`text-center font-medium ${
+                formData.is_callback ? "text-cyan-800" : "text-gray-700"
+              }`}>
                 {formData.is_callback 
                   ? "📞 You're scheduling a callback for future follow-up with this customer"
                   : "💰 You're adding a completed deal with payment information"
