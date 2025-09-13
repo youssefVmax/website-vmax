@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showDealAdded, showError, showLoading } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -114,9 +116,16 @@ export function AddDealPage() {
     no_user: "1",
     SalesAgentID: user?.id || "",
     ClosingAgentID: "",
+    // Callback fields
+    is_callback: false,
+    first_call_date: new Date().toISOString().split('T')[0],
+    first_call_time: new Date().toTimeString().slice(0, 5),
+    callback_notes: "",
+    callback_reason: "",
   });
 
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("customer-info");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -171,11 +180,19 @@ export function AddDealPage() {
     setLoading(true);
 
     try {
-      // Validate required fields
-      if (!formData.customer_name || !formData.email || !formData.phone || !formData.amount) {
-        showError("Missing Information", "Please fill in all required fields: Customer Name, Email, Phone, and Amount.");
-        setLoading(false);
-        return;
+      // Validate required fields based on type
+      if (formData.is_callback) {
+        if (!formData.customer_name || !formData.email || !formData.phone) {
+          showError("Missing Information", "Please fill in all required fields: Customer Name, Email, and Phone.");
+          setLoading(false);
+          return;
+        }
+      } else {
+        if (!formData.customer_name || !formData.email || !formData.phone || !formData.amount) {
+          showError("Missing Information", "Please fill in all required fields: Customer Name, Email, Phone, and Amount.");
+          setLoading(false);
+          return;
+        }
       }
 
       // Convert duration to months
@@ -193,42 +210,80 @@ export function AddDealPage() {
         }
       };
 
-      // Prepare deal data for Firebase deals service
-      const dealData = {
-        customer_name: formData.customer_name,
-        phone_number: formData.phone,
-        email: formData.email,
-        amount_paid: parseFloat(formData.amount) || 0,
-        duration_months: getDurationMonths(formData.duration),
-        sales_agent: formData.sales_agent,
-        closing_agent: formData.closing_agent,
-        sales_team: formData.team,
-        product_type: formData.type_program,
-        service_tier: formData.type_service,
-        signup_date: formData.date,
-        notes: formData.comment,
-        status: 'active' as const,
-        stage: 'closed-won' as const,
-        priority: 'medium' as const,
-        SalesAgentID: formData.SalesAgentID || user?.id || '',
-        ClosingAgentID: formData.ClosingAgentID || user?.id || '',
-        created_by: user?.name || 'Unknown',
-        created_by_id: user?.id || '',
-        // Additional fields from original form
-        username: formData.username,
-        invoice: formData.invoice,
-        device_id: formData.device_id,
-        device_key: formData.device_key,
-        no_user: parseInt(formData.no_user) || 1
-      };
+      // Handle callback vs deal submission
+      if (formData.is_callback) {
+        // Save as callback
+        const callbackData = {
+          customer_name: formData.customer_name,
+          phone_number: formData.phone,
+          email: formData.email,
+          sales_agent: formData.sales_agent,
+          sales_team: formData.team,
+          first_call_date: formData.first_call_date,
+          first_call_time: formData.first_call_time,
+          callback_notes: formData.callback_notes,
+          callback_reason: formData.callback_reason,
+          status: 'pending' as const,
+          created_by: user?.name || 'Unknown',
+          created_by_id: user?.id || '',
+          SalesAgentID: formData.SalesAgentID || user?.id || '',
+        };
 
-      console.log('Creating deal with Firebase service:', dealData);
-      
-      // Use Firebase deals service for proper integration with target progress
-      const dealId = await dealsService.createDeal(dealData, user);
-      console.log('Deal created successfully with ID:', dealId);
+        console.log('Creating callback:', callbackData);
+        
+        // Save callback using Firebase service
+        try {
+          const { callbacksService } = await import('@/lib/firebase-callbacks-service');
+          await callbacksService.addCallback(callbackData);
+          
+          await showDealAdded(0, formData.customer_name, 'Callback scheduled successfully!');
+        } catch (error) {
+          console.error('Error saving callback:', error);
+          showError("Error", "Failed to save callback. Please try again.");
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Prepare deal data for Firebase deals service
+        const dealData = {
+          customer_name: formData.customer_name,
+          phone_number: formData.phone,
+          email: formData.email,
+          amount_paid: parseFloat(formData.amount) || 0,
+          duration_months: getDurationMonths(formData.duration),
+          sales_agent: formData.sales_agent,
+          closing_agent: formData.closing_agent,
+          sales_team: formData.team,
+          product_type: formData.type_program,
+          service_tier: formData.type_service,
+          signup_date: formData.date,
+          notes: formData.comment,
+          status: 'active' as const,
+          stage: 'closed-won' as const,
+          priority: 'medium' as const,
+          SalesAgentID: formData.SalesAgentID || user?.id || '',
+          ClosingAgentID: formData.ClosingAgentID || user?.id || '',
+          created_by: user?.name || 'Unknown',
+          created_by_id: user?.id || '',
+          // Additional fields from original form
+          username: formData.username,
+          invoice: formData.invoice,
+          device_id: formData.device_id,
+          device_key: formData.device_key,
+          no_user: parseInt(formData.no_user) || 1,
+          // Required fields for Deal interface
+          country: 'Unknown',
+          invoice_link: formData.invoice
+        };
 
-      await showDealAdded(parseFloat(formData.amount), formData.customer_name);
+        console.log('Creating deal with Firebase service:', dealData);
+        
+        // Use Firebase deals service for proper integration with target progress
+        const dealId = await dealsService.createDeal(dealData, user);
+        console.log('Deal created successfully with ID:', dealId);
+
+        await showDealAdded(parseFloat(formData.amount), formData.customer_name);
+      }
 
       setFormData({
         date: new Date().toISOString().split('T')[0],
@@ -250,6 +305,12 @@ export function AddDealPage() {
         no_user: "1",
         SalesAgentID: user?.id || "",
         ClosingAgentID: "",
+        // Reset callback fields
+        is_callback: false,
+        first_call_date: new Date().toISOString().split('T')[0],
+        first_call_time: new Date().toTimeString().slice(0, 5),
+        callback_notes: "",
+        callback_reason: "",
       });
     } catch (error) {
       console.error('Error adding deal:', error);
@@ -274,7 +335,14 @@ export function AddDealPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="customer-info">Customer Information</TabsTrigger>
+                <TabsTrigger value="deal-info" disabled={!formData.customer_name || !formData.phone || !formData.email}>Deal Information</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="customer-info" className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="customer_name">Customer Name *</Label>
                 <Combobox
@@ -300,7 +368,7 @@ export function AddDealPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address *</Label>
+                <Label htmlFor="email">Email Address </Label>
                 <Combobox
                   options={[...new Set((sales || []).map(s => s.email).filter(Boolean) as string[])].sort()}
                   value={formData.email}
@@ -310,18 +378,142 @@ export function AddDealPage() {
                   allowCustom={true}
                 />
               </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount ($) *</Label>
-                <Combobox
-                  options={[...new Set((sales || []).map(s => s.amount?.toString()).filter(Boolean))].sort((a, b) => parseFloat(a) - parseFloat(b))}
-                  value={formData.amount}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, amount: value }))}
-                  placeholder="Select or type amount"
-                  searchPlaceholder="Search amounts..."
-                  allowCustom={true}
-                />
-              </div>
+                {/* Callback/Deal Type Selection */}
+                <div className="space-y-4 p-6 border-2 border-dashed border-cyan-400 rounded-lg bg-white/10 backdrop-blur-sm shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          id="is_callback"
+                          checked={formData.is_callback}
+                          onChange={(e) => {
+                            setFormData(prev => ({ ...prev, is_callback: e.target.checked }));
+                            if (!e.target.checked) {
+                              setActiveTab("deal-info");
+                            }
+                          }}
+                          className="w-6 h-6 text-cyan-500 bg-slate-700 border-2 border-cyan-400 rounded focus:ring-cyan-500 focus:ring-2 cursor-pointer"
+                        />
+                      </div>
+                      <Label htmlFor="is_callback" className="text-lg font-bold text-cyan-300 cursor-pointer select-none">
+                        📞 Schedule Callback (Not a completed deal)
+                      </Label>
+                    </div>
+                    <Badge 
+                      variant={formData.is_callback ? "default" : "secondary"} 
+                      className={`ml-2 px-3 py-1 text-sm font-semibold ${
+                        formData.is_callback 
+                          ? "bg-cyan-500 text-white" 
+                          : "bg-slate-600 text-slate-200"
+                      }`}
+                    >
+                      {formData.is_callback ? "🔔 Callback Mode" : "💰 Deal Mode"}
+                    </Badge>
+                  </div>
+                  
+                  <div className={`p-4 rounded-lg ${
+                    formData.is_callback 
+                      ? "bg-cyan-500/20 border border-cyan-400/30" 
+                      : "bg-slate-700/30 border border-slate-500/30"
+                  }`}>
+                    <p className="text-sm font-medium text-white">
+                      {formData.is_callback 
+                        ? "📞 You're scheduling a callback for future follow-up with this customer"
+                        : "💰 You're adding a completed deal with payment information"
+                      }
+                    </p>
+                  </div>
+
+                  {formData.is_callback && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="first_call_date">First Call Date *</Label>
+                        <Input
+                          type="date"
+                          id="first_call_date"
+                          name="first_call_date"
+                          value={formData.first_call_date}
+                          onChange={handleChange}
+                          required
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="first_call_time">First Call Time *</Label>
+                        <Input
+                          type="time"
+                          id="first_call_time"
+                          name="first_call_time"
+                          value={formData.first_call_time}
+                          onChange={handleChange}
+                          required
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="callback_reason">Callback Reason</Label>
+                        <Select 
+                          value={formData.callback_reason}
+                          onValueChange={(value) => setFormData(prev => ({ ...prev, callback_reason: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select callback reason" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="customer-busy">Customer was busy</SelectItem>
+                            <SelectItem value="needs-time">Customer needs time to think</SelectItem>
+                            <SelectItem value="technical-questions">Technical questions</SelectItem>
+                            <SelectItem value="pricing-discussion">Pricing discussion needed</SelectItem>
+                            <SelectItem value="decision-maker">Need to speak with decision maker</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="md:col-span-2 space-y-2">
+                        <Label htmlFor="callback_notes">Callback Notes</Label>
+                        <Textarea
+                          id="callback_notes"
+                          name="callback_notes"
+                          value={formData.callback_notes}
+                          onChange={handleChange}
+                          rows={3}
+                          placeholder="Notes about the call and what to discuss in the callback..."
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {!formData.is_callback && (
+                  <div className="flex justify-end">
+                    <Button 
+                      type="button"
+                      onClick={() => setActiveTab("deal-info")}
+                      className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
+                    >
+                      Continue to Deal Information
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="deal-info" className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="amount">Amount ($) *</Label>
+                    <Combobox
+                      options={[...new Set((sales || []).map(s => s.amount?.toString()).filter(Boolean))].sort((a, b) => parseFloat(a) - parseFloat(b))}
+                      value={formData.amount}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, amount: value }))}
+                      placeholder="Select or type amount"
+                      searchPlaceholder="Search amounts..."
+                      allowCustom={true}
+                    />
+                  </div>
 
               <div className="space-y-2">
                 <Label htmlFor="username">Username *</Label>
@@ -398,6 +590,22 @@ export function AddDealPage() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="type_program">Type Program *</Label>
+                <Select 
+                  value={formData.type_program}
+                  onValueChange={(value) => handleSelectChange("type_program", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select program type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {programOptions.map((program) => (
+                      <SelectItem key={program} value={program}>{program}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="type_service">Type Service *</Label>
@@ -468,25 +676,36 @@ export function AddDealPage() {
                 />
               </div>
 
-              <div className="md:col-span-2 space-y-2">
-                <Label htmlFor="comment">Comments</Label>
-                <Textarea
-                  id="comment"
-                  name="comment"
-                  value={formData.comment}
-                  onChange={handleChange}
-                  rows={3}
-                />
-              </div>
-            </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="comment">Comments</Label>
+                    <Textarea
+                      id="comment"
+                      name="comment"
+                      value={formData.comment}
+                      onChange={handleChange}
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end space-x-4">
+              {activeTab === "deal-info" && (
+                <Button 
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActiveTab("customer-info")}
+                >
+                  Back to Customer Info
+                </Button>
+              )}
               <Button 
                 type="submit" 
                 className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
                 disabled={loading}
               >
-                {loading ? "Adding Deal..." : "Add Deal"}
+                {loading ? (formData.is_callback ? "Scheduling Callback..." : "Adding Deal...") : (formData.is_callback ? "Schedule Callback" : "Add Deal")}
               </Button>
             </div>
           </form>

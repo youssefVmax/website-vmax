@@ -1,8 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter, ZAxis } from 'recharts';
-import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3 } from 'lucide-react';
+import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3, Phone, Clock } from 'lucide-react';
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
+import { callbackAnalyticsService } from '@/lib/callback-analytics-service';
+import CallbackKPIDashboard from './callback-kpi-dashboard';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
 
@@ -40,8 +43,24 @@ interface AnalyticsData {
 }
 
 function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps) {
+  const [activeTab, setActiveTab] = useState('sales');
+  const [callbackMetrics, setCallbackMetrics] = useState<any>(null);
+
   // Use live data with real-time updates via SSE
   const { sales, loading, error, refresh } = useFirebaseSalesData(userRole, user?.id, user?.name);
+
+  // Load callback metrics for quick overview
+  useEffect(() => {
+    const loadCallbackMetrics = async () => {
+      try {
+        const metrics = await callbackAnalyticsService.getLiveCallbackMetrics();
+        setCallbackMetrics(metrics);
+      } catch (err) {
+        console.error('Failed to load callback metrics:', err);
+      }
+    };
+    loadCallbackMetrics();
+  }, []);
 
   // Normalize to DealData for charts/KPIs
   const salesData: DealData[] = (sales || []).map((row: any) => ({
@@ -220,6 +239,13 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
 
   return (
     <div className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="sales">Sales Analytics</TabsTrigger>
+          <TabsTrigger value="callbacks">Callback Analytics</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="sales" className="space-y-6">
       {/* Real-time Status Indicator */}
       <div className="flex items-center justify-between">
         <div>
@@ -280,12 +306,15 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Top Agent Sales</p>
+                <p className="text-sm font-medium text-gray-600">Pending Callbacks</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  ${analytics.topAgents[0]?.sales?.toLocaleString() || '0'}
+                  {callbackMetrics?.pendingCount || '0'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {callbackMetrics?.todayCallbacks || 0} today
                 </p>
               </div>
-              <Award className="h-8 w-8 text-orange-600" />
+              <Phone className="h-8 w-8 text-orange-600" />
             </div>
           </CardContent>
         </Card>
@@ -536,6 +565,12 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+        
+        <TabsContent value="callbacks" className="space-y-6">
+          <CallbackKPIDashboard userRole={userRole} user={user} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

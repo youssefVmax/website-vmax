@@ -25,13 +25,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
-          // Validate that the stored user still exists in our system
-          const validUser = await authenticateUser(parsedUser.username, parsedUser.password);
-          if (validUser) {
-            setUser(validUser);
-          } else {
-            localStorage.removeItem('vmax_user');
-          }
+          // Simply restore the user from localStorage without re-authentication
+          // This maintains login state across page refreshes
+          setUser(parsedUser);
         } catch (error) {
           console.error('Failed to parse stored user:', error);
           localStorage.removeItem('vmax_user');

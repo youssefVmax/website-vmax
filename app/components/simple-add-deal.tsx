@@ -13,6 +13,8 @@ import { dealsService } from "@/lib/firebase-deals-service";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { userService } from "@/lib/firebase-user-service";
+import { Badge } from "@/components/ui/badge";
+import { callbacksService } from "@/lib/firebase-callbacks-service";
 
 export function SimpleAddDeal() {
   const { toast } = useToast();
@@ -44,7 +46,13 @@ export function SimpleAddDeal() {
     is_bob_player: false,
     is_smarters: false,
     is_ibo_pro: false,
-    is_iboss: false
+    is_iboss: false,
+    // Callback fields
+    is_callback: false,
+    first_call_date: new Date().toISOString().split('T')[0],
+    first_call_time: new Date().toTimeString().slice(0, 5),
+    callback_notes: "",
+    callback_reason: ""
   });
 
   // Load salesmen users on component mount
@@ -124,35 +132,73 @@ export function SimpleAddDeal() {
     setLoading(true);
 
     try {
-      // Validate required fields
-      if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.amount_paid) {
+      if (formData.is_callback) {
+        // Validate callback fields
+        if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.first_call_date || !formData.first_call_time) {
+          toast({
+            title: "Validation Error",
+            description: "Please fill in all required callback fields: Customer Name, Email, Phone, Call Date, and Call Time.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Create callback
+        const callbackData = {
+          customer_name: formData.customer_name,
+          phone_number: formData.phone_number,
+          email: formData.email,
+          sales_agent: user?.name || 'Unknown',
+          sales_team: user?.team || 'Unknown',
+          first_call_date: formData.first_call_date,
+          first_call_time: formData.first_call_time,
+          callback_reason: formData.callback_reason,
+          callback_notes: formData.callback_notes,
+          status: 'pending' as const,
+          created_by: user?.name || 'Unknown',
+          created_by_id: user?.id || '',
+          SalesAgentID: user?.id || ''
+        };
+
+        console.log('Creating callback with Firebase service:', callbackData);
+        const callbackId = await callbacksService.addCallback(callbackData);
+        console.log('Callback created successfully with ID:', callbackId);
+
         toast({
-          title: "Validation Error",
-          description: "Please fill in all required fields: Customer Name, Email, Phone, and Amount.",
-          variant: "destructive",
+          title: "Callback scheduled successfully!",
+          description: `Callback for "${formData.customer_name}" has been scheduled for ${formData.first_call_date} at ${formData.first_call_time}.`,
         });
-        setLoading(false);
-        return;
+      } else {
+        // Validate deal fields
+        if (!formData.customer_name || !formData.email || !formData.phone_number || !formData.amount_paid) {
+          toast({
+            title: "Validation Error",
+            description: "Please fill in all required fields: Customer Name, Email, Phone, and Amount.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Use Firebase deals service for proper integration
+        const dealData = {
+          ...formData,
+          SalesAgentID: user?.id || '',
+          ClosingAgentID: user?.id || '',
+          created_by: user?.name || 'Unknown',
+          created_by_id: user?.id || ''
+        };
+
+        console.log('Creating deal with Firebase service:', dealData);
+        const dealId = await dealsService.createDeal(dealData, user);
+        console.log('Deal created successfully with ID:', dealId);
+
+        toast({
+          title: "Deal added successfully!",
+          description: `Deal for "${formData.customer_name}" has been created with automatic notifications.`,
+        });
       }
-
-      // Use Firebase deals service for proper integration
-      const dealData = {
-        ...formData,
-        SalesAgentID: user?.id || '',
-        ClosingAgentID: user?.id || '',
-        created_by: user?.name || 'Unknown',
-        created_by_id: user?.id || ''
-      };
-
-      console.log('Creating deal with Firebase service:', dealData);
-      const dealId = await dealsService.createDeal(dealData, user);
-      console.log('Deal created successfully with ID:', dealId);
-
-      // Show success message
-      toast({
-        title: "Deal added successfully!",
-        description: `Deal for "${formData.customer_name}" has been created with automatic notifications.`,
-      });
 
       // Reset form
       setFormData({
@@ -178,7 +224,12 @@ export function SimpleAddDeal() {
         is_bob_player: false,
         is_smarters: false,
         is_ibo_pro: false,
-        is_iboss: false
+        is_iboss: false,
+        is_callback: false,
+        first_call_date: new Date().toISOString().split('T')[0],
+        first_call_time: new Date().toTimeString().slice(0, 5),
+        callback_notes: "",
+        callback_reason: ""
       });
 
       // Refresh and redirect
@@ -188,10 +239,10 @@ export function SimpleAddDeal() {
       }, 1500);
 
     } catch (error) {
-      console.error('Error adding deal:', error);
+      console.error('Error adding deal/callback:', error);
       toast({
         title: "Error",
-        description: "There was an error adding the deal. Please try again.",
+        description: "There was an error processing your request. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -355,7 +406,116 @@ export function SimpleAddDeal() {
             </div>
           </div>
 
-          {/* Service Features Section */}
+          {/* Callback/Deal Type Selection */}
+          <div className="space-y-4 p-6 border-2 border-dashed border-cyan-400 rounded-lg bg-white/10 backdrop-blur-sm shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    id="is_callback"
+                    checked={formData.is_callback}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, is_callback: e.target.checked }));
+                    }}
+                    className="w-6 h-6 text-cyan-500 bg-slate-700 border-2 border-cyan-400 rounded focus:ring-cyan-500 focus:ring-2 cursor-pointer"
+                  />
+                </div>
+                <Label htmlFor="is_callback" className="text-lg font-bold text-cyan-300 cursor-pointer select-none">
+                  📞 Schedule Callback (Not a completed deal)
+                </Label>
+              </div>
+              <Badge 
+                variant={formData.is_callback ? "default" : "secondary"} 
+                className={`ml-2 px-3 py-1 text-sm font-semibold ${
+                  formData.is_callback 
+                    ? "bg-cyan-500 text-white" 
+                    : "bg-slate-600 text-slate-200"
+                }`}
+              >
+                {formData.is_callback ? "🔔 Callback Mode" : "💰 Deal Mode"}
+              </Badge>
+            </div>
+            
+            <div className={`p-4 rounded-lg ${
+              formData.is_callback 
+                ? "bg-cyan-500/20 border border-cyan-400/30" 
+                : "bg-slate-700/30 border border-slate-500/30"
+            }`}>
+              <p className="text-sm font-medium text-white">
+                {formData.is_callback 
+                  ? "📞 You're scheduling a callback for future follow-up with this customer"
+                  : "💰 You're adding a completed deal with payment information"
+                }
+              </p>
+            </div>
+
+            {formData.is_callback && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="first_call_date">First Call Date *</Label>
+                  <Input
+                    type="date"
+                    id="first_call_date"
+                    name="first_call_date"
+                    value={formData.first_call_date}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="first_call_time">First Call Time *</Label>
+                  <Input
+                    type="time"
+                    id="first_call_time"
+                    name="first_call_time"
+                    value={formData.first_call_time}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="callback_reason">Callback Reason</Label>
+                  <Select 
+                    value={formData.callback_reason}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, callback_reason: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select callback reason" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="customer-busy">Customer was busy</SelectItem>
+                      <SelectItem value="needs-time">Customer needs time to think</SelectItem>
+                      <SelectItem value="technical-questions">Technical questions</SelectItem>
+                      <SelectItem value="pricing-discussion">Pricing discussion needed</SelectItem>
+                      <SelectItem value="decision-maker">Need to speak with decision maker</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="callback_notes">Callback Notes</Label>
+                  <Textarea
+                    id="callback_notes"
+                    name="callback_notes"
+                    value={formData.callback_notes}
+                    onChange={handleChange}
+                    rows={3}
+                    placeholder="Notes about the call and what to discuss in the callback..."
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Service Features Section - Only show if not callback */}
+          {!formData.is_callback && (
           <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg border border-purple-200">
             <h3 className="text-lg font-semibold text-purple-900 mb-4">🛠️ Service Features</h3>
             <p className="text-sm text-purple-700 mb-4">Select one service feature (only one can be selected at a time):</p>
@@ -430,10 +590,12 @@ export function SimpleAddDeal() {
               </div>
             )}
           </div>
+          )}
 
-          {/* Calculated Information Section */}
+          {/* Calculated Information Section - Only show if not callback */}
+          {!formData.is_callback && (
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
-            <h3 className="text-lg font-semibold text-blue-900 mb-4">📊 Calculated Information</h3>
+            <h3 className="text-lg font-semibold text-blue-900 mb-4">Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
                 <div className="text-sm font-medium text-gray-600">End Date</div>
@@ -470,6 +632,7 @@ export function SimpleAddDeal() {
               </div>
             </div>
           </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
@@ -493,7 +656,7 @@ export function SimpleAddDeal() {
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Saving..." : "Save Deal"}
+              {loading ? "Saving..." : (formData.is_callback ? "Schedule Callback" : "Save Deal")}
             </Button>
           </div>
         </form>

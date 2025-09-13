@@ -28,6 +28,7 @@ import {
   Shield,
   PieChart,
   DollarSign,
+  Phone,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -51,6 +52,7 @@ import { ImportExportControls } from "@/components/import-export-controls"
 import UserManagement from "@/components/user-management"
 import { AnimatedMetricCard } from "@/components/animated-metrics"
 import AccessDenied from "@/components/access-denied"
+import { CallbacksManagement } from "@/components/callbacks-management"
 
 interface FullPageDashboardProps {
   user: any;
@@ -166,6 +168,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     if (user.role === 'manager') {
       return [
         ...baseItems,
+        { id: "callbacks", icon: Phone, label: "Callbacks" },
         { id: "user-management", icon: Users, label: "User Management" },
         { id: "team-targets", icon: Target, label: "Team Targets" },
         { id: "analytics", icon: BarChart3, label: "Advanced Analytics" },
@@ -176,6 +179,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     } else if (user.role === 'salesman') {
       return [
         ...baseItems,
+        { id: "callbacks", icon: Phone, label: "My Callbacks" },
         { id: "my-deals", icon: FileText, label: "My Deals Table" },
         { id: "add-deal", icon: Plus, label: "Add Deal" },
         { id: "my-targets", icon: Target, label: "My Targets" },
@@ -458,6 +462,8 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "User Management"
     case "competition":
       return "Sales Competition"
+    case "callbacks":
+      return "Callbacks Management"
     case "settings":
       return "Settings"
     default:
@@ -509,6 +515,8 @@ function PageContent({
       return <UserManagement userRole={user.role} user={user} />
     case "competition":
       return <CompetitionDashboard />
+    case "callbacks":
+      return <CallbacksManagement userRole={user.role} user={user} />
     case "settings":
       return <ProfileSettings user={user} />
     default:

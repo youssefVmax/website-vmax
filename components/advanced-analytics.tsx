@@ -260,10 +260,6 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
             <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
             Real-time Data{lastUpdated ? ` • ${format(lastUpdated, 'HH:mm:ss')}` : ''}
           </Badge>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
-          </Button>
           <Button variant="outline" size="sm">
             <Filter className="h-4 w-4 mr-2" />
             Advanced Filters

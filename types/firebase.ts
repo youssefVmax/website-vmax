@@ -181,5 +181,6 @@ export const COLLECTIONS = {
   USERS: 'users',
   NOTIFICATIONS: 'notifications',
   TARGETS: 'targets',
-  SETTINGS: 'settings'
+  SETTINGS: 'settings',
+  CALLBACKS: 'callbacks'
 } as const;

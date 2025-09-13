@@ -214,7 +214,7 @@ export const showToast = async (title: string, icon: 'success' | 'error' | 'warn
 };
 
 // Deal added notification (custom for this app)
-export const showDealAdded = async (dealAmount: number, customerName: string) => {
+export const showDealAdded = async (dealAmount: number, customerName: string, customMessage?: string) => {
   const customSwal = await getCustomSwal();
   return customSwal.fire({
     icon: 'success',
@@ -253,7 +253,7 @@ export const showDealAdded = async (dealAmount: number, customerName: string) =>
           <svg class="animate-bounce w-5 h-5 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
           </svg>
-          Deal has been added and all KPIs updated in real-time!
+          ${customMessage || (dealAmount > 0 ? 'Deal has been added and all KPIs updated in real-time!' : 'Callback has been scheduled successfully!')}
         </div>
       </div>
     `,

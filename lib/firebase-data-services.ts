@@ -89,8 +89,7 @@ export const dataFilesService = {
     try {
       const q = query(
         collection(db, 'dataFiles'),
-        where('assignedTo', 'array-contains', userName),
-        orderBy('created_at', 'desc')
+        where('assignedTo', 'array-contains', userName)
       );
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => {
@@ -144,8 +143,7 @@ export const dataFilesService = {
     } else {
       q = query(
         collection(db, 'dataFiles'),
-        where('assignedTo', 'array-contains', userName || ''),
-        orderBy('created_at', 'desc')
+        where('assignedTo', 'array-contains', userName || '')
       );
     }
 
@@ -234,8 +232,7 @@ export const numberAssignmentsService = {
     try {
       const q = query(
         collection(db, 'numberAssignments'),
-        where('assignedTo', '==', userName),
-        orderBy('created_at', 'desc')
+        where('assignedTo', '==', userName)
       );
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => {
@@ -293,8 +290,7 @@ export const numberAssignmentsService = {
     } else {
       q = query(
         collection(db, 'numberAssignments'),
-        where('assignedTo', '==', userName || ''),
-        orderBy('created_at', 'desc')
+        where('assignedTo', '==', userName || '')
       );
     }
 
