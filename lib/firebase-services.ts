@@ -22,6 +22,23 @@ export const salesService = {
   // Get all sales with optional filtering
   async getSales(userRole?: string, userId?: string, userName?: string): Promise<Sale[]> {
     try {
+      // Helper to safely extract time in milliseconds from various timestamp shapes
+      const getTimeMs = (value: any): number => {
+        if (!value) return 0;
+        try {
+          // Firestore Timestamp
+          if (typeof value?.toMillis === 'function') return value.toMillis();
+          // Date
+          if (value instanceof Date) return value.getTime();
+          // Firestore Timestamp-like object with seconds
+          if (typeof value === 'object' && typeof value.seconds === 'number') return value.seconds * 1000;
+          // ISO string or other parsable string
+          if (typeof value === 'string') return new Date(value).getTime() || 0;
+          // number already milliseconds
+          if (typeof value === 'number') return value;
+        } catch {}
+        return 0;
+      };
       // For managers, get all sales without filtering to avoid index issues
       if (userRole === 'manager') {
         const q = query(collection(db, COLLECTIONS.SALES));
@@ -66,11 +83,7 @@ export const salesService = {
           } as Sale;
         });
         // Sort in memory instead of using orderBy to avoid index issues
-        return sales.sort((a, b) => {
-          const aTime = a.created_at?.toMillis() || 0;
-          const bTime = b.created_at?.toMillis() || 0;
-          return bTime - aTime;
-        });
+        return sales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
       } 
       
       if (userRole === 'customer-service' && (userId || userName)) {
@@ -101,22 +114,22 @@ export const salesService = {
           } as Sale;
         });
         // Sort in memory instead of using orderBy to avoid index issues
-        return sales.sort((a, b) => {
-          const aTime = a.created_at?.toMillis() || 0;
-          const bTime = b.created_at?.toMillis() || 0;
-          return bTime - aTime;
-        });
+        return sales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
       }
       
       // Default case - get all sales
       const q = query(collection(db, COLLECTIONS.SALES));
       const snapshot = await getDocs(q);
-      const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Sale));
-      return sales.sort((a, b) => {
-        const aTime = a.created_at?.toMillis() || 0;
-        const bTime = b.created_at?.toMillis() || 0;
-        return bTime - aTime;
+      const sales = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          created_at: data.created_at?.toDate?.() || data.created_at,
+          updated_at: data.updated_at?.toDate?.() || data.updated_at
+        } as Sale;
       });
+      return sales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
     } catch (error) {
       console.error('Error fetching sales:', error);
       throw error;
