@@ -59,31 +59,87 @@ export const salesService = {
         let q;
         if (userName) {
           const normalizedUserName = userName.toLowerCase().trim();
-          q = query(
-            collection(db, COLLECTIONS.SALES),
-            where('sales_agent_norm', '==', normalizedUserName)
+          // Try multiple field variations to match different data structures
+          const queries = [
+            query(collection(db, COLLECTIONS.SALES), where('sales_agent_norm', '==', normalizedUserName)),
+            query(collection(db, COLLECTIONS.SALES), where('sales_agent', '==', userName)),
+            query(collection(db, COLLECTIONS.SALES), where('closing_agent', '==', userName)),
+            query(collection(db, COLLECTIONS.SALES), where('SalesAgentID', '==', userId || '')),
+            query(collection(db, COLLECTIONS.SALES), where('closing_agent_id', '==', userId || ''))
+          ];
+          
+          let allSales: Sale[] = [];
+          for (const query_item of queries) {
+            try {
+              const snapshot = await getDocs(query_item);
+              const sales = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                  id: doc.id,
+                  ...data,
+                  created_at: data.created_at?.toDate?.() || data.created_at,
+                  updated_at: data.updated_at?.toDate?.() || data.updated_at
+                } as Sale;
+              });
+              allSales = [...allSales, ...sales];
+            } catch (error) {
+              console.log('Query failed, trying next:', error);
+            }
+          }
+          
+          // Remove duplicates based on document ID
+          const uniqueSales = allSales.filter((sale, index, self) => 
+            index === self.findIndex(s => s.id === sale.id)
           );
+          
+          return uniqueSales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
         } else if (userId) {
-          q = query(
-            collection(db, COLLECTIONS.SALES),
-            where('SalesAgentID', '==', userId)
+          // Try multiple field variations for userId
+          const queries = [
+            query(collection(db, COLLECTIONS.SALES), where('SalesAgentID', '==', userId)),
+            query(collection(db, COLLECTIONS.SALES), where('closing_agent_id', '==', userId)),
+            query(collection(db, COLLECTIONS.SALES), where('ClosingAgentID', '==', userId))
+          ];
+          
+          let allSales: Sale[] = [];
+          for (const query_item of queries) {
+            try {
+              const snapshot = await getDocs(query_item);
+              const sales = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                  id: doc.id,
+                  ...data,
+                  created_at: data.created_at?.toDate?.() || data.created_at,
+                  updated_at: data.updated_at?.toDate?.() || data.updated_at
+                } as Sale;
+              });
+              allSales = [...allSales, ...sales];
+            } catch (error) {
+              console.log('Query failed, trying next:', error);
+            }
+          }
+          
+          // Remove duplicates based on document ID
+          const uniqueSales = allSales.filter((sale, index, self) => 
+            index === self.findIndex(s => s.id === sale.id)
           );
+          
+          return uniqueSales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
         } else {
           q = query(collection(db, COLLECTIONS.SALES));
+          const snapshot = await getDocs(q);
+          const sales = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              created_at: data.created_at?.toDate?.() || data.created_at,
+              updated_at: data.updated_at?.toDate?.() || data.updated_at
+            } as Sale;
+          });
+          return sales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
         }
-        
-        const snapshot = await getDocs(q);
-        const sales = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            created_at: data.created_at?.toDate?.() || data.created_at,
-            updated_at: data.updated_at?.toDate?.() || data.updated_at
-          } as Sale;
-        });
-        // Sort in memory instead of using orderBy to avoid index issues
-        return sales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
       } 
       
       if (userRole === 'customer-service' && (userId || userName)) {
@@ -178,44 +234,100 @@ export const salesService = {
 
   // Real-time sales listener
   onSalesChange(callback: (sales: Sale[]) => void, userRole?: string, userId?: string, userName?: string) {
-    let q = query(collection(db, COLLECTIONS.SALES), orderBy('created_at', 'desc'));
-    
-    // Apply role-based filtering - MANAGERS see ALL sales for real-time KPIs
-    if (userRole === 'salesman' && (userId || userName)) {
-      if (userId) {
-        // Use simple query without orderBy to avoid composite index requirement
-        q = query(
-          collection(db, COLLECTIONS.SALES),
-          where('SalesAgentID', '==', userId)
-        );
-      } else if (userName) {
-        // Use simple query without orderBy to avoid composite index requirement
-        q = query(
-          collection(db, COLLECTIONS.SALES),
-          where('sales_agent_norm', '==', userName.toLowerCase().trim())
-        );
-      }
-    } else if (userRole === 'customer-service' && (userId || userName)) {
-      if (userId) {
-        // Use simple query without orderBy to avoid composite index requirement
-        q = query(
-          collection(db, COLLECTIONS.SALES),
-          where('ClosingAgentID', '==', userId)
-        );
-      } else if (userName) {
-        // Use simple query without orderBy to avoid composite index requirement
-        q = query(
-          collection(db, COLLECTIONS.SALES),
-          where('closing_agent_norm', '==', userName.toLowerCase().trim())
-        );
-      }
+    // For managers, get all sales
+    if (userRole === 'manager') {
+      const q = query(collection(db, COLLECTIONS.SALES));
+      return onSnapshot(q, (snapshot) => {
+        const sales = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: data.created_at?.toDate?.() || data.created_at,
+            updated_at: data.updated_at?.toDate?.() || data.updated_at
+          } as Sale;
+        });
+        callback(sales);
+      });
     }
-    // For managers (userRole === 'manager') or no role specified, listen to ALL sales
-
+    
+    // For salesmen, we need to handle multiple queries for real-time updates
+    if (userRole === 'salesman' && (userId || userName)) {
+      // Since onSnapshot doesn't support multiple queries, we'll listen to all sales
+      // and filter on the client side for real-time updates
+      const q = query(collection(db, COLLECTIONS.SALES));
+      
+      return onSnapshot(q, (snapshot) => {
+        const allSales = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: data.created_at?.toDate?.() || data.created_at,
+            updated_at: data.updated_at?.toDate?.() || data.updated_at
+          } as Sale;
+        });
+        
+        // Filter sales for the specific salesman
+        const filteredSales = allSales.filter(sale => {
+          if (userName) {
+            const normalizedUserName = userName.toLowerCase().trim();
+            return (
+              (sale as any).sales_agent_norm === normalizedUserName ||
+              (sale as any).sales_agent === userName ||
+              (sale as any).closing_agent === userName
+            );
+          }
+          if (userId) {
+            return (
+              (sale as any).SalesAgentID === userId ||
+              (sale as any).closing_agent_id === userId ||
+              (sale as any).ClosingAgentID === userId
+            );
+          }
+          return false;
+        });
+        
+        callback(filteredSales);
+      });
+    }
+    
+    // For customer service
+    if (userRole === 'customer-service' && (userId || userName)) {
+      const q = query(collection(db, COLLECTIONS.SALES));
+      
+      return onSnapshot(q, (snapshot) => {
+        const allSales = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: data.created_at?.toDate?.() || data.created_at,
+            updated_at: data.updated_at?.toDate?.() || data.updated_at
+          } as Sale;
+        });
+        
+        // Filter sales for the specific customer service agent
+        const filteredSales = allSales.filter(sale => {
+          if (userName) {
+            const normalizedUserName = userName.toLowerCase().trim();
+            return (sale as any).closing_agent_norm === normalizedUserName;
+          }
+          if (userId) {
+            return (sale as any).ClosingAgentID === userId;
+          }
+          return false;
+        });
+        
+        callback(filteredSales);
+      });
+    }
+    
+    // Default case - listen to all sales
+    const q = query(collection(db, COLLECTIONS.SALES));
     return onSnapshot(q, (snapshot) => {
       const sales = snapshot.docs.map(doc => {
         const data = doc.data();
-        // Convert Firestore timestamps to serializable format
         return {
           id: doc.id,
           ...data,
