@@ -3,19 +3,16 @@
 import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Upload, Download, Database, FileText, Users, Trash2, Plus, Search, Filter, X } from "lucide-react"
+import { Upload, Download, Database, FileText, Users, Trash2, Plus, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { userService } from "@/lib/firebase-user-service"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { dataFilesService, numberAssignmentsService } from "@/lib/firebase-data-services"
 import { useFirebaseDataFiles } from "@/hooks/useFirebaseDataFiles"
-import { showInfo, showSuccess } from "@/lib/sweetalert"
+import { showInfo } from "@/lib/sweetalert"
 import { formatDisplayDate, sanitizeObject } from "@/lib/timestamp-utils"
 
 interface DataFile {
@@ -49,7 +46,6 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [users, setUsers] = useState<any[]>([])
   const [userLoading, setUserLoading] = useState(true)
-  const { sales = [] } = useFirebaseSalesData(userRole, user.id, user.name)
 
   const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
 
@@ -720,7 +716,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               <span>{isManager ? 'All Number Assignments' : 'My Assigned Numbers'}</span>
               {!isManager && visibleAssignments.length > 0 && (
                 <Badge variant="secondary">
-                  {visibleAssignments.reduce((sum, assignment) => sum + assignment.numbers.length, 0)} Total Numbers
+                  {visibleAssignments.reduce((sum, assignment) => sum + ((assignment.numbers?.length) || 0), 0)} Total Numbers
                 </Badge>
               )}
             </CardTitle>
@@ -864,7 +860,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Records</p>
                 <p className="text-2xl font-bold">
-                  {visibleFiles.reduce((sum, file) => sum + file.recordCount, 0)}
+                  {visibleFiles.reduce((sum, file) => sum + (Number(file.recordCount) || 0), 0)}
                 </p>
               </div>
               <Database className="h-8 w-8 text-green-500" />
@@ -878,7 +874,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Assigned Numbers</p>
                 <p className="text-2xl font-bold">
-                  {visibleAssignments.reduce((sum, assignment) => sum + assignment.numbers.length, 0)}
+                  {visibleAssignments.reduce((sum, assignment) => sum + ((assignment.numbers?.length) || 0), 0)}
                 </p>
               </div>
               <Users className="h-8 w-8 text-purple-500" />

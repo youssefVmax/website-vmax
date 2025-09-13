@@ -17,9 +17,13 @@ export function sanitizeTimestamp(timestamp: any): string | null {
       return timestamp.toISOString();
     }
     
-    // If it's a Firestore timestamp with seconds property
-    if (timestamp && typeof timestamp === 'object' && timestamp.seconds) {
-      return new Date(timestamp.seconds * 1000).toISOString();
+    // If it's a Firestore timestamp with seconds property (handle seconds === 0)
+    if (
+      timestamp &&
+      typeof timestamp === 'object' &&
+      typeof (timestamp as any).seconds === 'number'
+    ) {
+      return new Date((timestamp as any).seconds * 1000).toISOString();
     }
     
     // If it's a Firestore timestamp with toDate method
