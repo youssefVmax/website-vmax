@@ -161,38 +161,41 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
 
   const getNavItems = () => {
     const baseItems = [
-      { id: "dashboard", icon: Home, label: "Dashboard" },
-      { id: "notifications", icon: Bell, label: "Notifications" },
+      { id: "dashboard", icon: Home, label: "Dashboard" } as const,
+      { id: "notifications", icon: Bell, label: "Notifications" } as const,
     ]
 
     if (user.role === 'manager') {
       return [
         ...baseItems,
-        { id: "callbacks", icon: Phone, label: "Callbacks" },
-        { id: "user-management", icon: Users, label: "User Management" },
-        { id: "team-targets", icon: Target, label: "Team Targets" },
-        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" },
-        { id: "datacenter", icon: Database, label: "Data Center" },
-        
-        { id: "settings", icon: Settings, label: "Settings" },
+        // In-app callbacks tab (legacy management view inside dashboard)
+        { id: "callbacks", icon: Phone, label: "Callbacks" } as const,
+        // Direct links to new callback pages
+        { id: "callbacks-manage", icon: Phone, label: "Manage Callbacks", href: "/callbacks/manage" } as const,
+        { id: "callbacks-new", icon: Plus, label: "New Callback", href: "/callbacks/new" } as const,
+        { id: "user-management", icon: Users, label: "User Management" } as const,
+        { id: "team-targets", icon: Target, label: "Team Targets" } as const,
+        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
+        { id: "datacenter", icon: Database, label: "Data Center" } as const,
+        { id: "settings", icon: Settings, label: "Settings" } as const,
       ]
     } else if (user.role === 'salesman') {
       return [
         ...baseItems,
-        { id: "callbacks", icon: Phone, label: "My Callbacks" },
-        { id: "my-deals", icon: FileText, label: "My Deals Table" },
-        { id: "add-deal", icon: Plus, label: "Add Deal" },
-        { id: "my-targets", icon: Target, label: "My Targets" },
-        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" },
-        { id: "datacenter", icon: Database, label: "Data Center" },
-        
+        { id: "callbacks", icon: Phone, label: "My Callbacks" } as const,
+        { id: "callbacks-new", icon: Plus, label: "New Callback", href: "/callbacks/new" } as const,
+        { id: "my-deals", icon: FileText, label: "My Deals Table" } as const,
+        { id: "add-deal", icon: Plus, label: "Add Deal" } as const,
+        { id: "my-targets", icon: Target, label: "My Targets" } as const,
+        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
+        { id: "datacenter", icon: Database, label: "Data Center" } as const,
       ]
     } else {
       return [
         ...baseItems,
-        { id: "support-deals", icon: FileText, label: "Support Deals" },
-        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" },
-        { id: "datacenter", icon: Database, label: "Data Center" },
+        { id: "support-deals", icon: FileText, label: "Support Deals" } as const,
+        { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
+        { id: "datacenter", icon: Database, label: "Data Center" } as const,
       ]
     }
   }
@@ -256,13 +259,19 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
             
             <CardContent className="p-4 flex-1 overflow-y-auto">
               <nav className="space-y-2">
-                {navItems.map((item) => (
+                {navItems.map((item: any) => (
                   <NavItem
                     key={item.id}
                     icon={item.icon}
                     label={item.label}
                     active={activeTab === item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => {
+                      if (item.href) {
+                        window.location.href = item.href
+                      } else {
+                        setActiveTab(item.id)
+                      }
+                    }}
                     collapsed={!sidebarOpen}
                     isDark={isDark}
                   />
