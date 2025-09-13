@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { Bell, CheckCircle, Plus, Send, X, AlertCircle, Briefcase, MessageSquare, Info } from "lucide-react"
 
@@ -17,6 +17,43 @@ import { dealsService } from "@/lib/firebase-deals-service"
 import { DealDetailsModal } from "./DealDetailsModal"
 import type { DealDetails } from "./DealDetailsModal"
 import { Notification as FirebaseNotification } from "@/types/firebase"
+
+// Safe timestamp conversion helper
+function safeToDate(timestamp: any): Date | null {
+  if (!timestamp) return null;
+  
+  try {
+    // If it's already a Date object
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    
+    // If it's a Firestore timestamp with toDate method
+    if (timestamp && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    
+    // If it's a Firestore timestamp with seconds property
+    if (timestamp && typeof timestamp === 'object' && typeof timestamp.seconds === 'number') {
+      return new Date(timestamp.seconds * 1000);
+    }
+    
+    // If it's a string, try to parse it
+    if (typeof timestamp === 'string') {
+      return new Date(timestamp);
+    }
+    
+    // If it's a number (milliseconds)
+    if (typeof timestamp === 'number') {
+      return new Date(timestamp);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error converting timestamp:', error, timestamp);
+    return null;
+  }
+}
 
 type NotificationType = "info" | "warning" | "success" | "error" | "deal" | "message"
 type PriorityType = "low" | "medium" | "high"
@@ -132,10 +169,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
           from: getReadableName(notif.from || 'System'),
           fromAvatar: notif.fromAvatar,
           to: notif.to || [currentUser.name],
-          timestamp: notif.created_at?.toDate ? notif.created_at.toDate() : 
-                     (notif.created_at && typeof notif.created_at === 'object' && 'seconds' in notif.created_at) 
-                       ? new Date(notif.created_at.seconds * 1000) 
-                       : new Date(),
+          timestamp: safeToDate(notif.created_at) || new Date(),
           read: notif.isRead || false,
           dealId: notif.dealId,
           dealName: notif.dealName,
@@ -256,8 +290,8 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
         amount: deal.amount_paid,
         stage: deal.stage,
         status: deal.status,
-        createdDate: deal.created_at?.toDate?.()?.toISOString() || deal.signup_date,
-        lastUpdated: deal.updated_at?.toDate?.()?.toISOString() || new Date().toISOString(),
+        createdDate: safeToDate(deal.created_at)?.toISOString() || deal.signup_date,
+        lastUpdated: safeToDate(deal.updated_at)?.toISOString() || new Date().toISOString(),
         notes: deal.notes || `Deal for ${deal.customer_name} - ${deal.product_type} service (${deal.service_tier})`
       };
       

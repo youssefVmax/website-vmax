@@ -1,3 +1,4 @@
+import { db } from './firebase';
 import { 
   collection, 
   doc, 
@@ -9,11 +10,51 @@ import {
   query, 
   where, 
   orderBy, 
+  onSnapshot, 
   Timestamp,
+  serverTimestamp,
   writeBatch,
   increment
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { TargetProgress } from '../types/firebase';
+import { notificationService } from './firebase-services';
+
+// Safe timestamp conversion helper
+function safeToDate(timestamp: any): Date | null {
+  if (!timestamp) return null;
+  
+  try {
+    // If it's already a Date object
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    
+    // If it's a Firestore timestamp with toDate method
+    if (timestamp && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    
+    // If it's a Firestore timestamp with seconds property
+    if (timestamp && typeof timestamp === 'object' && typeof timestamp.seconds === 'number') {
+      return new Date(timestamp.seconds * 1000);
+    }
+    
+    // If it's a string, try to parse it
+    if (typeof timestamp === 'string') {
+      return new Date(timestamp);
+    }
+    
+    // If it's a number (milliseconds)
+    if (typeof timestamp === 'number') {
+      return new Date(timestamp);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error converting timestamp:', error, timestamp);
+    return null;
+  }
+}
 
 export interface TargetProgress {
   id?: string;
@@ -165,8 +206,8 @@ export class FirebaseTargetProgressService {
       
       // Sort in memory to maintain order without composite index
       return progressData.sort((a, b) => {
-        const dateA = a.created_at?.toDate?.() || new Date(0);
-        const dateB = b.created_at?.toDate?.() || new Date(0);
+        const dateA = safeToDate(a.created_at) || new Date(0);
+        const dateB = safeToDate(b.created_at) || new Date(0);
         return dateB.getTime() - dateA.getTime(); // desc order
       });
     } catch (error) {

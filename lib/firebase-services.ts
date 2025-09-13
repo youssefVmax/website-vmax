@@ -1,21 +1,43 @@
-import {
-  collection,
-  addDoc,
-  getDocs,
-  getDoc,
-  doc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  onSnapshot,
-  serverTimestamp,
-  writeBatch
-} from 'firebase/firestore';
 import { db } from './firebase';
+import { collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, Timestamp, serverTimestamp, limit, writeBatch } from 'firebase/firestore';
 import { Sale, User, Notification, Target, Settings, COLLECTIONS } from '@/types/firebase';
+
+// Safe timestamp conversion helper
+function safeToDate(timestamp: any): Date | null {
+  if (!timestamp) return null;
+  
+  try {
+    // If it's already a Date object
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    
+    // If it's a Firestore timestamp with toDate method
+    if (timestamp && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    
+    // If it's a Firestore timestamp with seconds property
+    if (timestamp && typeof timestamp === 'object' && typeof timestamp.seconds === 'number') {
+      return new Date(timestamp.seconds * 1000);
+    }
+    
+    // If it's a string, try to parse it
+    if (typeof timestamp === 'string') {
+      return new Date(timestamp);
+    }
+    
+    // If it's a number (milliseconds)
+    if (typeof timestamp === 'number') {
+      return new Date(timestamp);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error converting timestamp:', error, timestamp);
+    return null;
+  }
+}
 
 // Sales operations
 export const salesService = {
@@ -48,8 +70,8 @@ export const salesService = {
           return {
             id: doc.id,
             ...data,
-            created_at: data.created_at?.toDate?.() || data.created_at,
-            updated_at: data.updated_at?.toDate?.() || data.updated_at
+            created_at: safeToDate(data.created_at) || data.created_at,
+            updated_at: safeToDate(data.updated_at) || data.updated_at
           } as Sale;
         });
       }
@@ -77,8 +99,8 @@ export const salesService = {
                 return {
                   id: doc.id,
                   ...data,
-                  created_at: data.created_at?.toDate?.() || data.created_at,
-                  updated_at: data.updated_at?.toDate?.() || data.updated_at
+                  created_at: safeToDate(data.created_at) || data.created_at,
+                  updated_at: safeToDate(data.updated_at) || data.updated_at
                 } as Sale;
               });
               allSales = [...allSales, ...sales];
@@ -110,8 +132,8 @@ export const salesService = {
                 return {
                   id: doc.id,
                   ...data,
-                  created_at: data.created_at?.toDate?.() || data.created_at,
-                  updated_at: data.updated_at?.toDate?.() || data.updated_at
+                  created_at: safeToDate(data.created_at) || data.created_at,
+                  updated_at: safeToDate(data.updated_at) || data.updated_at
                 } as Sale;
               });
               allSales = [...allSales, ...sales];
@@ -134,8 +156,8 @@ export const salesService = {
             return {
               id: doc.id,
               ...data,
-              created_at: data.created_at?.toDate?.() || data.created_at,
-              updated_at: data.updated_at?.toDate?.() || data.updated_at
+              created_at: safeToDate(data.created_at) || data.created_at,
+              updated_at: safeToDate(data.updated_at) || data.updated_at
             } as Sale;
           });
           return sales.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
@@ -165,8 +187,8 @@ export const salesService = {
           return {
             id: doc.id,
             ...data,
-            created_at: data.created_at?.toDate?.() || data.created_at,
-            updated_at: data.updated_at?.toDate?.() || data.updated_at
+            created_at: safeToDate(data.created_at) || data.created_at,
+            updated_at: safeToDate(data.updated_at) || data.updated_at
           } as Sale;
         });
         // Sort in memory instead of using orderBy to avoid index issues
@@ -243,8 +265,8 @@ export const salesService = {
           return {
             id: doc.id,
             ...data,
-            created_at: data.created_at?.toDate?.() || data.created_at,
-            updated_at: data.updated_at?.toDate?.() || data.updated_at
+            created_at: safeToDate(data.created_at) || data.created_at,
+            updated_at: safeToDate(data.updated_at) || data.updated_at
           } as Sale;
         });
         callback(sales);
@@ -263,8 +285,8 @@ export const salesService = {
           return {
             id: doc.id,
             ...data,
-            created_at: data.created_at?.toDate?.() || data.created_at,
-            updated_at: data.updated_at?.toDate?.() || data.updated_at
+            created_at: safeToDate(data.created_at) || data.created_at,
+            updated_at: safeToDate(data.updated_at) || data.updated_at
           } as Sale;
         });
         
@@ -302,8 +324,8 @@ export const salesService = {
           return {
             id: doc.id,
             ...data,
-            created_at: data.created_at?.toDate?.() || data.created_at,
-            updated_at: data.updated_at?.toDate?.() || data.updated_at
+            created_at: safeToDate(data.created_at) || data.created_at,
+            updated_at: safeToDate(data.updated_at) || data.updated_at
           } as Sale;
         });
         

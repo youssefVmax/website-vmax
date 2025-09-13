@@ -407,51 +407,49 @@ export function SimpleAddDeal() {
           </div>
 
           {/* Callback/Deal Type Selection - HIGHLY VISIBLE DESIGN */}
-          <div className="mb-8 p-10 border-4 border-solid border-cyan-500 rounded-2xl bg-gradient-to-br from-cyan-100/80 to-blue-100/80 shadow-2xl backdrop-blur-sm">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-black text-gray-900 mb-4 uppercase tracking-wide">📋 CHOOSE ACTION TYPE</h2>
-              <p className="text-lg font-semibold text-gray-700 bg-white/70 p-3 rounded-lg shadow-md">Select whether you want to create a completed deal or schedule a callback</p>
+          <div className="mb-8 p-6 border-2 border-cyan-500 rounded-lg bg-cyan-50">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">📋 CHOOSE ACTION TYPE</h2>
+              <p className="text-base font-medium text-gray-700 bg-white p-3 rounded-lg">Select whether you want to create a completed deal or schedule a callback</p>
             </div>
             
-            <div className="flex items-center justify-center mb-8">
-              <div className="flex items-center space-x-6 bg-white rounded-2xl p-6 shadow-2xl border-4 border-cyan-300">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    id="is_callback"
-                    checked={formData.is_callback}
-                    onChange={(e) => {
-                      setFormData(prev => ({ ...prev, is_callback: e.target.checked }));
-                      console.log('Callback toggle changed:', e.target.checked);
-                    }}
-                    className="w-12 h-12 text-cyan-600 bg-white border-4 border-cyan-500 rounded-xl focus:ring-cyan-600 focus:ring-8 cursor-pointer shadow-xl transform hover:scale-110 transition-all duration-200"
-                  />
-                </div>
-                <Label htmlFor="is_callback" className="text-2xl font-black text-gray-900 cursor-pointer select-none px-6 py-4 rounded-2xl transition-all duration-300 hover:bg-cyan-100 hover:shadow-lg">
+            <div className="flex items-center justify-center mb-6">
+              <div className="flex items-center space-x-4 bg-white rounded-lg p-4 border-2 border-cyan-300">
+                <input
+                  type="checkbox"
+                  id="is_callback"
+                  checked={formData.is_callback}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, is_callback: e.target.checked }));
+                    console.log('Callback toggle changed:', e.target.checked);
+                  }}
+                  className="w-6 h-6 text-cyan-600 bg-white border-2 border-cyan-500 rounded focus:ring-cyan-600 cursor-pointer"
+                />
+                <Label htmlFor="is_callback" className="text-lg font-bold text-gray-900 cursor-pointer">
                   📞 SCHEDULE CALLBACK
                 </Label>
               </div>
             </div>
             
-            <div className="flex justify-center mb-6">
+            <div className="flex justify-center mb-4">
               <Badge 
                 variant={formData.is_callback ? "default" : "secondary"} 
-                className={`px-8 py-4 text-2xl font-black rounded-2xl transition-all duration-300 shadow-2xl ${
+                className={`px-4 py-2 text-sm font-bold rounded transition-all ${
                   formData.is_callback 
-                    ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white transform scale-110 animate-pulse" 
-                    : "bg-gradient-to-r from-gray-600 to-gray-700 text-white"
+                    ? "bg-cyan-600 text-white" 
+                    : "bg-gray-600 text-white"
                 }`}
               >
                 {formData.is_callback ? "🔔 CALLBACK MODE ACTIVE" : "💰 DEAL MODE ACTIVE"}
               </Badge>
             </div>
             
-            <div className={`p-8 rounded-2xl transition-all duration-300 shadow-xl ${
+            <div className={`p-4 rounded-lg transition-all ${
               formData.is_callback 
-                ? "bg-gradient-to-r from-cyan-200 to-blue-200 border-4 border-cyan-400" 
-                : "bg-gradient-to-r from-gray-200 to-gray-300 border-4 border-gray-400"
+                ? "bg-cyan-200 border-2 border-cyan-400" 
+                : "bg-gray-200 border-2 border-gray-400"
             }`}>
-              <p className={`text-center text-xl font-bold ${
+              <p className={`text-center text-base font-bold ${
                 formData.is_callback ? "text-cyan-900" : "text-gray-800"
               }`}>
                 {formData.is_callback 
