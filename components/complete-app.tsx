@@ -12,28 +12,43 @@ export default function CompleteApp() {
   const router = useRouter()
 
   useEffect(() => {
+    console.log('CompleteApp: Checking for saved user')
     // Check if user is already logged in (from localStorage)
-    const savedUser = localStorage.getItem('current-user')
+    const savedUser = localStorage.getItem('vmax_user') // Use same key as useAuth
+    console.log('CompleteApp: Found saved user:', savedUser ? 'yes' : 'no')
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser)
+        console.log('CompleteApp: Parsed user:', parsedUser.name)
         // Verify user data is valid
         if (parsedUser.id && parsedUser.username && parsedUser.role) {
           setUser(parsedUser)
+          console.log('CompleteApp: User set successfully')
         } else {
-          localStorage.removeItem('current-user')
+          console.log('CompleteApp: Invalid user data, removing')
+          localStorage.removeItem('vmax_user')
         }
       } catch (error) {
-        localStorage.removeItem('current-user')
+        console.log('CompleteApp: Error parsing user, removing')
+        localStorage.removeItem('vmax_user')
       }
     }
     setLoading(false)
+    console.log('CompleteApp: Loading complete, user:', user?.name || 'none')
   }, [])
 
-  const handleLogin = (loggedInUser: User) => {
-    setUser(loggedInUser)
-    // Save to localStorage for persistence
-    localStorage.setItem('current-user', JSON.stringify(loggedInUser))
+  const handleLogin = () => {
+    // Get user from useAuth's localStorage key
+    const savedUser = localStorage.getItem('vmax_user')
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser)
+        setUser(parsedUser)
+        console.log('CompleteApp: Login callback - user set:', parsedUser.name)
+      } catch (error) {
+        console.error('CompleteApp: Error parsing user in login callback')
+      }
+    }
   }
 
   const handleLogout = () => {
@@ -56,8 +71,10 @@ export default function CompleteApp() {
   }
 
   if (!user) {
+    console.log('CompleteApp: No user found, showing login')
     return <UnifiedLogin onLogin={handleLogin} />
   }
 
+  console.log('CompleteApp: User found, rendering dashboard for:', user.name)
   return <FullPageDashboard user={user} onLogout={handleLogout} />
 }
