@@ -62,6 +62,7 @@ export interface Deal {
   SalesAgentID: string;
   ClosingAgentID: string;
   
+  
   // Additional tracking fields
   status: 'pending' | 'active' | 'completed' | 'cancelled' | 'refunded';
   stage: 'lead' | 'qualified' | 'proposal' | 'negotiation' | 'closed-won' | 'closed-lost';
