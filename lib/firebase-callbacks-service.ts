@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, Timestamp, serverTimestamp } from 'firebase/firestore';
-import { Callback } from '../types/firebase';
+import { COLLECTIONS } from '../types/firebase';
 import { notificationService } from './firebase-services';
 
 // Safe timestamp conversion helper
