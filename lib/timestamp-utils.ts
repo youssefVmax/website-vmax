@@ -40,7 +40,19 @@ export function sanitizeTimestamp(timestamp: any): string | null {
 }
 
 export function sanitizeObject(obj: any): any {
-  if (!obj || typeof obj !== 'object') return obj;
+  if (obj == null) return obj;
+
+  // If this value itself is a Firestore Timestamp-like object, convert it directly
+  // This catches cases where the key name does not hint it's a date (e.g., createdAt)
+  if (typeof obj === 'object') {
+    const maybeHasToDate = typeof (obj as any)?.toDate === 'function';
+    const maybeSeconds = typeof (obj as any)?.seconds === 'number' && typeof (obj as any)?.nanoseconds === 'number';
+    if (maybeHasToDate || maybeSeconds) {
+      return sanitizeTimestamp(obj);
+    }
+  }
+
+  if (typeof obj !== 'object') return obj;
   
   if (Array.isArray(obj)) {
     return obj.map(sanitizeObject);
@@ -52,11 +64,22 @@ export function sanitizeObject(obj: any): any {
     // Check if this looks like a timestamp field
     if (key.includes('date') || key.includes('Date') || key.includes('_at') || key === 'timestamp') {
       sanitized[key] = sanitizeTimestamp(value);
-    } else if (value && typeof value === 'object') {
-      sanitized[key] = sanitizeObject(value);
-    } else {
-      sanitized[key] = value;
+      continue;
     }
+
+    // If the value is a Firestore Timestamp-like object, convert regardless of key
+    if (value && typeof value === 'object') {
+      const hasToDate = typeof (value as any)?.toDate === 'function';
+      const hasSeconds = typeof (value as any)?.seconds === 'number' && typeof (value as any)?.nanoseconds === 'number';
+      if (hasToDate || hasSeconds) {
+        sanitized[key] = sanitizeTimestamp(value);
+        continue;
+      }
+      sanitized[key] = sanitizeObject(value);
+      continue;
+    }
+
+    sanitized[key] = value;
   }
   
   return sanitized;
