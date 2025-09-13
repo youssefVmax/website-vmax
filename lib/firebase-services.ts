@@ -426,11 +426,34 @@ export const notificationService = {
       const snapshot = await getDocs(q);
       let notifications = snapshot.docs.map(doc => {
         const data = doc.data();
+        
+        // Helper function to safely convert timestamps
+        const safeToDate = (value: any) => {
+          if (!value) return null;
+          try {
+            // Firestore Timestamp
+            if (typeof value?.toDate === 'function') return value.toDate();
+            // Date object
+            if (value instanceof Date) return value;
+            // ISO string
+            if (typeof value === 'string') return new Date(value);
+            // Firestore Timestamp-like object with seconds
+            if (typeof value === 'object' && typeof value.seconds === 'number') {
+              return new Date(value.seconds * 1000);
+            }
+            // Number (milliseconds)
+            if (typeof value === 'number') return new Date(value);
+          } catch (error) {
+            console.warn('Failed to convert timestamp:', value, error);
+          }
+          return value;
+        };
+        
         return {
           id: doc.id,
           ...data,
-          created_at: data.created_at?.toDate?.() || data.created_at,
-          timestamp: data.timestamp?.toDate?.() || data.timestamp
+          created_at: safeToDate(data.created_at),
+          timestamp: safeToDate(data.timestamp)
         } as unknown;
       }) as Notification[];
       

@@ -15,17 +15,21 @@ function AppContent() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
+    console.log('AppContent useEffect - isAuthenticated:', isAuthenticated, 'user:', user?.name, 'currentView:', currentView)
     // Check authentication state and URL parameters
     if (isAuthenticated && user) {
+      console.log('User is authenticated, setting view to app')
       setCurrentView('app')
     } else if (searchParams.get('login') === '1') {
+      console.log('Login parameter detected, setting view to login')
       setCurrentView('login')
     }
-  }, [searchParams, isAuthenticated, user])
+  }, [searchParams, isAuthenticated, user, currentView])
 
   const handleLogin = () => {
     // This will be called after successful authentication by UnifiedLogin
     // The authentication is handled by useAuth hook, so we just need to set the view
+    console.log('handleLogin called, setting view to app')
     setCurrentView('app')
   }
 
@@ -57,6 +61,7 @@ function AppContent() {
   }
 
   if (currentView === 'app' && isAuthenticated) {
+    console.log('Rendering app view for authenticated user:', user?.name)
     return (
       <>
         <NotificationsProvider>
@@ -66,6 +71,9 @@ function AppContent() {
       </>
     )
   }
+
+  // Debug: Show what's happening when not rendering app
+  console.log('Not rendering app - currentView:', currentView, 'isAuthenticated:', isAuthenticated)
 
   // Show landing page
   return (
