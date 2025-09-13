@@ -38,6 +38,7 @@ export function SimpleAddDeal() {
     country: "",
     signup_date: new Date().toISOString().split('T')[0],
     notes: "",
+    device_key: "",
     status: "active" as const,
     stage: "closed-won" as const,
     priority: "medium" as const,
@@ -184,6 +185,7 @@ export function SimpleAddDeal() {
         // Use Firebase deals service for proper integration
         const dealData = {
           ...formData,
+          device_key: formData.device_key,
           SalesAgentID: user?.id || '',
           ClosingAgentID: user?.id || '',
           created_by: user?.name || 'Unknown',
@@ -216,6 +218,7 @@ export function SimpleAddDeal() {
         country: "",
         signup_date: new Date().toISOString().split('T')[0],
         notes: "",
+        device_key: "",
         status: "active" as const,
         stage: "closed-won" as const,
         priority: "medium" as const,
@@ -635,6 +638,21 @@ export function SimpleAddDeal() {
               </div>
             </div>
             
+            {/* Additional Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="device_key">Device Key (optional)</Label>
+                <Input
+                  id="device_key"
+                  name="device_key"
+                  value={formData.device_key}
+                  onChange={handleChange}
+                  placeholder="Enter device key / license code"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
             <div className="mt-4 p-3 bg-blue-100 rounded-lg">
               <div className="text-sm font-medium text-blue-800">
                 Total Duration: {totalDurationMonths} months ({formData.duration_years} years, {formData.duration_months} months)

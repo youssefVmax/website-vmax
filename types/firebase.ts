@@ -43,6 +43,8 @@ export interface Deal {
   sales_team: string;
   product_type: string;
   service_tier: string;
+  // Optional device identifier for the service
+  device_key?: string;
   data_month: number;
   data_year: number;
   invoice_link?: string;
