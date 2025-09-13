@@ -1,60 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import UnifiedLogin from "@/components/unified-login"
 import FullPageDashboard from "@/components/full-page-dashboard"
-import { User } from "@/lib/auth"
+import { useAuth } from "@/hooks/useAuth"
 
 export default function CompleteApp() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { user, isAuthenticated, loading, logout } = useAuth()
   const router = useRouter()
 
-  useEffect(() => {
-    console.log('CompleteApp: Checking for saved user')
-    // Check if user is already logged in (from localStorage)
-    const savedUser = localStorage.getItem('vmax_user') // Use same key as useAuth
-    console.log('CompleteApp: Found saved user:', savedUser ? 'yes' : 'no')
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser)
-        console.log('CompleteApp: Parsed user:', parsedUser.name)
-        // Verify user data is valid
-        if (parsedUser.id && parsedUser.username && parsedUser.role) {
-          setUser(parsedUser)
-          console.log('CompleteApp: User set successfully')
-        } else {
-          console.log('CompleteApp: Invalid user data, removing')
-          localStorage.removeItem('vmax_user')
-        }
-      } catch (error) {
-        console.log('CompleteApp: Error parsing user, removing')
-        localStorage.removeItem('vmax_user')
-      }
-    }
-    setLoading(false)
-    console.log('CompleteApp: Loading complete, user:', user?.name || 'none')
-  }, [])
-
   const handleLogin = () => {
-    // Get user from useAuth's localStorage key
-    const savedUser = localStorage.getItem('vmax_user')
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser)
-        setUser(parsedUser)
-        console.log('CompleteApp: Login callback - user set:', parsedUser.name)
-      } catch (error) {
-        console.error('CompleteApp: Error parsing user in login callback')
-      }
-    }
+    // Login is handled by useAuth hook, this callback just triggers after success
+    console.log('CompleteApp: Login callback triggered')
   }
 
   const handleLogout = () => {
-    setUser(null)
-    localStorage.removeItem('current-user')
-    localStorage.removeItem('vmax_user')
+    logout()
     // Navigate to landing page
     router.push('/')
   }
@@ -70,11 +31,11 @@ export default function CompleteApp() {
     )
   }
 
-  if (!user) {
-    console.log('CompleteApp: No user found, showing login')
+  if (!isAuthenticated || !user) {
+    console.log('CompleteApp: No authenticated user, showing login')
     return <UnifiedLogin onLogin={handleLogin} />
   }
 
-  console.log('CompleteApp: User found, rendering dashboard for:', user.name)
+  console.log('CompleteApp: Authenticated user found, rendering dashboard for:', user.name)
   return <FullPageDashboard user={user} onLogout={handleLogout} />
 }
