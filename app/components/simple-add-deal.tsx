@@ -406,15 +406,15 @@ export function SimpleAddDeal() {
             </div>
           </div>
 
-          {/* Callback/Deal Type Selection - Enhanced Design */}
-          <div className="mb-8 p-8 border-2 border-dashed border-cyan-400 rounded-xl bg-gradient-to-br from-cyan-50/10 to-blue-50/10 backdrop-blur-sm shadow-xl">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-2">📋 Choose Action Type</h3>
-              <p className="text-sm text-gray-600">Select whether you want to create a completed deal or schedule a callback</p>
+          {/* Callback/Deal Type Selection - HIGHLY VISIBLE DESIGN */}
+          <div className="mb-8 p-10 border-4 border-solid border-cyan-500 rounded-2xl bg-gradient-to-br from-cyan-100/80 to-blue-100/80 shadow-2xl backdrop-blur-sm">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-black text-gray-900 mb-4 uppercase tracking-wide">📋 CHOOSE ACTION TYPE</h2>
+              <p className="text-lg font-semibold text-gray-700 bg-white/70 p-3 rounded-lg shadow-md">Select whether you want to create a completed deal or schedule a callback</p>
             </div>
             
-            <div className="flex items-center justify-center mb-6">
-              <div className="flex items-center space-x-4 bg-white rounded-full p-2 shadow-lg border border-cyan-200">
+            <div className="flex items-center justify-center mb-8">
+              <div className="flex items-center space-x-6 bg-white rounded-2xl p-6 shadow-2xl border-4 border-cyan-300">
                 <div className="relative">
                   <input
                     type="checkbox"
@@ -422,40 +422,41 @@ export function SimpleAddDeal() {
                     checked={formData.is_callback}
                     onChange={(e) => {
                       setFormData(prev => ({ ...prev, is_callback: e.target.checked }));
+                      console.log('Callback toggle changed:', e.target.checked);
                     }}
-                    className="w-8 h-8 text-cyan-500 bg-white border-3 border-cyan-400 rounded-lg focus:ring-cyan-500 focus:ring-4 cursor-pointer shadow-md"
+                    className="w-12 h-12 text-cyan-600 bg-white border-4 border-cyan-500 rounded-xl focus:ring-cyan-600 focus:ring-8 cursor-pointer shadow-xl transform hover:scale-110 transition-all duration-200"
                   />
                 </div>
-                <Label htmlFor="is_callback" className="text-lg font-bold text-gray-800 cursor-pointer select-none px-4 py-2 rounded-full transition-all duration-200 hover:bg-cyan-50">
-                  📞 Schedule Callback (Not a completed deal)
+                <Label htmlFor="is_callback" className="text-2xl font-black text-gray-900 cursor-pointer select-none px-6 py-4 rounded-2xl transition-all duration-300 hover:bg-cyan-100 hover:shadow-lg">
+                  📞 SCHEDULE CALLBACK
                 </Label>
               </div>
             </div>
             
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center mb-6">
               <Badge 
                 variant={formData.is_callback ? "default" : "secondary"} 
-                className={`px-6 py-2 text-base font-bold rounded-full transition-all duration-300 ${
+                className={`px-8 py-4 text-2xl font-black rounded-2xl transition-all duration-300 shadow-2xl ${
                   formData.is_callback 
-                    ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg transform scale-105" 
-                    : "bg-gradient-to-r from-gray-500 to-gray-600 text-white shadow-md"
+                    ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white transform scale-110 animate-pulse" 
+                    : "bg-gradient-to-r from-gray-600 to-gray-700 text-white"
                 }`}
               >
-                {formData.is_callback ? "🔔 Callback Mode" : "💰 Deal Mode"}
+                {formData.is_callback ? "🔔 CALLBACK MODE ACTIVE" : "💰 DEAL MODE ACTIVE"}
               </Badge>
             </div>
             
-            <div className={`p-6 rounded-xl transition-all duration-300 ${
+            <div className={`p-8 rounded-2xl transition-all duration-300 shadow-xl ${
               formData.is_callback 
-                ? "bg-gradient-to-r from-cyan-100 to-blue-100 border-2 border-cyan-300 shadow-lg" 
-                : "bg-gradient-to-r from-gray-100 to-gray-200 border-2 border-gray-300 shadow-md"
+                ? "bg-gradient-to-r from-cyan-200 to-blue-200 border-4 border-cyan-400" 
+                : "bg-gradient-to-r from-gray-200 to-gray-300 border-4 border-gray-400"
             }`}>
-              <p className={`text-center font-medium ${
-                formData.is_callback ? "text-cyan-800" : "text-gray-700"
+              <p className={`text-center text-xl font-bold ${
+                formData.is_callback ? "text-cyan-900" : "text-gray-800"
               }`}>
                 {formData.is_callback 
-                  ? "📞 You're scheduling a callback for future follow-up with this customer"
-                  : "💰 You're adding a completed deal with payment information"
+                  ? "📞 YOU ARE SCHEDULING A CALLBACK FOR FUTURE FOLLOW-UP"
+                  : "💰 YOU ARE ADDING A COMPLETED DEAL WITH PAYMENT"
                 }
               </p>
             </div>
