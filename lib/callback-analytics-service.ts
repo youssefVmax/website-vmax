@@ -37,10 +37,10 @@ export class CallbackAnalyticsService {
   
   async getCallbackKPIs(filters: CallbackFilters = {}): Promise<CallbackKPIs> {
     try {
-      // Fetch all callbacks
-      let callbacks = await callbacksService.getCallbacks();
+      // Fetch callbacks with role-based filtering
+      let callbacks = await callbacksService.getCallbacks(filters.userRole, filters.userId);
       
-      // Apply filters
+      // Apply additional filters
       callbacks = this.applyFilters(callbacks, filters);
       
       // Calculate basic metrics
@@ -273,14 +273,16 @@ export class CallbackAnalyticsService {
   }
   
   // Real-time callback metrics for live dashboard
-  async getLiveCallbackMetrics(): Promise<{
+  async getLiveCallbackMetrics(userRole?: string, userId?: string, userName?: string): Promise<{
     pendingCount: number;
     todayCallbacks: number;
     todayConversions: number;
     averageResponseTimeToday: number;
   }> {
     try {
-      const callbacks = await callbacksService.getCallbacks();
+      console.log('Fetching callbacks for analytics:', { userRole, userId, userName });
+      const callbacks = await callbacksService.getCallbacks(userRole, userId, userName);
+      console.log('Callbacks fetched:', callbacks.length, callbacks);
       const today = new Date().toISOString().split('T')[0];
       
       const todayCallbacks = callbacks.filter((c: any) => 

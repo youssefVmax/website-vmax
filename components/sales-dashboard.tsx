@@ -49,18 +49,29 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   // Use live data with real-time updates via SSE
   const { sales, loading, error, refresh } = useFirebaseSalesData(userRole, user?.id, user?.name);
 
-  // Load callback metrics for quick overview
+  // Load callback metrics for quick overview with real-time updates
   useEffect(() => {
+    if (!user) return;
+    
     const loadCallbackMetrics = async () => {
       try {
-        const metrics = await callbackAnalyticsService.getLiveCallbackMetrics();
+        console.log('Loading callback metrics for:', { userRole, userId: user.id, userName: user.name });
+        const metrics = await callbackAnalyticsService.getLiveCallbackMetrics(userRole, user.id, user.name);
+        console.log('Callback metrics loaded:', metrics);
         setCallbackMetrics(metrics);
       } catch (err) {
         console.error('Failed to load callback metrics:', err);
       }
     };
+
+    // Initial load
     loadCallbackMetrics();
-  }, []);
+
+    // Set up real-time updates every 30 seconds
+    const interval = setInterval(loadCallbackMetrics, 30000);
+
+    return () => clearInterval(interval);
+  }, [user, userRole]);
 
   // Normalize to DealData for charts/KPIs
   const salesData: DealData[] = (sales || []).map((row: any) => ({
@@ -312,7 +323,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                   {callbackMetrics?.pendingCount || '0'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {callbackMetrics?.todayCallbacks || 0} today
+                  {callbackMetrics?.todayCallbacks || 0} created today
                 </p>
               </div>
               <Phone className="h-8 w-8 text-orange-600" />
