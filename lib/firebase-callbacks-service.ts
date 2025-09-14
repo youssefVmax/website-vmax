@@ -134,6 +134,29 @@ export const callbacksService = {
         updated_at: serverTimestamp()
       };
       const docRef = await addDoc(collection(db, COLLECTIONS.CALLBACKS || 'callbacks'), callbackData);
+      
+      // Create a manager-only notification with callback details
+      try {
+        await notificationService.addNotification({
+          title: 'New Callback Scheduled',
+          message: `Callback for ${callback.customer_name} (${callback.phone_number}) on ${callback.first_call_date} at ${callback.first_call_time}. Agent: ${callback.sales_agent}.`,
+          type: 'message',
+          priority: 'medium',
+          from: callback.created_by || callback.sales_agent,
+          fromAvatar: undefined,
+          to: ['manager'],
+          isRead: false,
+          actionRequired: true,
+          dealId: undefined,
+          salesAgent: callback.sales_agent,
+          salesAgentId: callback.SalesAgentID,
+          closingAgent: undefined,
+          closingAgentId: undefined,
+          isManagerMessage: true
+        } as any);
+      } catch (notifyErr) {
+        console.warn('Failed to create manager notification for callback:', notifyErr);
+      }
       return docRef.id;
     } catch (error) {
       console.error('Error adding callback:', error);

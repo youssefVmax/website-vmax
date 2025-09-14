@@ -222,20 +222,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
     );
   }
 
-  if (!analytics || analytics.totalDeals === 0) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center">
-          <p className="text-gray-600 mb-4">No deals found. Start by adding your first deal!</p>
-          <div className="text-sm text-gray-500">
-            <p>• Total Sales: $0.00</p>
-            <p>• Total Deals: 0</p>
-            <p>• Average Deal Size: $0.00</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const hasData = !!analytics && analytics.totalDeals > 0;
 
   return (
     <div className="space-y-6">
@@ -246,6 +233,20 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
         </TabsList>
         
         <TabsContent value="sales" className="space-y-6">
+      {/* When no sales data, show an empty state but keep tabs visible */}
+      {!hasData ? (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <p className="text-gray-600 mb-4">No deals found. Start by adding your first deal!</p>
+            <div className="text-sm text-gray-500">
+              <p>• Total Sales: $0.00</p>
+              <p>• Total Deals: 0</p>
+              <p>• Average Deal Size: $0.00</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       {/* Real-time Status Indicator */}
       <div className="flex items-center justify-between">
         <div>
@@ -564,6 +565,8 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
             </div>
           </CardContent>
         </Card>
+      )}
+        </>
       )}
         </TabsContent>
         
