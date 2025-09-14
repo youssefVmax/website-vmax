@@ -484,8 +484,8 @@ export const notificationService = {
         notifications = notifications.filter(notification => {
           const to = (notification.to || []) as any[]
           
-          // Managers should see all deal notifications
-          if (userRole === 'manager' && notification.type === 'deal') {
+          // Managers should see all deal and callback notifications
+          if (userRole === 'manager' && (notification.type === 'deal' || notification.type === 'callback')) {
             return true;
           }
           

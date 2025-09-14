@@ -187,32 +187,66 @@
   backdrop-filter: blur(4px) !important;
 }
 
-/* Animation improvements */
-@keyframes swal2-show {
+/* Top positioning and animation improvements */
+.swal2-container.swal2-top {
+  align-items: flex-start !important;
+  padding-top: 2rem !important;
+}
+
+.custom-swal-popup {
+  margin-top: 0 !important;
+  margin-bottom: auto !important;
+}
+
+/* Enhanced animations for top positioning */
+@keyframes swal2-show-top {
   0% {
-    transform: scale(0.7) translateY(20px);
+    transform: translateY(-100px) scale(0.8);
     opacity: 0;
   }
-  45% {
-    transform: scale(1.05) translateY(-5px);
-    opacity: 1;
-  }
-  80% {
-    transform: scale(0.95) translateY(0);
+  50% {
+    transform: translateY(10px) scale(1.02);
+    opacity: 0.8;
   }
   100% {
-    transform: scale(1) translateY(0);
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes swal2-hide-top {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+@keyframes swal2-show {
+  0% {
+    transform: translateY(-100px) scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: translateY(10px) scale(1.02);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
 
 @keyframes swal2-hide {
   0% {
-    transform: scale(1) translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
   100% {
-    transform: scale(0.5) translateY(20px);
+    transform: translateY(-100px) scale(0.8);
     opacity: 0;
   }
 }

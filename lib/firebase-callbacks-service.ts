@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { COLLECTIONS } from '../types/firebase';
 import { notificationService } from './firebase-services';
 
@@ -135,24 +135,30 @@ export const callbacksService = {
       };
       const docRef = await addDoc(collection(db, COLLECTIONS.CALLBACKS || 'callbacks'), callbackData);
       
-      // Create a manager-only notification with callback details
+      // Enhanced manager notification with comprehensive callback details
       try {
         await notificationService.addNotification({
-          title: 'New Callback Scheduled',
-          message: `Callback for ${callback.customer_name} (${callback.phone_number}) on ${callback.first_call_date} at ${callback.first_call_time}. Agent: ${callback.sales_agent}.`,
-          type: 'message',
+          title: '📞 New Callback Scheduled',
+          message: `Agent ${callback.created_by || callback.sales_agent} scheduled a callback:\n• Customer: ${callback.customer_name}\n• Phone: ${callback.phone_number}\n• Email: ${callback.email || 'N/A'}\n• Date: ${callback.first_call_date}\n• Time: ${callback.first_call_time}\n• Reason: ${callback.callback_reason || 'General inquiry'}\n• Agent: ${callback.sales_agent}\n• Team: ${callback.sales_team || 'N/A'}`,
+          type: 'callback',
           priority: 'medium',
           from: callback.created_by || callback.sales_agent,
           fromAvatar: undefined,
           to: ['manager'],
           isRead: false,
           actionRequired: true,
-          dealId: undefined,
+          callbackId: docRef.id,
+          customerName: callback.customer_name,
+          customerPhone: callback.phone_number,
+          customerEmail: callback.email,
+          scheduledDate: callback.first_call_date,
+          scheduledTime: callback.first_call_time,
+          callbackReason: callback.callback_reason,
           salesAgent: callback.sales_agent,
           salesAgentId: callback.SalesAgentID,
-          closingAgent: undefined,
-          closingAgentId: undefined,
-          isManagerMessage: true
+          teamName: callback.sales_team,
+          isManagerMessage: true,
+          timestamp: serverTimestamp()
         } as any);
       } catch (notifyErr) {
         console.warn('Failed to create manager notification for callback:', notifyErr);
@@ -172,6 +178,36 @@ export const callbacksService = {
         ...updates,
         updated_at: serverTimestamp()
       });
+
+      // Send notification to managers for important status changes
+      if (updates.status && ['completed', 'cancelled'].includes(updates.status)) {
+        try {
+          const callbackDoc = await getDoc(callbackRef);
+          if (callbackDoc.exists()) {
+            const callbackData = callbackDoc.data() as Callback;
+            const statusEmoji = updates.status === 'completed' ? '✅' : '❌';
+            
+            await notificationService.addNotification({
+              title: `${statusEmoji} Callback ${updates.status === 'completed' ? 'Completed' : 'Cancelled'}`,
+              message: `Agent ${callbackData.sales_agent} ${updates.status} callback for ${callbackData.customer_name}:\n• Phone: ${callbackData.phone_number}\n• Original Date: ${callbackData.first_call_date}\n• Agent: ${callbackData.sales_agent}\n• Team: ${callbackData.sales_team || 'N/A'}`,
+              type: 'callback',
+              priority: updates.status === 'completed' ? 'low' : 'medium',
+              from: callbackData.sales_agent,
+              to: ['manager'],
+              isRead: false,
+              actionRequired: false,
+              callbackId: id,
+              customerName: callbackData.customer_name,
+              salesAgent: callbackData.sales_agent,
+              salesAgentId: callbackData.SalesAgentID,
+              callbackStatus: updates.status,
+              timestamp: serverTimestamp()
+            } as any);
+          }
+        } catch (notifyErr) {
+          console.warn('Failed to create status update notification:', notifyErr);
+        }
+      }
     } catch (error) {
       console.error('Error updating callback:', error);
       throw error;

@@ -96,11 +96,12 @@ const getCustomSwal = async () => {
     buttonsStyling: false,
     background: 'transparent',
     backdrop: 'rgba(0, 0, 0, 0.8)',
+    position: 'top',
     showClass: {
-      popup: 'animate__animated animate__fadeInUp animate__faster'
+      popup: 'animate__animated animate__slideInDown animate__faster'
     },
     hideClass: {
-      popup: 'animate__animated animate__fadeOutDown animate__faster'
+      popup: 'animate__animated animate__slideOutUp animate__faster'
     }
   });
 };
@@ -116,7 +117,7 @@ export const showSuccess = async (title: string, message?: string) => {
     timerProgressBar: true,
     showConfirmButton: false,
     toast: false,
-    position: 'center'
+    position: 'top'
   });
 };
 
@@ -128,7 +129,8 @@ export const showError = async (title: string, message?: string) => {
     title,
     text: message,
     confirmButtonText: 'OK',
-    showConfirmButton: true
+    showConfirmButton: true,
+    position: 'top'
   });
 };
 
@@ -141,7 +143,8 @@ export const showWarning = async (title: string, message?: string) => {
     text: message,
     showCancelButton: true,
     confirmButtonText: 'Continue',
-    cancelButtonText: 'Cancel'
+    cancelButtonText: 'Cancel',
+    position: 'top'
   });
 };
 
@@ -154,7 +157,8 @@ export const showInfo = async (title: string, message?: string) => {
     text: message,
     confirmButtonText: 'Got it',
     timer: 5000,
-    timerProgressBar: true
+    timerProgressBar: true,
+    position: 'top'
   });
 };
 
@@ -168,7 +172,8 @@ export const showConfirm = async (title: string, message?: string, confirmText =
     showCancelButton: true,
     confirmButtonText: confirmText,
     cancelButtonText: cancelText,
-    reverseButtons: true
+    reverseButtons: true,
+    position: 'top'
   });
 };
 
@@ -181,6 +186,7 @@ export const showLoading = async (title: string, message?: string) => {
     allowOutsideClick: false,
     allowEscapeKey: false,
     showConfirmButton: false,
+    position: 'top',
     didOpen: () => {
       const swal = customSwal;
       if (swal.showLoading) {
@@ -284,7 +290,8 @@ export const showManagerNotification = async (salesmanName: string, dealAmount: 
   const customSwal = await getCustomSwal();
   return customSwal.fire({
     title: `New deal: $${dealAmount.toLocaleString()} by ${salesmanName}`,
-    icon: 'success'
+    icon: 'success',
+    position: 'top'
   });
 };
 

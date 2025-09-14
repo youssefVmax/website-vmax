@@ -593,7 +593,19 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
                 </div>
               </CardHeader>
               <CardContent className="pb-4 pt-0">
-                <p className="text-sm">{notification.message}</p>
+                <div className="text-sm">
+                  {notification.message.includes('\n') ? (
+                    <div className="space-y-1">
+                      {notification.message.split('\n').map((line, idx) => (
+                        <div key={idx} className={line.startsWith('•') ? 'ml-3 text-muted-foreground' : line.includes(':') && line.includes('Agent') ? 'font-medium' : ''}>
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>{notification.message}</p>
+                  )}
+                </div>
                 
                 {notification.dealId && (
                   <div className="mt-3 p-3 bg-muted/30 rounded-md">

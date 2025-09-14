@@ -50,7 +50,19 @@ export default function NotificationMenu() {
                   <Badge className="uppercase text-[10px]" variant={n.priority === 'high' ? 'destructive' : 'secondary'}>{n.priority}</Badge>
                 </div>
                 <div className="text-xs text-muted-foreground">{new Date(n.timestamp).toLocaleString()}</div>
-                <p className="text-sm leading-snug">{n.message}</p>
+                <div className="text-sm leading-snug">
+                  {n.message.includes('\n') ? (
+                    <div className="space-y-1">
+                      {n.message.split('\n').map((line, idx) => (
+                        <div key={idx} className={line.startsWith('•') ? 'ml-2 text-muted-foreground' : ''}>
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>{n.message}</p>
+                  )}
+                </div>
               </div>
             </DropdownMenuItem>
           ))}

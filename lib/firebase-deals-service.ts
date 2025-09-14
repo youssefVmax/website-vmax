@@ -253,20 +253,27 @@ export class FirebaseDealsService {
           isRead: false,
           actionRequired: true
         }] : []),
-        // Notification for all managers
+        // Enhanced notification for all managers with detailed agent information
         {
-          title: 'New Deal Created',
-          message: `${processedDeal.created_by} created a new deal for ${processedDeal.customer_name} worth $${processedDeal.amount_paid}`,
+          title: '💰 New Deal Created',
+          message: `Agent ${processedDeal.created_by} created a new deal:\n• Customer: ${processedDeal.customer_name}\n• Value: $${processedDeal.amount_paid?.toLocaleString()}\n• Service: ${processedDeal.type_service || 'N/A'}\n• Stage: ${processedDeal.stage}\n• Sales Agent: ${processedDeal.sales_agent}\n• Team: ${processedDeal.sales_team || 'N/A'}`,
           type: 'deal' as const,
-          priority: 'medium' as const,
+          priority: processedDeal.amount_paid > 10000 ? 'high' as const : 'medium' as const,
           from: processedDeal.created_by || 'System',
           to: ['manager'], // This will be expanded to all managers in notification service
           dealId: docRef.id,
           dealName: processedDeal.customer_name,
           dealValue: processedDeal.amount_paid,
           dealStage: processedDeal.stage,
+          salesAgent: processedDeal.sales_agent,
+          salesAgentId: processedDeal.SalesAgentID,
+          closingAgent: processedDeal.closing_agent,
+          closingAgentId: processedDeal.ClosingAgentID,
+          serviceType: processedDeal.type_service,
+          teamName: processedDeal.sales_team,
           isRead: false,
-          actionRequired: false
+          actionRequired: false,
+          timestamp: serverTimestamp()
         }
       ];
 
