@@ -59,34 +59,67 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
     setIsLoading(targetsLoading)
   }, [targetsLoading])
 
-  // Filter and process targets based on user role and sales data
+  // Load target progress from Firebase
+  useEffect(() => {
+    const loadTargetProgress = async () => {
+      if (!user?.id) return;
+      
+      try {
+        setProgressLoading(true);
+        console.log('🎯 Loading target progress for user:', user.id, 'role:', userRole);
+        const { dealsService } = await import('@/lib/firebase-deals-service');
+        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
+        console.log('🎯 Target progress loaded:', progress);
+        setTargetProgress(progress);
+      } catch (error) {
+        console.error('Failed to load target progress:', error);
+      } finally {
+        setProgressLoading(false);
+      }
+    };
+
+    loadTargetProgress();
+  }, [user?.id, userRole])
+
+  // Refresh target progress periodically to catch updates
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!user?.id) return;
+      
+      try {
+        console.log('🔄 Refreshing target progress...');
+        const { dealsService } = await import('@/lib/firebase-deals-service');
+        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
+        console.log('🔄 Target progress refreshed:', progress);
+        setTargetProgress(progress);
+      } catch (error) {
+        console.error('Failed to refresh target progress:', error);
+      }
+    }, 15000); // Refresh every 15 seconds
+
+    return () => clearInterval(interval);
+  }, [user?.id, userRole])
+
+  // Filter and process targets based on user role and Firebase target progress data
   const processedTargets: SalesTarget[] = useMemo(() => {
     const targetsToProcess = userRole === 'salesman' 
       ? firebaseTargets.filter(t => t.agentName?.toLowerCase() === user.name.toLowerCase() || t.agentId === user.id)
       : firebaseTargets;
 
-    if (!sales) {
-      return targetsToProcess.map(t => ({ 
-        id: t.id || '',
-        agentId: t.agentId || '',
-        agentName: t.agentName || 'Unknown',
-        team: t.team || 'Unknown',
-        monthlyTarget: t.monthlyTarget,
-        dealsTarget: t.dealsTarget,
-        period: t.period,
-        currentSales: 0, 
-        currentDeals: 0, 
-        status: 'behind' as const
-      }));
-    }
-
     return targetsToProcess.map(target => {
-      const agentSales = sales.filter(sale => 
-        (sale as any).sales_agent?.toLowerCase() === target.agentName?.toLowerCase() ||
-        (sale as any).closing_agent?.toLowerCase() === target.agentName?.toLowerCase()
-      )
-      const currentSales = agentSales.reduce((sum, sale) => sum + ((sale as any).amount_paid || (sale as any).amount || 0), 0);
-      const currentDeals = agentSales.length;
+      // Find matching progress data from Firebase
+      const progressData = targetProgress.find(p => 
+        p.agentId === target.agentId && p.period === target.period
+      );
+      
+      console.log(`🎯 Processing target for ${target.agentName} (${target.agentId}) - ${target.period}:`, {
+        target,
+        progressData,
+        targetProgressArray: targetProgress
+      });
+      
+      const currentSales = progressData?.currentSales || 0;
+      const currentDeals = progressData?.currentDeals || 0;
       
       const salesProgress = target.monthlyTarget > 0 ? (currentSales / target.monthlyTarget) * 100 : 0;
       const dealsProgress = target.dealsTarget > 0 ? (currentDeals / target.dealsTarget) * 100 : 0;
@@ -98,7 +131,7 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
         status = 'behind';
       }
 
-      return {
+      const processedTarget = {
         id: target.id || '',
         agentId: target.agentId || '',
         agentName: target.agentName || 'Unknown',
@@ -110,8 +143,11 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
         period: target.period,
         status
       } as SalesTarget;
+
+      console.log(`🎯 Processed target result:`, processedTarget);
+      return processedTarget;
     });
-  }, [sales, firebaseTargets, userRole, user.name, user.id]);
+  }, [firebaseTargets, targetProgress, userRole, user.name, user.id]);
 
   // Calculate statistics from processed targets
   const totalTargets = processedTargets.length
@@ -136,7 +172,7 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
 
   // Load agents from Firebase users (preferred source). Fallback to derived list if empty.
   const [agentOptions, setAgentOptions] = useState<{ id: string; name: string; team: string }[]>([])
-  const [loadingAgents, setLoadingAgents] = useState<boolean>(false)
+  const [loadingAgents, setLoadingAgents] = useState(false)
 
   useEffect(() => {
     let mounted = true
