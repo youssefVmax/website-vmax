@@ -564,6 +564,156 @@ export class FirebaseDealsService {
       .slice(-12); // Last 12 months
   }
 
+  // Retroactively connect all existing deals to targets
+  async syncExistingDealsWithTargets(): Promise<{ syncedCount: number; skippedCount: number; totalDeals: number }> {
+    try {
+      console.log('🔄 Starting sync of existing deals with targets...');
+      
+      // Get all deals
+      const allDeals = await this.getAllDeals();
+      console.log(`Found ${allDeals.length} existing deals to sync`);
+      
+      // Import target progress service
+      const { targetProgressService } = await import('./firebase-target-progress-service');
+      
+      let syncedCount = 0;
+      let skippedCount = 0;
+      
+      for (const deal of allDeals) {
+        try {
+          if (!deal.SalesAgentID || !deal.amount_paid || !deal.data_month || !deal.data_year) {
+            console.log(`⚠️ Skipping deal ${deal.id} - missing required fields`);
+            skippedCount++;
+            continue;
+          }
+          
+          const period = `${this.getMonthName(deal.data_month)} ${deal.data_year}`;
+          
+          // Check if this deal is already in target progress
+          const existingProgress = await targetProgressService.getAgentTargetProgress(deal.SalesAgentID, period);
+          const dealAlreadyTracked = existingProgress.some(progress => 
+            progress.dealHistory?.some(historyItem => historyItem.dealId === deal.DealID)
+          );
+          
+          if (dealAlreadyTracked) {
+            console.log(`✅ Deal ${deal.DealID} already tracked in targets`);
+            skippedCount++;
+            continue;
+          }
+          
+          // Update target progress for this deal
+          await this.updateTargetProgress(
+            deal.SalesAgentID,
+            deal.amount_paid,
+            deal.data_month,
+            deal.data_year,
+            deal.DealID,
+            deal.customer_name
+          );
+          
+          syncedCount++;
+          console.log(`✅ Synced deal ${deal.DealID} (${deal.customer_name}) - $${deal.amount_paid}`);
+          
+          // Add small delay to avoid overwhelming Firebase
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+        } catch (error) {
+          console.error(`❌ Error syncing deal ${deal.id}:`, error);
+          skippedCount++;
+        }
+      }
+      
+      console.log(`🎉 Sync completed! Synced: ${syncedCount}, Skipped: ${skippedCount}`);
+      
+      return { syncedCount, skippedCount, totalDeals: allDeals.length };
+    } catch (error) {
+      console.error('❌ Error syncing existing deals with targets:', error);
+      throw error;
+    }
+  }
+
+  // Get target progress for managers and salesmen
+  async getTargetProgressForUser(userId: string, userRole: string): Promise<any[]> {
+    try {
+      const { targetProgressService } = await import('./firebase-target-progress-service');
+      
+      if (userRole === 'manager') {
+        // Managers see all target progress
+        return await targetProgressService.getAllTargetProgress();
+      } else {
+        // Salesmen see only their own progress
+        return await targetProgressService.getAgentTargetProgress(userId);
+      }
+    } catch (error) {
+      console.error('Error fetching target progress for user:', error);
+      return [];
+    }
+  }
+
+  // Get deals with target progress information
+  async getDealsWithTargetProgress(userId?: string, userRole?: string): Promise<any[]> {
+    try {
+      let deals: Deal[] = [];
+      
+      if (userRole === 'manager') {
+        deals = await this.getAllDeals();
+      } else if (userId) {
+        deals = await this.getDealsByAgent(userId);
+      }
+      
+      // Get target progress for each deal
+      const { targetProgressService } = await import('./firebase-target-progress-service');
+      const dealsWithProgress = await Promise.all(
+        deals.map(async (deal) => {
+          if (!deal.SalesAgentID || !deal.data_month || !deal.data_year) {
+            return { ...deal, targetProgress: null };
+          }
+          
+          const period = `${this.getMonthName(deal.data_month)} ${deal.data_year}`;
+          const progress = await targetProgressService.getAgentTargetProgress(deal.SalesAgentID, period);
+          
+          return {
+            ...deal,
+            targetProgress: progress.length > 0 ? progress[0] : null,
+            period
+          };
+        })
+      );
+      
+      return dealsWithProgress;
+    } catch (error) {
+      console.error('Error fetching deals with target progress:', error);
+      return [];
+    }
+  }
+
+  // Auto-sync existing deals when app starts (called once per session)
+  async autoSyncOnStartup(): Promise<void> {
+    try {
+      // Check if we've already synced in this session
+      const sessionKey = 'vmax_deals_synced_' + new Date().toDateString();
+      if (typeof window !== 'undefined' && localStorage.getItem(sessionKey)) {
+        console.log('📋 Deals already synced today');
+        return;
+      }
+
+      console.log('🚀 Auto-syncing existing deals with targets...');
+      const result = await this.syncExistingDealsWithTargets();
+      
+      if (result.syncedCount > 0) {
+        console.log(`✅ Auto-sync completed: ${result.syncedCount} deals synced, ${result.skippedCount} skipped`);
+      }
+
+      // Mark as synced for this session
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(sessionKey, 'true');
+      }
+    } catch (error) {
+      console.error('❌ Auto-sync failed:', error);
+      // Don't throw error to avoid breaking app startup
+    }
+  }
+
   // Real-time listener for deals
   onDealsChange(callback: (deals: Deal[]) => void, agentId?: string, team?: string) {
     let q = query(collection(db, this.COLLECTION), orderBy('created_at', 'desc'));

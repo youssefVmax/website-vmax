@@ -38,6 +38,8 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
   const { sales } = useFirebaseSalesData(userRole, user.id, user.name)
   const { targets: firebaseTargets, loading: targetsLoading, addTarget, updateTarget } = useFirebaseTargets(user.id, userRole)
   const [isLoading, setIsLoading] = useState(true)
+  const [targetProgress, setTargetProgress] = useState<any[]>([])
+  const [progressLoading, setProgressLoading] = useState(true)
 
   const [newTarget, setNewTarget] = useState({
     agentId: '',
@@ -60,15 +62,15 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
   // Filter and process targets based on user role and sales data
   const processedTargets: SalesTarget[] = useMemo(() => {
     const targetsToProcess = userRole === 'salesman' 
-      ? firebaseTargets.filter(t => t.agentName.toLowerCase() === user.name.toLowerCase() || t.agentId === user.id)
+      ? firebaseTargets.filter(t => t.agentName?.toLowerCase() === user.name.toLowerCase() || t.agentId === user.id)
       : firebaseTargets;
 
     if (!sales) {
       return targetsToProcess.map(t => ({ 
         id: t.id || '',
-        agentId: t.agentId,
-        agentName: t.agentName,
-        team: t.team,
+        agentId: t.agentId || '',
+        agentName: t.agentName || 'Unknown',
+        team: t.team || 'Unknown',
         monthlyTarget: t.monthlyTarget,
         dealsTarget: t.dealsTarget,
         period: t.period,
@@ -80,8 +82,8 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
 
     return targetsToProcess.map(target => {
       const agentSales = sales.filter(sale => 
-        (sale as any).sales_agent?.toLowerCase() === target.agentName.toLowerCase() ||
-        (sale as any).closing_agent?.toLowerCase() === target.agentName.toLowerCase()
+        (sale as any).sales_agent?.toLowerCase() === target.agentName?.toLowerCase() ||
+        (sale as any).closing_agent?.toLowerCase() === target.agentName?.toLowerCase()
       )
       const currentSales = agentSales.reduce((sum, sale) => sum + ((sale as any).amount_paid || (sale as any).amount || 0), 0);
       const currentDeals = agentSales.length;
@@ -97,9 +99,9 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
       }
 
       return {
-        id: target.id,
-        agentId: target.agentId,
-        agentName: target.agentName,
+        id: target.id || '',
+        agentId: target.agentId || '',
+        agentName: target.agentName || 'Unknown',
         team: target.team || 'Unknown',
         monthlyTarget: target.monthlyTarget,
         currentSales,
@@ -142,8 +144,8 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
       try {
         setLoadingAgents(true)
         const { userService } = await import('@/lib/firebase-user-service')
-        const allUsers = await userService.getUsers()
-        const firebaseAgents = allUsers.filter((user: any) => user.role === 'salesman' || user.role === 'manager')
+        const agents = await userService.getAllUsers();
+        const firebaseAgents = agents.filter((user: any) => user.role === 'salesman' || user.role === 'manager')
         if (mounted) {
           const mapped = firebaseAgents.map((u: any) => ({
             id: u.id,
@@ -190,21 +192,24 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
     if (!selectedAgent) return
 
     const payload = {
+      type: 'individual' as const,
       agentId: newTarget.agentId,
       agentName: selectedAgent.name,
       team: selectedAgent.team,
-      monthlyTarget: parseInt(newTarget.monthlyTarget),
+      monthlyTarget: parseFloat(newTarget.monthlyTarget),
       dealsTarget: parseInt(newTarget.dealsTarget),
       period: newTarget.period,
-    }
+      managerId: user.id,
+      managerName: user.name
+    };
 
     try {
-      const createdTarget = await addTarget(payload)
+      await addTarget(payload)
       setNewTarget({ agentId: '', agentName: '', team: '', monthlyTarget: '', dealsTarget: '', period: 'January 2025' })
       
       toast({
         title: "Target Created",
-        description: `Sales target created for ${createdTarget.agentName}.`
+        description: `Sales target created for ${selectedAgent.name}.`
       })
       document.getElementById('close-create-dialog')?.click()
     } catch (error) {

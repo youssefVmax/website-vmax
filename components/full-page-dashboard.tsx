@@ -76,6 +76,23 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     return () => window.removeEventListener('setActiveTab', handleTabChange as EventListener)
   }, [])
 
+  // Auto-sync deals with targets on app startup
+  useEffect(() => {
+    const initializeTargetSystem = async () => {
+      try {
+        const { dealsService } = await import('@/lib/firebase-deals-service')
+        await dealsService.autoSyncOnStartup()
+      } catch (error) {
+        console.error('Failed to initialize target system:', error)
+      }
+    }
+
+    // Only run once when component mounts and user is available
+    if (user?.id) {
+      initializeTargetSystem()
+    }
+  }, [user?.id])
+
   // Apply theme to document
   useEffect(() => {
     if (isDark) {
