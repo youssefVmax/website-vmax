@@ -53,6 +53,8 @@ import UserManagement from "@/components/user-management"
 import { AnimatedMetricCard } from "@/components/animated-metrics"
 import AccessDenied from "@/components/access-denied"
 import { CallbacksManagement } from "@/components/callbacks-management"
+import ManageCallbacksPage from "@/components/manage-callback"
+import NewCallbackPage from "@/components/new-callback"
 
 interface FullPageDashboardProps {
   user: any;
@@ -168,11 +170,8 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     if (user.role === 'manager') {
       return [
         ...baseItems,
-        // In-app callbacks tab (legacy management view inside dashboard)
-        { id: "callbacks", icon: Phone, label: "Callbacks" } as const,
-        // Direct links to new callback pages
-        { id: "callbacks-manage", icon: Phone, label: "Manage Callbacks", href: "/callbacks/manage" } as const,
-        { id: "callbacks-new", icon: Plus, label: "New Callback", href: "/callbacks/new" } as const,
+        { id: "callbacks-manage", icon: Phone, label: "Manage Callbacks" } as const,
+        { id: "callbacks-new", icon: Plus, label: "New Callback" } as const,
         { id: "user-management", icon: Users, label: "User Management" } as const,
         { id: "team-targets", icon: Target, label: "Team Targets" } as const,
         { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
@@ -182,8 +181,8 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     } else if (user.role === 'salesman') {
       return [
         ...baseItems,
-        { id: "callbacks", icon: Phone, label: "My Callbacks" } as const,
-        { id: "callbacks-new", icon: Plus, label: "New Callback", href: "/callbacks/new" } as const,
+        { id: "callbacks-manage", icon: Phone, label: "My Callbacks" } as const,
+        { id: "callbacks-new", icon: Plus, label: "New Callback" } as const,
         { id: "my-deals", icon: FileText, label: "My Deals Table" } as const,
         { id: "add-deal", icon: Plus, label: "Add Deal" } as const,
         { id: "my-targets", icon: Target, label: "My Targets" } as const,
@@ -471,8 +470,10 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "User Management"
     case "competition":
       return "Sales Competition"
-    case "callbacks":
-      return "Callbacks Management"
+    case "callbacks-manage":
+      return "Manage Callbacks"
+    case "callbacks-new":
+      return "New Callback"
     case "settings":
       return "Settings"
     default:
@@ -524,8 +525,10 @@ function PageContent({
       return <UserManagement userRole={user.role} user={user} />
     case "competition":
       return <CompetitionDashboard />
-    case "callbacks":
-      return <CallbacksManagement userRole={user.role} user={user} />
+    case "callbacks-manage":
+      return <ManageCallbacksPage />
+    case "callbacks-new":
+      return <NewCallbackPage />
     case "settings":
       return <ProfileSettings user={user} />
     default:
