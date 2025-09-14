@@ -12,11 +12,20 @@ const nextConfig = {
   experimental: {
     optimizeCss: false,
   },
-  webpack: (config, { isServer }) => {
+  // Force development mode to see unminified errors
+  productionBrowserSourceMaps: true,
+  webpack: (config, { isServer, dev }) => {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         crypto: false,
+      };
+    }
+    // Disable minification in development
+    if (dev) {
+      config.optimization = {
+        ...config.optimization,
+        minimize: false,
       };
     }
     return config;
