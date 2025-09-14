@@ -516,7 +516,11 @@ function PageContent({
 }
 
 function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
-  const { sales = [], metrics, loading, error } = useFirebaseSalesData(user.role, user.id, user.name)
+  // Prefer more specific identifiers to maximize match with stored deals
+  const preferredUserId = user?.SalesAgentID || user?.id
+  const preferredUserName = user?.username || user?.name
+  const { sales = [], metrics, loading, error } = useFirebaseSalesData(user.role, preferredUserId, preferredUserName)
+
   const [totalAgents, setTotalAgents] = useState(0)
 
   useEffect(() => {

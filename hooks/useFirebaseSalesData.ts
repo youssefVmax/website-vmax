@@ -43,10 +43,12 @@ export function useFirebaseSalesData(userRole: string, userId?: string, userName
     try {
       setLoading(true);
       setError(null);
-      
+      // Debug: trace identifiers used for fetching sales
+      console.debug('[useFirebaseSalesData] fetchSalesData params:', { userRole, userId, userName });
       const sales = await salesService.getSales(userRole, userId, userName);
       setSalesData(sales);
       setMetrics(calculateMetrics(sales));
+      console.debug('[useFirebaseSalesData] fetched sales count:', sales?.length ?? 0);
     } catch (err) {
       console.error('Error fetching sales data:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch sales data'));
@@ -64,6 +66,9 @@ export function useFirebaseSalesData(userRole: string, userId?: string, userName
         setSalesData(sales);
         setMetrics(calculateMetrics(sales));
         setLoading(false);
+        if ((sales?.length ?? 0) === 0) {
+          console.warn('[useFirebaseSalesData] real-time listener: no sales matched for', { userRole, userId, userName });
+        }
       },
       userRole,
       userId,
