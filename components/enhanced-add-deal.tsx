@@ -26,6 +26,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState<UserType[]>([])
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     // Customer Information
     customer_name: '',
@@ -137,36 +138,80 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     }
   }
 
-  const validateForm = (): { isValid: boolean; message?: string } => {
-    // Required fields
-    const requiredFields = [
-      { field: 'customer_name', label: 'Customer Name' },
-      { field: 'email', label: 'Email' },
-      { field: 'phone_number', label: 'Phone Number' },
-      { field: 'amount_paid', label: 'Amount Paid' },
-      { field: 'country', label: 'Country' }
-    ];
+  const validateForm = (): { isValid: boolean; errors: Record<string, string> } => {
+    const errors: Record<string, string> = {};
 
-    // Check required fields
-    for (const { field, label } of requiredFields) {
-      if (!formData[field as keyof typeof formData]) {
-        return { isValid: false, message: `${label} is required` };
+    // Required text fields validation
+    if (!formData.customer_name?.trim()) {
+      errors.customer_name = 'Customer name is required';
+    }
+
+    // Email validation
+    if (!formData.email?.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    // Phone validation
+    if (!formData.phone_number?.trim()) {
+      errors.phone_number = 'Phone number is required';
+    } else if (!/^[\+]?[1-9][\d]{0,15}$/.test(formData.phone_number.replace(/[\s\-\(\)]/g, ''))) {
+      errors.phone_number = 'Please enter a valid phone number';
+    }
+
+    // Country validation
+    if (!formData.country) {
+      errors.country = 'Country is required';
+    } else if (formData.country === 'Other' && !formData.custom_country?.trim()) {
+      errors.custom_country = 'Please specify the country name';
+    }
+
+    // Amount validation
+    if (!formData.amount_paid || formData.amount_paid <= 0) {
+      errors.amount_paid = 'Amount paid must be greater than 0';
+    }
+
+    // Date validation
+    if (!formData.signup_date) {
+      errors.signup_date = 'Signup date is required';
+    } else {
+      const signupDate = new Date(formData.signup_date);
+      const today = new Date();
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(today.getFullYear() - 1);
+      
+      if (signupDate > today) {
+        errors.signup_date = 'Signup date cannot be in the future';
+      } else if (signupDate < oneYearAgo) {
+        errors.signup_date = 'Signup date cannot be more than 1 year ago';
       }
     }
 
-    // Check if country is 'Other' but custom_country is not provided
-    if (formData.country === 'Other' && !formData.custom_country) {
-      return { isValid: false, message: 'Please specify a country' };
+    // Duration validation
+    const totalMonths = formData.duration_months + (formData.duration_years * 12);
+    if (totalMonths === 0) {
+      errors.duration = 'Duration must be at least 1 month';
     }
 
-    // Check if at least one program type is selected
+    // Service tier validation
+    if (!formData.service_tier) {
+      errors.service_tier = 'Service tier is required';
+    }
+
+    // Program type validation
     const isProgramTypeSelected = formData.is_ibo_player || formData.is_bob_player || 
                                  formData.is_smarters || formData.is_ibo_pro || formData.is_iboss;
     if (!isProgramTypeSelected) {
-      return { isValid: false, message: 'Please select at least one program type' };
+      errors.program_type = 'Please select a program type';
     }
 
-    return { isValid: true };
+    // Closing agent validation
+    if (!formData.closing_agent) {
+      errors.closing_agent = 'Closing agent is required';
+    }
+
+    return { isValid: Object.keys(errors).length === 0, errors };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -174,16 +219,33 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     
     // Validate form
     const validation = validateForm();
+    setValidationErrors(validation.errors);
+    
     if (!validation.isValid) {
+      const errorCount = Object.keys(validation.errors).length;
+      const firstError = Object.values(validation.errors)[0];
+      
       toast({
         title: "⚠️ Validation Error",
-        description: validation.message || 'Please fill in all required fields',
-        duration: 4000,
+        description: `${errorCount} field${errorCount > 1 ? 's need' : ' needs'} attention: ${firstError}`,
+        duration: 5000,
         variant: "destructive",
         className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-orange-800"
       });
+      
+      // Scroll to first error field
+      const firstErrorField = Object.keys(validation.errors)[0];
+      const element = document.getElementById(firstErrorField);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.focus();
+      }
+      
       return;
     }
+    
+    // Clear validation errors on successful validation
+    setValidationErrors({});
     
     setLoading(true);
 
@@ -221,7 +283,8 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         onSuccess(dealId);
       }
       
-      // Reset form
+      // Reset form and validation errors
+      setValidationErrors({});
       setFormData({
         customer_name: '',
         email: '',
@@ -298,56 +361,109 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="customer_name">Customer Name</Label>
+                  <Label htmlFor="customer_name">Customer Name *</Label>
                   <Input
                     id="customer_name"
                     value={formData.customer_name}
-                    onChange={(e) => handleInputChange('customer_name', e.target.value)}
+                    onChange={(e) => {
+                      handleInputChange('customer_name', e.target.value)
+                      if (validationErrors.customer_name) {
+                        setValidationErrors(prev => ({ ...prev, customer_name: '' }))
+                      }
+                    }}
+                    className={validationErrors.customer_name ? 'border-red-500 focus:border-red-500' : ''}
+                    placeholder="Enter customer's full name"
                     required
                   />
+                  {validationErrors.customer_name && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.customer_name}</p>
+                  )}
                 </div>
                 
                 <div>
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Email *</Label>
                   <Input
                     id="email"
                     type="email"
                     value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    onChange={(e) => {
+                      handleInputChange('email', e.target.value)
+                      if (validationErrors.email) {
+                        setValidationErrors(prev => ({ ...prev, email: '' }))
+                      }
+                    }}
+                    className={validationErrors.email ? 'border-red-500 focus:border-red-500' : ''}
+                    placeholder="customer@example.com"
                     required
                   />
+                  {validationErrors.email && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.email}</p>
+                  )}
                 </div>
                 
                 <div>
-                  <Label htmlFor="phone_number">Phone Number</Label>
+                  <Label htmlFor="phone_number">Phone Number *</Label>
                   <Input
                     id="phone_number"
                     value={formData.phone_number}
-                    onChange={(e) => handleInputChange('phone_number', e.target.value)}
+                    onChange={(e) => {
+                      handleInputChange('phone_number', e.target.value)
+                      if (validationErrors.phone_number) {
+                        setValidationErrors(prev => ({ ...prev, phone_number: '' }))
+                      }
+                    }}
+                    className={validationErrors.phone_number ? 'border-red-500 focus:border-red-500' : ''}
+                    placeholder="+1 (555) 123-4567"
                     required
                   />
+                  {validationErrors.phone_number && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.phone_number}</p>
+                  )}
                 </div>
                 
                 <div>
-                  <Label htmlFor="country">Country</Label>
-                  <Select value={formData.country} onValueChange={(value) => handleInputChange('country', value)}>
-                    <SelectTrigger>
+                  <Label htmlFor="country">Country *</Label>
+                  <Select value={formData.country} onValueChange={(value) => {
+                    handleInputChange('country', value)
+                    if (validationErrors.country) {
+                      setValidationErrors(prev => ({ ...prev, country: '' }))
+                    }
+                  }}>
+                    <SelectTrigger className={validationErrors.country ? 'border-red-500 focus:border-red-500' : ''}>
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="USA">USA</SelectItem>
                       <SelectItem value="Canada">Canada</SelectItem>
+                      <SelectItem value="UK">United Kingdom</SelectItem>
+                      <SelectItem value="Australia">Australia</SelectItem>
+                      <SelectItem value="Germany">Germany</SelectItem>
+                      <SelectItem value="France">France</SelectItem>
                       <SelectItem value="Other">Other (specify below)</SelectItem>
                     </SelectContent>
                   </Select>
+                  {validationErrors.country && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.country}</p>
+                  )}
                   {formData.country === 'Other' && (
-                    <Input
-                      className="mt-2"
-                      placeholder="Enter country name"
-                      value={formData.custom_country || ''}
-                      onChange={(e) => handleInputChange('custom_country', e.target.value)}
-                      required
-                    />
+                    <div className="mt-2">
+                      <Input
+                        id="custom_country"
+                        placeholder="Enter country name"
+                        value={formData.custom_country || ''}
+                        onChange={(e) => {
+                          handleInputChange('custom_country', e.target.value)
+                          if (validationErrors.custom_country) {
+                            setValidationErrors(prev => ({ ...prev, custom_country: '' }))
+                          }
+                        }}
+                        className={validationErrors.custom_country ? 'border-red-500 focus:border-red-500' : ''}
+                        required
+                      />
+                      {validationErrors.custom_country && (
+                        <p className="text-sm text-red-600 mt-1">{validationErrors.custom_country}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -362,18 +478,28 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="signup_date">Signup Date </Label>
+                  <Label htmlFor="signup_date">Signup Date *</Label>
                   <Input
                     id="signup_date"
                     type="date"
                     value={formData.signup_date}
-                    onChange={(e) => handleInputChange('signup_date', e.target.value)}
+                    onChange={(e) => {
+                      handleInputChange('signup_date', e.target.value)
+                      if (validationErrors.signup_date) {
+                        setValidationErrors(prev => ({ ...prev, signup_date: '' }))
+                      }
+                    }}
+                    className={validationErrors.signup_date ? 'border-red-500 focus:border-red-500' : ''}
+                    max={new Date().toISOString().split('T')[0]}
                     required
                   />
+                  {validationErrors.signup_date && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.signup_date}</p>
+                  )}
                 </div>
                 
                 <div>
-                  <Label htmlFor="amount_paid">Amount Paid ($)</Label>
+                  <Label htmlFor="amount_paid">Amount Paid ($) *</Label>
                   <Input
                     id="amount_paid"
                     type="text"
@@ -383,11 +509,18 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                       // Allow empty string or valid numbers
                       if (value === '' || /^\d*\.?\d*$/.test(value)) {
                         handleInputChange('amount_paid', value === '' ? 0 : parseFloat(value))
+                        if (validationErrors.amount_paid) {
+                          setValidationErrors(prev => ({ ...prev, amount_paid: '' }))
+                        }
                       }
                     }}
-                    placeholder="Enter amount"
+                    className={validationErrors.amount_paid ? 'border-red-500 focus:border-red-500' : ''}
+                    placeholder="Enter amount (e.g., 299.99)"
                     required
                   />
+                  {validationErrors.amount_paid && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.amount_paid}</p>
+                  )}
                 </div>
                 
                 <div>
@@ -421,9 +554,14 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="service_tier">Service Tier</Label>
-                  <Select value={formData.service_tier} onValueChange={(value) => handleInputChange('service_tier', value)}>
-                    <SelectTrigger>
+                  <Label htmlFor="service_tier">Service Tier *</Label>
+                  <Select value={formData.service_tier} onValueChange={(value) => {
+                    handleInputChange('service_tier', value)
+                    if (validationErrors.service_tier) {
+                      setValidationErrors(prev => ({ ...prev, service_tier: '' }))
+                    }
+                  }}>
+                    <SelectTrigger className={validationErrors.service_tier ? 'border-red-500 focus:border-red-500' : ''}>
                       <SelectValue placeholder="Select service tier" />
                     </SelectTrigger>
                     <SelectContent>
@@ -432,6 +570,9 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                       <SelectItem value="Premium">Premium</SelectItem>
                     </SelectContent>
                   </Select>
+                  {validationErrors.service_tier && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.service_tier}</p>
+                  )}
                 </div>
                 
                 <div>
@@ -457,6 +598,11 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {validationErrors.program_type && (
+                    <div className="col-span-full">
+                      <p className="text-sm text-red-600 mb-2">{validationErrors.program_type}</p>
+                    </div>
+                  )}
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="radio"
@@ -469,6 +615,9 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                         handleInputChange('is_smarters', false)
                         handleInputChange('is_ibo_pro', false)
                         handleInputChange('is_iboss', false)
+                        if (validationErrors.program_type) {
+                          setValidationErrors(prev => ({ ...prev, program_type: '' }))
+                        }
                       }}
                       className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
                       required
@@ -572,9 +721,14 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 </div>
                 
                 <div>
-                  <Label htmlFor="closing_agent">Closing Agent </Label>
-                  <Select value={formData.closing_agent} onValueChange={(value) => handleAgentChange('closing_agent', value)}>
-                    <SelectTrigger>
+                  <Label htmlFor="closing_agent">Closing Agent *</Label>
+                  <Select value={formData.closing_agent} onValueChange={(value) => {
+                    handleAgentChange('closing_agent', value)
+                    if (validationErrors.closing_agent) {
+                      setValidationErrors(prev => ({ ...prev, closing_agent: '' }))
+                    }
+                  }}>
+                    <SelectTrigger className={validationErrors.closing_agent ? 'border-red-500 focus:border-red-500' : ''}>
                       <SelectValue placeholder="Select closing agent" />
                     </SelectTrigger>
                     <SelectContent>
@@ -585,6 +739,9 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                       ))}
                     </SelectContent>
                   </Select>
+                  {validationErrors.closing_agent && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.closing_agent}</p>
+                  )}
                 </div>
               </div>
               
@@ -684,7 +841,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                   Cancel
                 </Button>
               )}
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading} className="min-w-[140px]">
                 <Save className="h-4 w-4 mr-2" />
                 {loading ? 'Creating Deal...' : 'Create Deal'}
               </Button>
