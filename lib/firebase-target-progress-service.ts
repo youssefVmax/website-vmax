@@ -56,32 +56,6 @@ function safeToDate(timestamp: any): Date | null {
   }
 }
 
-export interface TargetProgress {
-  id?: string;
-  targetId: string;
-  agentId: string;
-  agentName: string;
-  period: string; // "January 2025"
-  monthlyTarget: number;
-  dealsTarget: number;
-  currentSales: number;
-  currentDeals: number;
-  remainingTarget: number;
-  remainingDeals: number;
-  progressPercentage: number;
-  dealsProgressPercentage: number;
-  status: 'on-track' | 'behind' | 'exceeded';
-  lastUpdated: Timestamp;
-  dealHistory: Array<{
-    dealId: string;
-    dealAmount: number;
-    customerName: string;
-    date: Timestamp;
-  }>;
-  created_at: Timestamp;
-  updated_at: Timestamp;
-}
-
 export class FirebaseTargetProgressService {
   private readonly COLLECTION = 'target_progress';
 
@@ -119,6 +93,8 @@ export class FirebaseTargetProgressService {
   // Update target progress when a deal is created
   async updateProgressOnDealCreation(agentId: string, dealAmount: number, dealId: string, customerName: string, period: string): Promise<void> {
     try {
+      console.log(`🎯 Updating target progress: Agent ${agentId}, Period ${period}, Amount $${dealAmount}`);
+      
       // Find the target progress record for this agent and period
       const q = query(
         collection(db, this.COLLECTION),
@@ -127,6 +103,7 @@ export class FirebaseTargetProgressService {
       );
 
       const snapshot = await getDocs(q);
+      console.log(`Found ${snapshot.docs.length} target progress records for agent ${agentId} in period ${period}`);
       
       if (!snapshot.empty) {
         const batch = writeBatch(db);
@@ -134,6 +111,8 @@ export class FirebaseTargetProgressService {
         snapshot.docs.forEach(doc => {
           const progressRef = doc.ref;
           const currentData = doc.data() as TargetProgress;
+          
+          console.log(`Current progress: Sales $${currentData.currentSales}/${currentData.monthlyTarget}, Deals ${currentData.currentDeals}/${currentData.dealsTarget}`);
           
           const newCurrentSales = currentData.currentSales + dealAmount;
           const newCurrentDeals = currentData.currentDeals + 1;
@@ -160,6 +139,8 @@ export class FirebaseTargetProgressService {
 
           const updatedDealHistory = [...(currentData.dealHistory || []), newDealEntry];
 
+          console.log(`New progress: Sales $${newCurrentSales}/${currentData.monthlyTarget} (${newProgressPercentage.toFixed(1)}%), Deals ${newCurrentDeals}/${currentData.dealsTarget} (${newDealsProgressPercentage.toFixed(1)}%)`);
+
           batch.update(progressRef, {
             currentSales: newCurrentSales,
             currentDeals: newCurrentDeals,
@@ -175,9 +156,32 @@ export class FirebaseTargetProgressService {
         });
 
         await batch.commit();
+        console.log(`✅ Target progress updated successfully for agent ${agentId}`);
+      } else {
+        console.log(`⚠️ No target progress record found for agent ${agentId} in period ${period}. This might mean no targets are set for this period.`);
+        
+        // Try to find if there are any targets for this agent and period, and create progress record if needed
+        const { targetsService } = await import('./firebase-targets-service');
+        const targets = await targetsService.getTargets(agentId, 'salesman');
+        const matchingTargets = targets.filter(target => target.period === period);
+        
+        if (matchingTargets.length > 0) {
+          console.log(`Found ${matchingTargets.length} targets for this period. Creating progress records...`);
+          
+          // Create progress records for each target
+          for (const target of matchingTargets) {
+            await this.initializeTargetProgress(target);
+            console.log(`Created progress record for target ${target.id}`);
+            
+            // Now update the newly created progress record
+            await this.updateProgressOnDealCreation(agentId, dealAmount, dealId, customerName, period);
+          }
+        } else {
+          console.log(`No targets found for agent ${agentId} in period ${period}. Cannot update progress.`);
+        }
       }
     } catch (error) {
-      console.error('Error updating target progress:', error);
+      console.error('❌ Error updating target progress:', error);
       throw error;
     }
   }

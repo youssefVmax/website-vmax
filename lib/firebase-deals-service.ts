@@ -252,9 +252,14 @@ export class FirebaseDealsService {
       // Find current period targets for the agent
       const currentPeriod = `${this.getMonthName(month)} ${year}`;
       
+      console.log(`Updating target progress for agent ${agentId}, period: ${currentPeriod}, amount: $${dealAmount}`);
+      
       // Get agent's targets for the current period
       const targets = await targetsService.getTargets(agentId, 'salesman');
+      console.log(`Found ${targets.length} total targets for agent ${agentId}`);
+      
       const currentTargets = targets.filter(target => target.period === currentPeriod);
+      console.log(`Found ${currentTargets.length} targets for current period: ${currentPeriod}`);
       
       if (currentTargets.length > 0) {
         // Import target progress service
@@ -262,6 +267,8 @@ export class FirebaseDealsService {
         
         // Update target progress in Firebase for each matching target
         for (const target of currentTargets) {
+          console.log(`Updating progress for target ${target.id}: ${target.agentName} - ${target.period}`);
+          
           await targetProgressService.updateProgressOnDealCreation(
             agentId,
             dealAmount,
@@ -270,13 +277,13 @@ export class FirebaseDealsService {
             currentPeriod
           );
           
-          console.log(`Updated target progress for agent ${agentId}, target ${target.id}, amount: $${dealAmount}`);
+          console.log(`✅ Successfully updated target progress for agent ${agentId}, target ${target.id}, amount: $${dealAmount}`);
         }
 
         // Create notification about target progress update
         const progressNotifications = currentTargets.map(target => ({
           title: 'Target Progress Updated',
-          message: `Your deal of $${dealAmount} for ${customerName || 'a customer'} has been deducted from your ${target.period} target. Keep up the great work!`,
+          message: `Your deal of $${dealAmount} for ${customerName || 'a customer'} has been added to your ${target.period} target progress. Keep up the great work!`,
           type: 'info' as const,
           priority: 'low' as const,
           from: 'System',
@@ -290,9 +297,11 @@ export class FirebaseDealsService {
         for (const notification of progressNotifications) {
           await notificationService.addNotification(notification);
         }
+      } else {
+        console.log(`⚠️ No targets found for agent ${agentId} in period ${currentPeriod}. Available targets:`, targets.map(t => ({ id: t.id, period: t.period, agent: t.agentName })));
       }
     } catch (error) {
-      console.error('Error updating target progress:', error);
+      console.error('❌ Error updating target progress:', error);
       // Don't throw error to avoid breaking deal creation
     }
   }

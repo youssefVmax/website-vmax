@@ -157,6 +157,32 @@ export interface TeamTarget {
   updated_at?: Timestamp;
 }
 
+export interface TargetProgress {
+  id?: string;
+  targetId: string;
+  agentId: string;
+  agentName: string;
+  period: string; // "January 2025"
+  monthlyTarget: number;
+  dealsTarget: number;
+  currentSales: number;
+  currentDeals: number;
+  remainingTarget: number;
+  remainingDeals: number;
+  progressPercentage: number;
+  dealsProgressPercentage: number;
+  status: 'on-track' | 'behind' | 'exceeded';
+  lastUpdated: Timestamp;
+  dealHistory: Array<{
+    dealId: string;
+    dealAmount: number;
+    customerName: string;
+    date: Timestamp;
+  }>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
 export interface Settings {
   id?: string;
   userId: string;
