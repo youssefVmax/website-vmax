@@ -33,7 +33,7 @@ interface SalesTargetsProps {
   user: { name: string; username: string; id: string }
 }
 
-export function SalesTargets({ userRole, user }: SalesTargetsProps) {
+export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
   const { toast } = useToast()
   const { sales } = useFirebaseSalesData(userRole, user.id, user.name)
   const { targets: firebaseTargets, loading: targetsLoading, addTarget, updateTarget } = useFirebaseTargets(user.id, userRole)
@@ -142,20 +142,37 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
       try {
         setLoadingAgents(true)
         const { userService } = await import('@/lib/firebase-user-service')
-        const firebaseAgents = await userService.getUsersByRole('salesman')
+        const allUsers = await userService.getUsers()
+        const firebaseAgents = allUsers.filter((user: any) => user.role === 'salesman' || user.role === 'manager')
         if (mounted) {
-          const mapped = (firebaseAgents || []).map((u: any) => ({ id: u.id, name: u.name || u.username, team: u.team || 'Unknown' }))
+          const mapped = firebaseAgents.map((u: any) => ({
+            id: u.id,
+            name: u.name || u.username || 'Unknown',
+            team: u.team || 'Unknown'
+          }))
           setAgentOptions(mapped.sort((a: any, b: any) => a.name.localeCompare(b.name)))
         }
       } catch (e) {
         console.error('Failed to load agents from users collection', e)
+        // Fallback to sales data if user service fails
+        if (mounted && sales) {
+          const mapped = sales.reduce((acc: any[], sale: any) => {
+            const agentName = sale.sales_agent_norm || sale.sales_agent
+            const agentId = sale.SalesAgentID
+            if (agentName && agentId && !acc.some((a: any) => a.id === agentId)) {
+              acc.push({ id: agentId, name: agentName, team: sale.team || 'Unknown' })
+            }
+            return acc
+          }, [])
+          setAgentOptions(mapped.sort((a: any, b: any) => a.name.localeCompare(b.name)))
+        }
       } finally {
         if (mounted) setLoadingAgents(false)
       }
     }
     loadAgents()
     return () => { mounted = false }
-  }, [])
+  }, [sales])
 
   const availableAgents = agentOptions.length > 0 ? agentOptions : salesAgents
 
@@ -169,7 +186,7 @@ export function SalesTargets({ userRole, user }: SalesTargetsProps) {
       return
     }
 
-    const selectedAgent = salesAgents.find((a: any) => a.id === newTarget.agentId)
+    const selectedAgent = availableAgents.find((a: any) => a.id === newTarget.agentId)
     if (!selectedAgent) return
 
     const payload = {

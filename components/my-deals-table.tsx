@@ -37,7 +37,10 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
   // Quick action state
   const [viewDeal, setViewDeal] = useState<any|null>(null)
   const [editDeal, setEditDeal] = useState<any|null>(null)
-  const [editNote, setEditNote] = useState<string>("")
+  const [editNote, setEditNote] = useState<string>("") 
+  const [editEmail, setEditEmail] = useState<string>("") 
+  const [editPhone, setEditPhone] = useState<string>("") 
+  const [editDealName, setEditDealName] = useState<string>("")
 
   const enriched = useMemo(() => {
     const norm = user.name.toLowerCase().trim()
@@ -53,7 +56,7 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return enriched.filter(r => {
-      const matchesQuery = !q || r.customer_name?.toLowerCase().includes(q) || r.DealID?.toLowerCase().includes(q)
+      const matchesQuery = !q || r.customer_name?.toLowerCase().includes(q) || r.closing_agent?.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q) || r.phone_number?.toLowerCase().includes(q)
       const matchesService = !serviceFilter || r.type_service === serviceFilter
       const matchesTeam = !teamFilter || r.team === teamFilter
       const d = new Date(r.date)
@@ -69,7 +72,8 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
       const get = (x:any) => {
         switch (sortBy) {
           case 'date': return new Date(x.date).getTime()
-          case 'DealID': return String(x.DealID)
+          case 'end_date': return new Date(x.end_date || x.date).getTime()
+          case 'closing_agent': return String(x.closing_agent || '')
           case 'customer_name': return String(x.customer_name)
           case 'type_service': return String(x.type_service)
           case 'team': return String(x.team)
@@ -100,21 +104,31 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
 
   const handleSaveEdit = async () => {
     // Persist via notification to manager as an audit trail
+    const updates = [];
+    if (editDealName !== ((editDeal as any)?.closing_agent || '')) updates.push(`Closing Agent: ${editDealName}`);
+    if (editEmail !== ((editDeal as any)?.email || '')) updates.push(`Email: ${editEmail}`);
+    if (editPhone !== ((editDeal as any)?.phone_number || '')) updates.push(`Phone: ${editPhone}`);
+    if (editNote) updates.push(`Note: ${editNote}`);
+    
     await addNotification({
       title: 'Deal Updated',
-      message: `${user.name} updated deal ${editDeal?.DealID}. Note: ${editNote}`,
+      message: `${user.name} updated deal ${editDeal?.DealID}. Changes: ${updates.join(', ')}`,
       type: 'deal',
       priority: 'low',
       from: user.id,
       to: ['manager-001'],
       dealId: editDeal?.DealID,
-      dealName: editDeal?.customer_name,
+      dealName: editDealName || editDeal?.customer_name,
       dealValue: editDeal?.amount || 0,
       dealStage: 'updated',
       actionRequired: false,
     } as any)
+    
     setEditDeal(null)
     setEditNote("")
+    setEditEmail("")
+    setEditPhone("")
+    setEditDealName("")
     toast({ title: 'Saved successfully', description: 'Your changes have been recorded.' })
   }
 
@@ -157,9 +171,11 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <CardTitle>My Deals</CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <CardTitle>My Deals</CardTitle>
             <Input placeholder="Search by customer or deal ID" value={query} onChange={(e)=>{setQuery(e.target.value); setPage(1)}} className="w-64" />
+          </div>
+          <div className="flex items-center gap-2">
             <Select value={serviceFilter ?? "__all__"} onValueChange={(v)=>{setServiceFilter(v === '__all__' ? undefined : v); setPage(1)}}>
               <SelectTrigger className="w-44"><SelectValue placeholder="Service" /></SelectTrigger>
               <SelectContent>
@@ -167,13 +183,15 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                 {services.map(s=> <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={teamFilter ?? "__all__"} onValueChange={(v)=>{setTeamFilter(v === '__all__' ? undefined : v); setPage(1)}}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Team" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Teams</SelectItem>
-                {teams.map(t=> <SelectItem key={t} value={t}>{t}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {user.role !== 'salesman' && (
+              <Select value={teamFilter ?? "__all__"} onValueChange={(v)=>{setTeamFilter(v === '__all__' ? undefined : v); setPage(1)}}>
+                <SelectTrigger className="w-40"><SelectValue placeholder="Team" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Teams</SelectItem>
+                  {teams.map(t=> <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
             <Input type="date" value={from} onChange={(e)=>{setFrom(e.target.value); setPage(1)}} />
             <Input type="date" value={to} onChange={(e)=>{setTo(e.target.value); setPage(1)}} />
             <Select value={String(pageSize)} onValueChange={(v)=>{setPageSize(Number(v)); setPage(1)}}>
@@ -196,8 +214,13 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                   </Button>
                 </TableHead>
                 <TableHead>
-                  <Button variant="ghost" className="px-0" onClick={()=>toggleSort('DealID')}>
-                    Deal ID <ArrowUpDown className="h-3 w-3 ml-1" />
+                  <Button variant="ghost" className="px-0 text-xs" onClick={()=>toggleSort('closing_agent')}>
+                    Closing Agent <ArrowUpDown className="h-3 w-3 ml-1" />
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" className="px-0" onClick={()=>toggleSort('end_date')}>
+                    End Date <ArrowUpDown className="h-3 w-3 ml-1" />
                   </Button>
                 </TableHead>
                 <TableHead>
@@ -221,32 +244,44 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                     Amount <ArrowUpDown className="h-3 w-3 ml-1" />
                   </Button>
                 </TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Device Key</TableHead>
+                <TableHead>Device ID</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {pageData.map((d) => (
                 <TableRow key={d.DealID}>
-                  <TableCell>{new Date(d.date).toLocaleDateString()}</TableCell>
-                  <TableCell className="font-mono text-xs">{d.DealID}</TableCell>
-                  <TableCell className="font-medium">{d.customer_name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{(d as any).role}</Badge>
+                  <TableCell className="text-sm py-2">{new Date(d.date).toLocaleDateString()}</TableCell>
+                  <TableCell className="font-medium text-sm">{(d as any).closing_agent || 'N/A'}</TableCell>
+                  <TableCell className="text-sm">{(d as any).end_date ? new Date((d as any).end_date).toLocaleDateString() : 'N/A'}</TableCell>
+                  <TableCell className="font-medium text-sm py-2">{d.customer_name}</TableCell>
+                  <TableCell className="py-2">
+                    <Badge variant="outline" className="text-xs px-2 py-1">{(d as any).role}</Badge>
                   </TableCell>
-                  <TableCell>{d.type_service}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{d.team}</Badge>
+                  <TableCell className="text-sm py-2">{d.type_service}</TableCell>
+                  <TableCell className="py-2">
+                    <Badge variant="secondary" className="text-xs px-2 py-1">{d.team}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">${(d.amount || 0).toFixed(2)}</TableCell>
-                  <TableCell className="text-right space-x-1">
-                    <Button variant="ghost" size="sm" onClick={()=>setViewDeal(d)}>
-                      <Eye className="h-4 w-4" />
+                  <TableCell className="text-right text-sm py-2">${(d.amount || 0).toFixed(2)}</TableCell>
+                  <TableCell className="text-sm py-2">{(d as any).email || 'N/A'}</TableCell>
+                  <TableCell className="text-sm py-2">{(d as any).phone_number || 'N/A'}</TableCell>
+                  <TableCell className="font-mono text-xs py-2">{(d as any).device_key || 'N/A'}</TableCell>
+                  <TableCell className="font-mono text-xs py-2">{(d as any).device_id || 'N/A'}</TableCell>
+                  <TableCell className="text-right space-x-1 py-2">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={()=>setViewDeal(d)}>
+                      <Eye className="h-3 w-3" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={()=>{setEditDeal(d); setEditNote("")}}>
-                      <EditIcon className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={()=>handleReopen(d)}>
-                      <RotateCcw className="h-4 w-4" />
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={()=>{
+                      setEditDeal(d); 
+                      setEditNote("");
+                      setEditEmail((d as any).email || "");
+                      setEditPhone((d as any).phone_number || "");
+                      setEditDealName((d as any).closing_agent || "");
+                    }}>
+                      <EditIcon className="h-3 w-3" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -281,9 +316,12 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
               View detailed information about the selected deal
             </div>
             <div className="space-y-2 text-sm">
-              <div><strong>Deal ID:</strong> {viewDeal?.DealID}</div>
+              <div><strong>Closing Agent:</strong> {(viewDeal as any)?.closing_agent || 'N/A'}</div>
               <div><strong>Date:</strong> {viewDeal ? new Date(viewDeal.date).toLocaleString() : ''}</div>
+              <div><strong>End Date:</strong> {(viewDeal as any)?.end_date ? new Date((viewDeal as any).end_date).toLocaleString() : 'N/A'}</div>
               <div><strong>Customer:</strong> {viewDeal?.customer_name}</div>
+              <div><strong>Email:</strong> {(viewDeal as any)?.email || 'N/A'}</div>
+              <div><strong>Phone:</strong> {(viewDeal as any)?.phone_number || 'N/A'}</div>
               <div><strong>Service:</strong> {viewDeal?.type_service}</div>
               <div><strong>Team:</strong> {viewDeal?.team}</div>
               <div><strong>Amount:</strong> ${viewDeal?.amount?.toFixed?.(2) ?? viewDeal?.amount}</div>
@@ -295,13 +333,28 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
         <Dialog open={!!editDeal} onOpenChange={(o)=>!o && setEditDeal(null)}>
           <DialogContent aria-describedby="edit-deal-description">
             <DialogHeader>
-              <DialogTitle>Edit Deal Note</DialogTitle>
+              <DialogTitle>Edit Deal Information</DialogTitle>
             </DialogHeader>
             <div id="edit-deal-description" className="sr-only">
-              Edit the note or comments for the selected deal
+              Edit deal information including name, email, phone, and notes
             </div>
             <div className="space-y-3">
-              <Input placeholder="Add a note about this deal" value={editNote} onChange={(e)=>setEditNote(e.target.value)} />
+              <div>
+                <label className="text-sm font-medium">Closing Agent</label>
+                <Input placeholder="Closing agent name" value={editDealName} onChange={(e)=>setEditDealName(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input placeholder="Customer email" value={editEmail} onChange={(e)=>setEditEmail(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Phone</label>
+                <Input placeholder="Customer phone number" value={editPhone} onChange={(e)=>setEditPhone(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <Input placeholder="Add a note about this deal" value={editNote} onChange={(e)=>setEditNote(e.target.value)} />
+              </div>
             </div>
             <DialogFooter>
               <Button onClick={handleSaveEdit}>Save</Button>

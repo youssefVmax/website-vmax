@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { formatDistanceToNow } from "date-fns"
-import { Bell, CheckCircle, Plus, Send, X, AlertCircle, Briefcase, MessageSquare, Info } from "lucide-react"
+import { Bell, CheckCircle, Plus, Send, X, AlertCircle, Briefcase, MessageSquare, Info, Eye } from "lucide-react"
 
 import { Button } from "./ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card"
@@ -17,6 +17,9 @@ import { dealsService } from "@/lib/firebase-deals-service"
 import { DealDetailsModal } from "./DealDetailsModal"
 import type { DealDetails } from "./DealDetailsModal"
 import { Notification as FirebaseNotification } from "@/types/firebase"
+import NotificationDetailsModal from "./notification-details-modal"
+import { useNotifications } from "@/hooks/use-notifications"
+import { useAuth } from "@/hooks/useAuth"
 
 // Safe timestamp conversion helper
 function safeToDate(timestamp: any): Date | null {
@@ -94,22 +97,33 @@ interface NotificationsPageProps {
 export default function NotificationsPage({ userRole = 'salesman', user }: NotificationsPageProps) {
   const currentUser = user || { name: "Mohsen Sayed", username: "mohsen.sayed" }
   const { toast } = useToast()
+  const { user: authUser } = useAuth()
+  const { notifications, markAsRead, markAllAsRead } = useNotifications()
 
   const [activeTab, setActiveTab] = useState("all")
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingDeal, setLoadingDeal] = useState(false)
   const [selectedDeal, setSelectedDeal] = useState<DealDetails | null>(null)
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [newMessage, setNewMessage] = useState({
     message: "",
     priority: "medium" as PriorityType,
   })
-  const [notifications, setNotifications] = useState<Notification[]>([])
 
   // Load notifications from Firebase on component mount
   useEffect(() => {
-    loadNotifications()
-  }, [])
+    setLoading(false) // Use notifications from hook instead
+  }, [notifications])
+
+  const handleViewDetailsModal = (notification: any) => {
+    setSelectedNotification(notification)
+    setShowDetailsModal(true)
+    if (!notification.read) {
+      markAsRead(notification.id)
+    }
+  }
 
   const loadNotifications = async () => {
     try {
@@ -221,13 +235,13 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     if (activeTab === "all") return true
     if (activeTab === "unread") return !notification.read
     if (activeTab === "deals") return notification.type === "deal"
-    if (activeTab === "messages") return notification.type === "message" || notification.isManagerMessage
     return true
   })
+
   const unreadCount = filteredNotifications.filter(notif => !notif.read).length
 
-  // Mark notification as read
-  const markAsRead = async (id: string) => {
+  // Mark notification as read (using local function to avoid conflicts)
+  const markNotificationAsRead = async (id: string) => {
     try {
       await notificationService.markAsRead(id)
       setNotifications(prevNotifications => 
@@ -235,17 +249,17 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
           notification.id === id ? { ...notification, read: true } : notification
         )
       )
-    } catch (error) {
-      console.error('Error marking notification as read:', error)
+      
       toast({
-        title: "Error",
-        description: "Failed to mark notification as read",
-        variant: "destructive"
+        title: "Notification marked as read",
+        description: "The notification has been marked as read.",
       })
+    } catch (error) {
+      console.error("Error marking notification as read:", error)
     }
   }
 
-  const markAllAsRead = async () => {
+  const markAllNotificationsAsRead = async () => {
     try {
       const unreadNotifications = notifications.filter(n => !n.read)
       await Promise.all(unreadNotifications.map(n => notificationService.markAsRead(n.id)))
@@ -447,7 +461,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={markAllAsRead}>
+          <Button variant="outline" size="sm" onClick={markAllNotificationsAsRead}>
             <CheckCircle className="mr-2 h-4 w-4" />
             Mark all as read
           </Button>
@@ -658,7 +672,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleViewDetails(notification);
+                            handleViewDetailsModal(notification);
                           }}
                           disabled={loadingDeal}
                         >
@@ -676,7 +690,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleViewDetails(notification);
+                        handleViewDetailsModal(notification);
                       }}
                     >
                       View Details
@@ -689,6 +703,18 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
         )}
         </div>
       </div>
+
+      {/* Notification Details Modal */}
+      <NotificationDetailsModal
+        notification={selectedNotification}
+        isOpen={showDetailsModal}
+        onClose={() => {
+          setShowDetailsModal(false)
+          setSelectedNotification(null)
+        }}
+        userRole={userRole}
+        userId={authUser?.id || ''}
+      />
     </div>
   )
 }

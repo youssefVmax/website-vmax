@@ -6,7 +6,6 @@ import {
   Bell,
   Database,
   type LucideIcon,
-  Search,
   Settings,
   Tv,
   Users,
@@ -344,25 +343,6 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
               </div>
 
               <div className="flex items-center space-x-4">
-                <div className={`hidden md:flex items-center space-x-1 rounded-full px-3 py-1.5 border backdrop-blur-sm transition-all duration-300 ${
-                  isDark 
-                    ? 'bg-slate-800/50 border-slate-700/50' 
-                    : 'bg-white/70 border-blue-200/50'
-                }`}>
-                  <Search className={`h-4 w-4 transition-colors duration-300 ${
-                    isDark ? 'text-slate-400' : 'text-slate-500'
-                  }`} />
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    className={`bg-transparent border-none focus:outline-none text-sm w-40 transition-colors duration-300 ${
-                      isDark 
-                        ? 'text-slate-100 placeholder:text-slate-500' 
-                        : 'text-slate-800 placeholder:text-slate-400'
-                    }`}
-                  />
-                </div>
-
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -526,6 +506,8 @@ function PageContent({
       return <CompetitionDashboard />
     case "callbacks-manage":
       return <ManageCallbacksPage />
+    case "callbacks-new":
+      return <NewCallbackPage />
     case "settings":
       return <ProfileSettings user={user} />
     default:

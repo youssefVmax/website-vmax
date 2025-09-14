@@ -14,6 +14,7 @@ import { dealsService } from "@/lib/firebase-deals-service"
 import { userService } from "@/lib/firebase-user-service"
 import { User as UserType } from "@/lib/auth"
 import { showDealAdded, showError, showLoading } from "@/lib/sweetalert"
+import { useToast } from "@/hooks/use-toast"
 
 interface EnhancedAddDealProps {
   currentUser: UserType
@@ -22,6 +23,7 @@ interface EnhancedAddDealProps {
 }
 
 export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: EnhancedAddDealProps) {
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState<UserType[]>([])
   const [formData, setFormData] = useState({
@@ -57,6 +59,8 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     
     // Additional Information
     invoice_link: '',
+    device_key: '',
+    device_id: '',
     notes: '',
     status: 'active' as const,
     stage: 'closed-won' as const,
@@ -171,7 +175,13 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     // Validate form
     const validation = validateForm();
     if (!validation.isValid) {
-      await showError('Validation Error', validation.message || 'Please fill in all required fields');
+      toast({
+        title: "⚠️ Validation Error",
+        description: validation.message || 'Please fill in all required fields',
+        duration: 4000,
+        variant: "destructive",
+        className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-orange-800"
+      });
       return;
     }
     
@@ -199,11 +209,16 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
       const dealId = await dealsService.createDeal(dealData, currentUser)
       console.log('Deal created successfully with ID:', dealId)
       
-      // Show success message
-      await showDealAdded(formData.amount_paid, formData.customer_name)
+      // Show success message with toast notification
+      toast({
+        title: "🎉 Deal Created Successfully!",
+        description: `$${formData.amount_paid.toLocaleString()} deal for ${formData.customer_name}`,
+        duration: 4000,
+        className: "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200 text-emerald-800"
+      });
       
       if (onSuccess) {
-        onSuccess(dealId)
+        onSuccess(dealId);
       }
       
       // Reset form
@@ -231,6 +246,8 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         is_ibo_pro: false,
         is_iboss: false,
         invoice_link: '',
+        device_key: '',
+        device_id: '',
         notes: '',
         status: 'active' as const,
         stage: 'closed-won' as const,
@@ -238,7 +255,13 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
       });
     } catch (error) {
       console.error('Error creating deal:', error)
-      await showError('Deal Creation Failed', 'Failed to create deal. Please try again.')
+      toast({
+        title: "❌ Deal Creation Failed",
+        description: "Failed to create deal. Please try again.",
+        duration: 5000,
+        variant: "destructive",
+        className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-red-800"
+      });
     } finally {
       setLoading(false)
     }
@@ -619,6 +642,26 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                   value={formData.invoice_link}
                   onChange={(e) => handleInputChange('invoice_link', e.target.value)}
                   placeholder="https://..."
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="device_key">Device Key</Label>
+                <Input
+                  id="device_key"
+                  value={formData.device_key}
+                  onChange={(e) => handleInputChange('device_key', e.target.value)}
+                  placeholder="Enter device key..."
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="device_id">Device ID</Label>
+                <Input
+                  id="device_id"
+                  value={formData.device_id}
+                  onChange={(e) => handleInputChange('device_id', e.target.value)}
+                  placeholder="Enter device ID..."
                 />
               </div>
               

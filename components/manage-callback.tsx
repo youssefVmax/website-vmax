@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +72,7 @@ const priorityColors: Record<string, string> = {
 export default function ManageCallbacksPage() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [callbacks, setCallbacks] = useState<CallbackRow[]>([]);
   const [editingCallback, setEditingCallback] = useState<CallbackRow | null>(null);
@@ -78,6 +80,36 @@ export default function ManageCallbacksPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CallbackRow["status"]>("all");
+  const [agentFilter, setAgentFilter] = useState<string>('all')
+  const [phoneFilter, setPhoneFilter] = useState<string>('')
+  const [historyForPhone, setHistoryForPhone] = useState<string | null>(null)
+
+  // Derived analytics for manager view (read-only insights)
+  const phoneStats = useMemo(() => {
+    const map = new Map<string, { count: number; lastUpdatedAt?: Date; agents: Set<string>; dates: Date[] }>()
+    callbacks.forEach((c) => {
+      const key = c.phone_number || 'unknown'
+      if (!map.has(key)) map.set(key, { count: 0, agents: new Set<string>(), dates: [] })
+      const rec = map.get(key)!
+      rec.count += 1
+      if (c.updated_at) {
+        const dt = new Date(c.updated_at as any)
+        rec.lastUpdatedAt = !rec.lastUpdatedAt || dt > rec.lastUpdatedAt ? dt : rec.lastUpdatedAt
+        rec.dates.push(dt)
+      }
+      if (c.sales_agent) rec.agents.add(c.sales_agent)
+    })
+    return map
+  }, [callbacks])
+
+  const updatesByAgent = useMemo(() => {
+    const map = new Map<string, number>()
+    callbacks.forEach((c) => {
+      const updater = (c as any).updated_by || c.sales_agent || 'Unknown'
+      map.set(updater, (map.get(updater) || 0) + 1)
+    })
+    return map
+  }, [callbacks])
 
   useEffect(() => {
     if (!user) return;
@@ -108,8 +140,23 @@ export default function ManageCallbacksPage() {
           c.sales_agent?.toLowerCase().includes(q)
       );
     }
+    if (agentFilter !== 'all') {
+      list = list.filter(c => (c.sales_agent || '').toLowerCase() === agentFilter.toLowerCase())
+    }
+    if (phoneFilter.trim()) {
+      const q = phoneFilter.toLowerCase()
+      list = list.filter(c => (c.phone_number || '').toLowerCase().includes(q))
+    }
+    
+    // Sort by last updated date (newest first)
+    list.sort((a, b) => {
+      const dateA = a.updated_at ? new Date(a.updated_at as any).getTime() : new Date(a.created_at as any).getTime();
+      const dateB = b.updated_at ? new Date(b.updated_at as any).getTime() : new Date(b.created_at as any).getTime();
+      return dateB - dateA; // Newest first
+    });
+    
     return list;
-  }, [callbacks, statusFilter, search]);
+  }, [callbacks, statusFilter, search, agentFilter, phoneFilter]);
 
   const updateStatus = async (row: CallbackRow, next: CallbackRow["status"]) => {
     try {
@@ -223,11 +270,13 @@ export default function ManageCallbacksPage() {
     <div className="container mx-auto p-4 md:p-6">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>Manage Callbacks</CardTitle>
+          <CardTitle>
+            {user?.role === 'manager' ? 'Callbacks Overview (Read-only)' : 'Manage Callbacks'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between mb-4">
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center flex-wrap">
               <Input
                 placeholder="Search customer, email, phone, or agent..."
                 value={search}
@@ -246,23 +295,74 @@ export default function ManageCallbacksPage() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => (window.location.href = "/callbacks/new")}>New Callback</Button>
+              {/* Quick filter: Agent - Only show for managers */}
+              {user?.role === 'manager' && (
+                <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v)}>
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Filter by agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All agents</SelectItem>
+                    {Array.from(new Set(callbacks.map(c => c.sales_agent).filter(Boolean))).sort().map(a => (
+                      <SelectItem key={a} value={a as string}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {/* Quick filter: Phone */}
+              <Input
+                placeholder="Filter by phone"
+                value={phoneFilter}
+                onChange={(e) => setPhoneFilter(e.target.value)}
+                className="w-56"
+              />
             </div>
           </div>
+
+          {user?.role === 'manager' && (
+            <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg border">
+                <div className="font-semibold mb-2">Updates by Agent (count)</div>
+                <div className="space-y-1 max-h-48 overflow-auto pr-1">
+                  {Array.from(updatesByAgent.entries()).sort((a,b)=>b[1]-a[1]).map(([agent, cnt]) => (
+                    <div key={agent} className="flex justify-between text-sm">
+                      <span className="truncate pr-2">{agent}</span>
+                      <span className="font-medium">{cnt}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="p-4 rounded-lg border">
+                <div className="font-semibold mb-2">Most Contacted Phones (by callbacks)</div>
+                <div className="space-y-1 max-h-48 overflow-auto pr-1">
+                  {Array.from(phoneStats.entries()).sort((a,b)=>b[1].count-a[1].count).slice(0,10).map(([phone, stat]) => (
+                    <div key={phone} className="flex justify-between text-sm">
+                      <span className="truncate pr-2">{phone}</span>
+                      <span className="font-medium">{stat.count}x</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left border-b">
                   <th className="py-2 pr-4">Customer</th>
-                  <th className="py-2 pr-4">Contact</th>
+                  <th className="py-2 pr-4">Phone</th>
+                  <th className="py-2 pr-4">Email</th>
                   <th className="py-2 pr-4">Agent</th>
                   <th className="py-2 pr-4">Scheduled</th>
+                  <th className="py-2 pr-4">Last Updated</th>
+                  <th className="py-2 pr-4">Same Phone Cnt</th>
                   <th className="py-2 pr-4">Priority</th>
                   <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 pr-4 text-right">Actions</th>
+                  {user?.role !== 'manager' && (
+                    <th className="py-2 pr-4 text-right">Actions</th>
+                  )}
+                  <th className="py-2 pr-0 text-right">History</th>
                 </tr>
               </thead>
               <tbody>
@@ -282,8 +382,10 @@ export default function ManageCallbacksPage() {
                         <div className="text-xs text-muted-foreground">{c.callback_reason || "—"}</div>
                       </td>
                       <td className="py-3 pr-4">
-                        <div>{c.email}</div>
-                        <div className="text-xs text-muted-foreground">{c.phone_number}</div>
+                        <div className="font-medium">{c.phone_number || "—"}</div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div>{c.email || "—"}</div>
                       </td>
                       <td className="py-3 pr-4">
                         <div>{c.sales_agent}</div>
@@ -300,6 +402,12 @@ export default function ManageCallbacksPage() {
                         </div>
                       </td>
                       <td className="py-3 pr-4">
+                        {c.updated_at ? new Date(c.updated_at as any).toLocaleString() : '—'}
+                      </td>
+                      <td className="py-3 pr-4" title={(() => { const s = phoneStats.get(c.phone_number || 'unknown'); return s?.dates?.map(d=> new Date(d).toLocaleString()).join(', ') || '' })()}>
+                        {(() => { const s = phoneStats.get(c.phone_number || 'unknown'); return s?.count || 1 })()}x
+                      </td>
+                      <td className="py-3 pr-4">
                         {c.priority && (
                           <Badge variant="outline" className={priorityColors[c.priority]}>
                             {c.priority}
@@ -309,11 +417,17 @@ export default function ManageCallbacksPage() {
                       <td className="py-3 pr-4">
                         <Badge className={statusColors[c.status]}>{c.status}</Badge>
                       </td>
+                      {user?.role !== 'manager' && (
                       <td className="py-3 pr-0 text-right">
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex gap-1 justify-end">
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button variant="outline" size="sm" onClick={() => handleEditCallback(c)}>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border-amber-200 text-amber-700 hover:text-amber-800 shadow-sm hover:shadow-md transition-all duration-200"
+                                onClick={() => handleEditCallback(c)}
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
                             </DialogTrigger>
@@ -322,17 +436,6 @@ export default function ManageCallbacksPage() {
                                 <DialogTitle>Edit Callback</DialogTitle>
                               </DialogHeader>
                               <div className="space-y-4">
-                                <div>
-                                  <Label htmlFor="edit-customer-name">
-                                    <User className="h-4 w-4 inline mr-2" />
-                                    Customer Name
-                                  </Label>
-                                  <Input
-                                    id="edit-customer-name"
-                                    value={editForm.customer_name || ""}
-                                    onChange={(e) => setEditForm({ ...editForm, customer_name: e.target.value })}
-                                  />
-                                </div>
                                 <div>
                                   <Label htmlFor="edit-phone">
                                     <Phone className="h-4 w-4 inline mr-2" />
@@ -439,37 +542,279 @@ export default function ManageCallbacksPage() {
                               </div>
                             </DialogContent>
                           </Dialog>
-                          <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            onClick={() => handleScheduleFollowUp(c)}
-                            disabled={c.status === "completed" || c.status === "cancelled"}
-                          >
-                            <RefreshCw className="h-4 w-4 mr-1" />
-                            Follow-up
-                          </Button>
                           {c.status === "pending" && (
-                            <Button variant="default" size="sm" onClick={() => updateStatus(c, "contacted")}>
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Mark Contacted
+                            <Button 
+                              variant="default" 
+                              size="sm" 
+                              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-sm hover:shadow-md transition-all duration-200"
+                              onClick={() => updateStatus(c, "contacted")}
+                            >
+                              <Phone className="h-4 w-4 mr-1" />
+                              Contact
                             </Button>
                           )}
                           {c.status === "contacted" && (
-                            <Button variant="default" size="sm" onClick={() => updateStatus(c, "completed")}>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="bg-gradient-to-r from-purple-50 to-violet-50 hover:from-purple-100 hover:to-violet-100 border-purple-200 text-purple-700 hover:text-purple-800 shadow-sm hover:shadow-md transition-all duration-200"
+                              onClick={() => handleScheduleFollowUp(c)}
+                            >
+                              <Calendar className="h-4 w-4 mr-1" />
+                              Follow-up
+                            </Button>
+                          )}
+                          {c.status === "contacted" && (
+                            <Button 
+                              variant="default" 
+                              size="sm" 
+                              className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-sm hover:shadow-md transition-all duration-200"
+                              onClick={() => updateStatus(c, "completed")}
+                            >
                               <CheckCircle className="h-4 w-4 mr-1" />
                               Complete
                             </Button>
                           )}
                           {c.status !== "cancelled" && c.status !== "completed" && (
-                            <Button variant="outline" size="sm" onClick={() => updateStatus(c, "cancelled")}>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="bg-gradient-to-r from-gray-50 to-slate-50 hover:from-gray-100 hover:to-slate-100 border-gray-200 text-gray-700 hover:text-gray-800 shadow-sm hover:shadow-md transition-all duration-200"
+                              onClick={() => updateStatus(c, "cancelled")}
+                            >
                               <XCircle className="h-4 w-4 mr-1" />
                               Cancel
                             </Button>
                           )}
-                          <Button variant="destructive" size="sm" onClick={() => handleDeleteCallback(c)}>
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            className="bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 text-white shadow-sm hover:shadow-md transition-all duration-200"
+                            onClick={() => handleDeleteCallback(c)}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
+                      </td>
+                      )}
+                      <td className="py-3 pr-0 text-right">
+                        <Dialog open={historyForPhone === (c.phone_number || '')} onOpenChange={(open) => setHistoryForPhone(open ? (c.phone_number || '') : null)}>
+                          <DialogTrigger asChild>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-blue-200 text-blue-700 hover:text-blue-800 shadow-sm hover:shadow-md transition-all duration-200"
+                              onClick={() => setHistoryForPhone(c.phone_number || '')}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-1" />
+                              History
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-4xl">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2">
+                                <Clock className="h-5 w-5 text-blue-600" />
+                                Callback Timeline for {c.phone_number}
+                              </DialogTitle>
+                            </DialogHeader>
+                            <div className="max-h-[70vh] overflow-auto">
+                              <div className="space-y-6 p-4">
+                                {(() => {
+                                  // Get all callbacks for this phone number
+                                  const phoneCallbacks = callbacks.filter(x => (x.phone_number || '') === (c.phone_number || ''));
+                                  
+                                  // Create timeline events for each callback
+                                  const timelineEvents = [];
+                                  
+                                  // Track unique events to avoid duplicates
+                                  const addedEvents = new Set();
+                                  
+                                  phoneCallbacks.forEach((callback, callbackIdx) => {
+                                    // Initial call/creation event
+                                    const createdDate = callback.created_at ? new Date(callback.created_at as any) : (callback.first_call_date ? new Date(callback.first_call_date) : null);
+                                    if (createdDate) {
+                                      const eventKey = `${callback.id}-created-${createdDate.getTime()}`;
+                                      if (!addedEvents.has(eventKey)) {
+                                        timelineEvents.push({
+                                          id: eventKey,
+                                          type: 'initial',
+                                          date: createdDate,
+                                          callback,
+                                          title: callbackIdx === 0 ? 'First Call' : 'New Callback',
+                                          description: `Callback created by ${callback.sales_agent}`,
+                                          status: 'pending',
+                                          isFirst: callbackIdx === 0
+                                        });
+                                        addedEvents.add(eventKey);
+                                      }
+                                    }
+                                    
+                                    // Status update events - only if different from creation
+                                    if (callback.status === 'contacted' && callback.updated_at) {
+                                      const contactedDate = new Date(callback.updated_at as any);
+                                      if (contactedDate && createdDate && contactedDate.getTime() !== createdDate.getTime()) {
+                                        const eventKey = `${callback.id}-contacted-${contactedDate.getTime()}`;
+                                        if (!addedEvents.has(eventKey)) {
+                                          timelineEvents.push({
+                                            id: eventKey,
+                                            type: 'status_update',
+                                            date: contactedDate,
+                                            callback,
+                                            title: 'Customer Contacted',
+                                            description: `Customer contacted by ${(callback as any).updated_by || callback.sales_agent}`,
+                                            status: 'contacted'
+                                          });
+                                          addedEvents.add(eventKey);
+                                        }
+                                      }
+                                    }
+                                    
+                                    // Follow-up scheduled events - only unique ones
+                                    if (callback.scheduled_date && callback.scheduled_time) {
+                                      const scheduledDateTime = new Date(`${callback.scheduled_date}T${callback.scheduled_time}`);
+                                      const eventKey = `followup-${callback.scheduled_date}-${callback.scheduled_time}-${callback.sales_agent}`;
+                                      if (!addedEvents.has(eventKey)) {
+                                        timelineEvents.push({
+                                          id: `${callback.id}-followup-${scheduledDateTime.getTime()}`,
+                                          type: 'followup',
+                                          date: scheduledDateTime,
+                                          callback,
+                                          title: 'Follow-up Scheduled',
+                                          description: `Follow-up appointment scheduled by ${callback.sales_agent}`,
+                                          status: 'pending',
+                                          isScheduled: true
+                                        });
+                                        addedEvents.add(eventKey);
+                                      }
+                                    }
+                                    
+                                    // Completion/cancellation events
+                                    if ((callback.status === 'completed' || callback.status === 'cancelled') && callback.updated_at) {
+                                      const finalDate = new Date(callback.updated_at as any);
+                                      if (createdDate && finalDate.getTime() !== createdDate.getTime()) {
+                                        const eventKey = `${callback.id}-final-${callback.status}-${finalDate.getTime()}`;
+                                        if (!addedEvents.has(eventKey)) {
+                                          timelineEvents.push({
+                                            id: eventKey,
+                                            type: 'final',
+                                            date: finalDate,
+                                            callback,
+                                            title: callback.status === 'completed' ? 'Callback Completed' : 'Callback Cancelled',
+                                            description: `Callback ${callback.status} by ${(callback as any).updated_by || callback.sales_agent}`,
+                                            status: callback.status
+                                          });
+                                          addedEvents.add(eventKey);
+                                        }
+                                      }
+                                    }
+                                  });
+                                  
+                                  // Sort all events chronologically
+                                  timelineEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
+                                  
+                                  return timelineEvents.map((event, idx) => {
+                                    const isLast = idx === timelineEvents.length - 1;
+                                    const statusColor = statusColors[event.status] || 'bg-gray-500';
+                                    const isFuture = event.date > new Date();
+                                    
+                                    return (
+                                      <div key={event.id} className="relative">
+                                        {/* Timeline line */}
+                                        {!isLast && (
+                                          <div className={`absolute left-6 top-16 w-0.5 h-20 ${isFuture ? 'bg-gradient-to-b from-gray-300 to-gray-200 border-dashed' : 'bg-gradient-to-b from-blue-300 to-blue-200'}`}></div>
+                                        )}
+                                        
+                                        {/* Timeline item */}
+                                        <div className="flex items-start gap-4">
+                                          {/* Timeline dot */}
+                                          <div className={`relative z-10 flex-shrink-0 w-12 h-12 rounded-full ${statusColor} flex items-center justify-center shadow-lg ${isFuture ? 'opacity-60 border-2 border-dashed border-gray-400' : ''}`}>
+                                            {event.type === 'initial' && <Phone className="h-6 w-6 text-white" />}
+                                            {event.type === 'status_update' && event.status === 'contacted' && <MessageSquare className="h-6 w-6 text-white" />}
+                                            {event.type === 'followup' && <Calendar className="h-6 w-6 text-white" />}
+                                            {event.type === 'final' && event.status === 'completed' && <CheckCircle className="h-6 w-6 text-white" />}
+                                            {event.type === 'final' && event.status === 'cancelled' && <XCircle className="h-6 w-6 text-white" />}
+                                          </div>
+                                          
+                                          {/* Content card */}
+                                          <div className={`flex-1 border rounded-lg shadow-sm p-4 hover:shadow-md transition-all duration-200 ${isFuture ? 'bg-gray-50 border-gray-300' : 'bg-white border-gray-200'}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                              <div className="flex items-center gap-2">
+                                                <h4 className="font-semibold text-gray-900">{event.title}</h4>
+                                                {event.isFirst && (
+                                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                                    Initial Contact
+                                                  </Badge>
+                                                )}
+                                                {event.isScheduled && (
+                                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                                    Scheduled
+                                                  </Badge>
+                                                )}
+                                                {isFuture && (
+                                                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                                                    Upcoming
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              <div className="text-right">
+                                                <div className="text-sm font-medium text-gray-900">
+                                                  {event.date.toLocaleDateString()}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                  {event.date.toLocaleTimeString()}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            
+                                            <p className="text-sm text-gray-700 mb-3">{event.description}</p>
+                                            
+                                            <div className="grid grid-cols-3 gap-4 text-xs">
+                                              <div>
+                                                <div className="font-medium text-gray-600">Agent</div>
+                                                <div className="text-gray-900">{event.callback.sales_agent}</div>
+                                              </div>
+                                              <div>
+                                                <div className="font-medium text-gray-600">Team</div>
+                                                <div className="text-gray-900">{event.callback.sales_team || '—'}</div>
+                                              </div>
+                                              <div>
+                                                <div className="font-medium text-gray-600">Status</div>
+                                                <Badge className={`${statusColor} text-white text-xs`}>
+                                                  {event.status.toUpperCase()}
+                                                </Badge>
+                                              </div>
+                                            </div>
+                                            
+                                            {event.callback.callback_reason && (
+                                              <div className="mt-3 pt-3 border-t border-gray-100">
+                                                <div className="text-xs font-medium text-gray-600 mb-1">Reason</div>
+                                                <div className="text-xs text-gray-800">{event.callback.callback_reason}</div>
+                                              </div>
+                                            )}
+                                            
+                                            {event.callback.callback_notes && (
+                                              <div className="mt-3 pt-3 border-t border-gray-100">
+                                                <div className="text-xs font-medium text-gray-600 mb-1">Notes</div>
+                                                <div className="text-xs text-gray-800 bg-gray-50 p-2 rounded text-left">{event.callback.callback_notes}</div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                                
+                                {callbacks.filter(x => (x.phone_number || '') === (c.phone_number || '')).length === 0 && (
+                                  <div className="text-center py-8 text-gray-500">
+                                    <Phone className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                                    <p>No callback history found for this phone number.</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </td>
                     </tr>
                   ))

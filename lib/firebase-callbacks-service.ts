@@ -66,6 +66,8 @@ export const callbacksService = {
   // Get all callbacks with optional filtering
   async getCallbacks(userRole?: string, userId?: string, userName?: string): Promise<Callback[]> {
     try {
+      console.log('getCallbacks called with:', { userRole, userId, userName });
+      
       // Helper to safely extract time in milliseconds from various timestamp shapes
       const getTimeMs = (value: any): number => {
         if (!value) return 0;
@@ -84,28 +86,54 @@ export const callbacksService = {
         return 0;
       };
 
-      let q = query(
-        collection(db, COLLECTIONS.CALLBACKS || 'callbacks'),
-        orderBy('created_at', 'desc')
-      );
-      
+      // For managers, get all callbacks without filtering to avoid index issues
       if (userRole === 'manager') {
-        // Managers see all callbacks - use default query
-      } else if (userRole === 'salesman' && (userId || userName)) {
-        // Salesmen see only their callbacks
-        if (userName) {
-          q = query(
-            collection(db, COLLECTIONS.CALLBACKS || 'callbacks'),
-            where('sales_agent', '==', userName)
-          );
-        } else if (userId) {
-          q = query(
-            collection(db, COLLECTIONS.CALLBACKS || 'callbacks'),
-            where('SalesAgentID', '==', userId)
-          );
-        }
+        const q = query(collection(db, COLLECTIONS.CALLBACKS || 'callbacks'));
+        const snapshot = await getDocs(q);
+        const callbacks = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: safeToDate(data.created_at) || data.created_at,
+            updated_at: safeToDate(data.updated_at) || data.updated_at
+          } as Callback;
+        });
+        
+        console.log('Manager callbacks fetched:', callbacks.length);
+        return callbacks.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
       }
-
+      
+      // For salesmen, get all callbacks and filter in memory to avoid index issues
+      if (userRole === 'salesman' && (userId || userName)) {
+        const q = query(collection(db, COLLECTIONS.CALLBACKS || 'callbacks'));
+        const snapshot = await getDocs(q);
+        const allCallbacks = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            created_at: safeToDate(data.created_at) || data.created_at,
+            updated_at: safeToDate(data.updated_at) || data.updated_at
+          } as Callback;
+        });
+        
+        // Filter callbacks for this salesman using multiple field checks
+        const salesmanCallbacks = allCallbacks.filter(callback => {
+          const matchesUserId = callback.SalesAgentID === userId || callback.created_by_id === userId;
+          const matchesUserName = callback.sales_agent === userName || callback.created_by === userName;
+          return matchesUserId || matchesUserName;
+        });
+        
+        console.log('Salesman callbacks fetched:', salesmanCallbacks.length, 'from total:', allCallbacks.length);
+        console.log('Filtering for userId:', userId, 'userName:', userName);
+        console.log('Sample callback fields:', allCallbacks[0] ? Object.keys(allCallbacks[0]) : 'No callbacks');
+        
+        return salesmanCallbacks.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
+      }
+      
+      // Default case - get all callbacks
+      const q = query(collection(db, COLLECTIONS.CALLBACKS || 'callbacks'));
       const snapshot = await getDocs(q);
       const callbacks = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -117,7 +145,7 @@ export const callbacksService = {
         } as Callback;
       });
 
-      // Sort in memory to avoid index issues
+      console.log('Default callbacks fetched:', callbacks.length);
       return callbacks.sort((a, b) => getTimeMs(b.created_at) - getTimeMs(a.created_at));
     } catch (error) {
       console.error('Error fetching callbacks:', error);
@@ -143,7 +171,7 @@ export const callbacksService = {
           type: 'callback',
           priority: 'medium',
           from: callback.created_by || callback.sales_agent,
-          fromAvatar: undefined,
+          fromAvatar: null,
           to: ['manager'],
           isRead: false,
           actionRequired: true,

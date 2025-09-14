@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { callbacksService } from "@/lib/firebase-callbacks-service";
@@ -21,9 +20,22 @@ import {
   MessageSquare, 
   Save,
   ArrowLeft,
-  AlertCircle,
-  CheckCircle
+  AlertCircle
 } from "lucide-react";
+
+type FormState = {
+  customer_name: string;
+  phone_number: string;
+  email: string;
+  first_call_date: string;
+  first_call_time: string;
+  callback_reason: string;
+  callback_notes: string;
+  priority: "low" | "medium" | "high";
+  scheduled_date: string;
+  scheduled_time: string;
+  follow_up_required: boolean;
+};
 
 export default function NewCallbackPage() {
   const router = useRouter();
@@ -31,7 +43,7 @@ export default function NewCallbackPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormState>({
     customer_name: "",
     phone_number: "",
     email: "",
@@ -49,7 +61,7 @@ export default function NewCallbackPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev: FormState) => ({ ...prev, [name]: value }));
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -76,6 +88,10 @@ export default function NewCallbackPage() {
         first_call_time: form.first_call_time,
         callback_reason: form.callback_reason,
         callback_notes: form.callback_notes,
+        priority: form.priority,
+        scheduled_date: form.scheduled_date,
+        scheduled_time: form.scheduled_time,
+        follow_up_required: form.follow_up_required,
         status: "pending" as const,
         created_by: user.name,
         created_by_id: user.id,
@@ -83,8 +99,31 @@ export default function NewCallbackPage() {
       };
 
       const id = await callbacksService.addCallback(payload);
-      toast({ title: "Callback created", description: `ID: ${id}` });
-      router.push("/callbacks/manage");
+      console.log('Callback created with ID:', id, 'Payload:', payload);
+      
+      // Detailed success notification with key callback details
+      toast({ 
+        title: "✅ Callback Created Successfully!",
+        description: `Customer: ${form.customer_name} | Phone: ${form.phone_number} | First call: ${form.first_call_date} ${form.first_call_time}`,
+        duration: 5000
+      });
+      
+      // Don't navigate - stay on the form to allow creating more callbacks
+      
+      // Reset form after successful submission
+      setForm({
+        customer_name: "",
+        phone_number: "",
+        email: "",
+        first_call_date: "",
+        first_call_time: "",
+        callback_reason: "",
+        callback_notes: "",
+        priority: "medium",
+        scheduled_date: "",
+        scheduled_time: "",
+        follow_up_required: false
+      });
     } catch (err) {
       console.error("Error creating callback", err);
       toast({ title: "Error", description: "Failed to create callback", variant: "destructive" });
@@ -216,7 +255,7 @@ export default function NewCallbackPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="priority">Priority Level</Label>
-                <Select value={form.priority} onValueChange={(value) => setForm(prev => ({ ...prev, priority: value }))}>
+                <Select value={form.priority} onValueChange={(value: "low" | "medium" | "high") => setForm((prev) => ({ ...prev, priority: value }))}>
                   <SelectTrigger className="transition-all duration-200 focus:ring-2 focus:ring-green-500 focus:border-green-500">
                     <SelectValue placeholder="Select priority" />
                   </SelectTrigger>
@@ -285,21 +324,6 @@ export default function NewCallbackPage() {
                   disabled={loading}
                   className="transition-all duration-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   min={new Date().toISOString().split("T")[0]}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="scheduled_time" className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Scheduled Time
-                </Label>
-                <Input 
-                  id="scheduled_time" 
-                  name="scheduled_time" 
-                  type="time" 
-                  value={form.scheduled_time} 
-                  onChange={handleChange} 
-                  disabled={loading}
-                  className="transition-all duration-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 />
               </div>
             </div>

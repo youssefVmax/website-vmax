@@ -115,8 +115,8 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
 
     // Process data for aggregations
     filteredData.forEach(deal => {
-      // Sales by agent
-      const agentName = deal.salesAgent || 'Unknown';
+      // Sales by agent - use closing agent for salesman role, sales agent for others
+      const agentName = userRole === 'salesman' ? (deal.closingAgent || 'Unknown') : (deal.salesAgent || 'Unknown');
       if (!salesByAgent[agentName]) {
         salesByAgent[agentName] = { agent: agentName, sales: 0, deals: 0 };
       }
@@ -276,61 +276,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Sales</p>
-                <p className="text-2xl font-bold text-gray-900">${analytics.totalSales.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-              </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Deals</p>
-                <p className="text-2xl font-bold text-gray-900">{analytics.totalDeals}</p>
-              </div>
-              <Target className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Average Deal</p>
-                <p className="text-2xl font-bold text-gray-900">${Number(analytics.averageDealSize).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Pending Callbacks</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {callbackMetrics?.pendingCount || '0'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {callbackMetrics?.todayCallbacks || 0} created today
-                </p>
-              </div>
-              <Phone className="h-8 w-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Key Metrics - Removed as requested */}
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -461,32 +407,103 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           </CardContent>
         </Card>
 
-        {/* Revenue by User Count */}
-        <Card>
-          <CardHeader>
+        {/* Revenue by Agent */}
+        <Card className="bg-gradient-to-br from-gray-900 to-black border-gray-700 shadow-lg">
+          <CardHeader className="pb-4">
             <CardTitle>
-              <div className="flex items-center">
-                <BarChart3 className="mr-2 h-5 w-5" />
-                Revenue by User Count
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="p-2 bg-gradient-to-r from-gray-700 to-gray-900 rounded-lg mr-3">
+                    <BarChart3 className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">
+                      {userRole === 'salesman' ? 'Revenue by Closing Agent' : 'Revenue by Sales Agent'}
+                    </h3>
+                    <p className="text-sm text-gray-300 mt-1">
+                      Performance breakdown by {userRole === 'salesman' ? 'closing agents' : 'sales agents'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-white">
+                    {analytics.salesByAgent.length}
+                  </div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide">
+                    {userRole === 'salesman' ? 'Closing Agents' : 'Sales Agents'}
+                  </div>
+                </div>
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-80">
+            <div className="h-80 mb-4">
               <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart data={analytics.userAnalysisData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" dataKey="name" name="Users" />
-                  <YAxis type="number" dataKey="value" name="Revenue" />
-                  <ZAxis type="number" dataKey="name" name="Deals" range={[50, 300]} />
-                  <Tooltip formatter={(value, name) => {
-                    if (name === 'name') return [value, 'Users per Deal'];
-                    if (name === 'value') return [`$${value}`, 'Total Revenue'];
-                    return [value, name];
-                  }} />
-                  <Scatter name="Deals" fill="#8884d8" />
-                </ScatterChart>
+                <BarChart data={analytics.salesByAgent.slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="agent" 
+                    angle={-45} 
+                    textAnchor="end" 
+                    height={80}
+                    fontSize={12}
+                    stroke="#9ca3af"
+                  />
+                  <YAxis 
+                    fontSize={12}
+                    stroke="#9ca3af"
+                    tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip 
+                    formatter={(value, name) => {
+                      if (name === 'sales') return [`$${Number(value).toLocaleString()}`, 'Revenue'];
+                      if (name === 'deals') return [value, 'Deals Count'];
+                      return [value, name];
+                    }}
+                    labelStyle={{ color: '#f3f4f6' }}
+                    contentStyle={{ 
+                      backgroundColor: '#1f2937', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
+                      color: '#f3f4f6'
+                    }}
+                  />
+                  <Bar 
+                    dataKey="sales" 
+                    fill="url(#blackGradient)" 
+                    radius={[4, 4, 0, 0]}
+                    stroke="#000000"
+                    strokeWidth={1}
+                  />
+                  <defs>
+                    <linearGradient id="blackGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#374151" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#111827" stopOpacity={0.8}/>
+                    </linearGradient>
+                  </defs>
+                </BarChart>
               </ResponsiveContainer>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-600 shadow-sm">
+                <div className="text-lg font-semibold text-white">
+                  ${analytics.salesByAgent.reduce((sum, agent) => sum + agent.sales, 0).toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-400 uppercase tracking-wide mt-1">Total Revenue</div>
+              </div>
+              <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-600 shadow-sm">
+                <div className="text-lg font-semibold text-emerald-400">
+                  {analytics.salesByAgent.reduce((sum, agent) => sum + agent.deals, 0)}
+                </div>
+                <div className="text-xs text-gray-400 uppercase tracking-wide mt-1">Total Deals</div>
+              </div>
+              <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-600 shadow-sm">
+                <div className="text-lg font-semibold text-amber-400">
+                  ${Math.round(analytics.salesByAgent.reduce((sum, agent) => sum + agent.sales, 0) / Math.max(analytics.salesByAgent.reduce((sum, agent) => sum + agent.deals, 0), 1)).toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-400 uppercase tracking-wide mt-1">Avg Deal Size</div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -507,6 +524,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                   <th className="text-left py-2">Amount</th>
                   <th className="text-left py-2">Service</th>
                   <th className="text-left py-2">Sales Agent</th>
+                  <th className="text-left py-2">Team</th>
                   <th className="text-left py-2">Status</th>
                 </tr>
               </thead>
@@ -518,6 +536,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                     <td className="py-2 font-semibold">${deal.amount}</td>
                     <td className="py-2">{deal.service}</td>
                     <td className="py-2 capitalize">{deal.salesAgent}</td>
+                    <td className="py-2">{deal.team || 'Unknown'}</td>
                     <td className="py-2">
                       <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
                         Completed

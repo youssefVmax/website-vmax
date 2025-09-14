@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { showToast, showSuccess } from "@/lib/sweetalert"
 import { useAuth } from "@/hooks/useAuth"
 
 interface UnifiedLoginProps {
@@ -148,14 +149,34 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
       
       if (success) {
         console.log('UnifiedLogin: Login successful, calling onLogin callback')
+        // Show custom success notification
+        await showSuccess(
+          'Login Successful',
+          'Welcome back! Redirecting you to your dashboard...'
+        );
+        
+        // Add custom styles after the modal is shown
+        setTimeout(() => {
+          const popup = document.querySelector('.swal2-popup') as HTMLElement;
+          if (popup) {
+            popup.style.borderRadius = '0.75rem';
+            popup.style.boxShadow = '0 0 30px rgba(16, 185, 129, 0.3)';
+          }
+        }, 10);
         onLogin()
       } else {
         console.log('UnifiedLogin: Login failed')
         setError("Invalid credentials")
+        const failureReason = username === 'manager'
+          ? 'Incorrect manager credentials. The manager account is not in Firebase; only the configured manager username/password are accepted.'
+          : 'User not found or password mismatch in Firebase.'
+        // SweetAlert toast (top-right) with reason
+        showToast(`Login failed: ${failureReason}`, 'error')
       }
     } catch (err) {
       console.error('UnifiedLogin: Login error:', err)
       setError("Authentication failed")
+      showToast('Authentication failed due to an unexpected error. Please try again.', 'error')
     } finally {
       setLoading(false)
     }

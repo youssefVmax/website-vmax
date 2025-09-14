@@ -127,6 +127,7 @@ export interface Target {
   // For individual targets
   agentId?: string;
   agentName?: string;
+  team?: string;
   // For team targets
   teamId?: string;
   teamName?: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,12 @@ import {
 import { 
   Phone, PhoneCall, Clock, TrendingUp, Users, CheckCircle, 
   XCircle, AlertCircle, Calendar, Target, Award, Activity,
-  RefreshCw, Filter
+  RefreshCw, Filter, User
 } from 'lucide-react';
 import { callbackAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/callback-analytics-service';
 import { callbacksService } from '@/lib/firebase-callbacks-service';
+import { dealsService } from '@/lib/firebase-deals-service';
+import { targetsService } from '@/lib/firebase-targets-service';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -32,19 +34,50 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
     userId: user.id
   });
   const [refreshing, setRefreshing] = useState(false);
+  // Manager-only revenue by user count + team comparisons
+  const [teamAnalysis, setTeamAnalysis] = useState<{
+    perTeam: Array<{
+      team: string;
+      members: number;
+      deals: number;
+      revenue: number;
+      revenuePerUser: number;
+      targetRevenue?: number;
+      targetDeals?: number;
+      performanceRevenuePct?: number;
+      performanceDealsPct?: number;
+      trend?: Array<{ x: number; y: number }>;
+    }>;
+  } | null>(null)
+  const [timeframe, setTimeframe] = useState<'30d' | 'month' | 'ytd'>('30d')
+  const [sortKey, setSortKey] = useState<'team' | 'members' | 'deals' | 'revenue' | 'revenuePerUser' | 'performanceRevenuePct' | 'performanceDealsPct'>('revenuePerUser')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  const loadKPIs = async () => {
+  const loadKPIs = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
+      console.log('Loading KPIs with user info:', { id: user.id, name: user.name, role: userRole });
+      
+      // For managers, don't pass userId/userName filters to get all callbacks
+      const filters: CallbackFilters = userRole === 'manager' ? {
+        userRole: 'manager'
+      } : {
+        userRole,
+        userId: user.id,
+        userName: user.name
+      };
+      
+      console.log('Using filters for KPIs:', filters);
+      
       const data = await callbackAnalyticsService.getCallbackKPIs(filters);
+      console.log('KPIs loaded:', data);
       setKpis(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load callback KPIs');
+    } catch (error) {
+      console.error('Error loading callback KPIs:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [userRole, user.id, user.name]);
 
   const refreshData = async () => {
     setRefreshing(true);
@@ -54,7 +87,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
 
   useEffect(() => {
     loadKPIs();
-  }, [filters]);
+  }, [loadKPIs]);
 
   // Auto-refresh every 30 seconds for live data
   useEffect(() => {
@@ -76,6 +109,155 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
 
     return () => unsubscribe();
   }, [userRole, user.id, user.name]);
+
+  // Load manager analysis: revenue by user count and team performance
+  useEffect(() => {
+    if (userRole !== 'manager') return
+    const load = async () => {
+      try {
+        const [deals, teamTargets, teamsWithMembers] = await Promise.all([
+          dealsService.getAllDeals(),
+          targetsService.getTeamTargets(user.id),
+          targetsService.getTeamsWithMembers()
+        ])
+
+        // Build members per team map from users list
+        const membersByTeam = new Map<string, number>()
+        teamsWithMembers.forEach(t => membersByTeam.set(t.name, t.members.length))
+
+        // Filter deals by timeframe
+        const now = new Date()
+        let start: Date
+        if (timeframe === '30d') {
+          start = new Date(now)
+          start.setDate(start.getDate() - 30)
+        } else if (timeframe === 'month') {
+          start = new Date(now.getFullYear(), now.getMonth(), 1)
+        } else {
+          start = new Date(now.getFullYear(), 0, 1)
+        }
+
+        const inRangeDeals = deals.filter(d => {
+          const dateStr = d.signup_date || (d as any).date
+          const dt = dateStr ? new Date(dateStr) : (d as any).created_at ? new Date((d as any).created_at) : null
+          if (!dt || isNaN(dt.getTime())) return false
+          return dt >= start && dt <= now
+        })
+
+        // Aggregate deals by team
+        const map = new Map<string, { team: string; members: number; deals: number; revenue: number }>()
+        // Track distinct active agents per team from deals (fallback when users list misses them)
+        const distinctAgentsPerTeam = new Map<string, Set<string>>()
+        const getMembersCount = (teamName: string): number => {
+          // Exact match
+          const exact = membersByTeam.get(teamName)
+          if (typeof exact === 'number') return exact
+          // Case-insensitive match
+          const match = Array.from(membersByTeam.entries()).find(([k]) => k.toLowerCase() === teamName.toLowerCase())
+          if (match) return match[1]
+          return 0
+        }
+
+        inRangeDeals.forEach(d => {
+          const team = d.sales_team || 'Unknown'
+          if (!map.has(team)) map.set(team, { team, members: 0, deals: 0, revenue: 0 })
+          const rec = map.get(team)!
+          rec.deals += 1
+          rec.revenue += Number(d.amount_paid || 0)
+          const agentId = (d as any).SalesAgentID || (d as any).sales_agent_id || d.sales_agent
+          if (!distinctAgentsPerTeam.has(team)) distinctAgentsPerTeam.set(team, new Set<string>())
+          if (agentId) distinctAgentsPerTeam.get(team)!.add(String(agentId))
+        })
+
+        // Fill members count using users list, falling back to distinct agents in data
+        map.forEach((rec, team) => {
+          const fromUsers = getMembersCount(team)
+          const fromDeals = distinctAgentsPerTeam.get(team)?.size || 0
+          rec.members = Math.max(fromUsers, fromDeals)
+        })
+
+        // Targets by team (latest period per team)
+        const targetsByTeam = new Map<string, { revenue?: number; deals?: number }>()
+        teamTargets.forEach(t => {
+          const prev = targetsByTeam.get(t.teamName) || {}
+          targetsByTeam.set(t.teamName, { revenue: t.monthlyTarget ?? prev.revenue, deals: t.dealsTarget ?? prev.deals })
+        })
+
+        // Build sparkline trends per team
+        const buildTrend = (team: string): Array<{ x: number; y: number }> => {
+          const points: Array<{ x: number; y: number }> = []
+          if (timeframe === 'ytd') {
+            // Monthly buckets Jan..current
+            for (let m = 0; m <= now.getMonth(); m++) {
+              const monthStart = new Date(now.getFullYear(), m, 1)
+              const monthEnd = new Date(now.getFullYear(), m + 1, 0)
+              const sum = inRangeDeals
+                .filter(d => (d.sales_team || 'Unknown') === team)
+                .filter(d => {
+                  const dt = new Date(d.signup_date || (d as any).date)
+                  return dt >= monthStart && dt <= monthEnd
+                })
+                .reduce((s, d) => s + Number(d.amount_paid || 0), 0)
+              points.push({ x: m + 1, y: sum })
+            }
+          } else {
+            // Weekly buckets, last 4-8 weeks depending on range
+            const weeks = timeframe === '30d' ? 4 : 6
+            for (let w = weeks - 1; w >= 0; w--) {
+              const bucketEnd = new Date(now)
+              bucketEnd.setDate(bucketEnd.getDate() - (w * 7))
+              const bucketStart = new Date(bucketEnd)
+              bucketStart.setDate(bucketEnd.getDate() - 6)
+              const sum = inRangeDeals
+                .filter(d => (d.sales_team || 'Unknown') === team)
+                .filter(d => {
+                  const dt = new Date(d.signup_date || (d as any).date)
+                  return dt >= bucketStart && dt <= bucketEnd
+                })
+                .reduce((s, d) => s + Number(d.amount_paid || 0), 0)
+              const idx = weeks - w
+              points.push({ x: idx, y: sum })
+            }
+          }
+          return points
+        }
+
+        let perTeam = Array.from(map.values()).map(row => {
+          const targets = targetsByTeam.get(row.team) || {}
+          const revenuePerUser = row.members > 0 ? row.revenue / row.members : row.revenue
+          const performanceRevenuePct = targets.revenue && targets.revenue > 0 ? (row.revenue / targets.revenue) * 100 : undefined
+          const performanceDealsPct = targets.deals && targets.deals > 0 ? (row.deals / targets.deals) * 100 : undefined
+          return {
+            team: row.team,
+            members: row.members,
+            deals: row.deals,
+            revenue: Math.round(row.revenue),
+            revenuePerUser: Math.round(revenuePerUser),
+            targetRevenue: targets.revenue,
+            targetDeals: targets.deals,
+            performanceRevenuePct: performanceRevenuePct,
+            performanceDealsPct: performanceDealsPct,
+            trend: buildTrend(row.team),
+          }
+        })
+
+        // Sorting
+        perTeam.sort((a, b) => {
+          const dir = sortDir === 'asc' ? 1 : -1
+          const av = (a as any)[sortKey] ?? 0
+          const bv = (b as any)[sortKey] ?? 0
+          if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+          return String(av).localeCompare(String(bv)) * dir
+        })
+
+        setTeamAnalysis({ perTeam })
+      } catch (e) {
+        console.error('Failed to load team analysis', e)
+        setTeamAnalysis(null)
+      }
+    }
+    load()
+  }, [userRole, user.id, timeframe, sortKey, sortDir])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -142,7 +324,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
       {/* Header with Live Status */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Callback Analytics</h2>
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Callback Analytics</h2>
           <p className="text-sm text-muted-foreground">
             {userRole === 'manager' 
               ? `Team callback performance • ${kpis.totalCallbacks} total callbacks`
@@ -170,66 +352,84 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
 
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
+        <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-blue-100">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Callbacks</p>
-                <p className="text-2xl font-bold text-gray-900">{kpis.totalCallbacks}</p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-sm font-medium text-blue-700">Total Callbacks</p>
+                <p className="text-3xl font-bold text-blue-900">{kpis.totalCallbacks}</p>
+                <p className="text-xs text-blue-600 mt-1">
                   {kpis.pendingCallbacks} pending
                 </p>
               </div>
-              <Phone className="h-8 w-8 text-blue-600" />
+              <div className="p-3 bg-blue-500 rounded-full">
+                <Phone className="h-8 w-8 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 to-green-100">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Conversion Rate</p>
-                <p className="text-2xl font-bold text-gray-900">{kpis.conversionRate.toFixed(1)}%</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {kpis.completedCallbacks} completed
+                <p className="text-sm font-medium text-green-700">Top Customer</p>
+                <p className="text-2xl font-bold text-green-900 truncate max-w-[150px]">
+                  {kpis.callbacksByAgent.length > 0 && kpis.recentCallbacks.length > 0 
+                    ? kpis.recentCallbacks[0]?.customer_name || 'No customers'
+                    : 'No customers'}
+                </p>
+                <p className="text-xs text-green-600 mt-1">
+                  Most recent callback
                 </p>
               </div>
-              <Target className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Avg Response Time</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatResponseTime(kpis.averageResponseTime)}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Median: {formatResponseTime(kpis.responseTimeMetrics.medianHours)}
-                </p>
+              <div className="p-3 bg-green-500 rounded-full">
+                <User className="h-8 w-8 text-white" />
               </div>
-              <Clock className="h-8 w-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+{userRole === 'manager' && (
+          <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-purple-100">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-700">Top Salesman</p>
+                  <p className="text-2xl font-bold text-purple-900 truncate max-w-[150px]">
+                    {kpis.callbacksByAgent.length > 0 
+                      ? kpis.callbacksByAgent[0]?.agent || 'No agents'
+                      : 'No agents'}
+                  </p>
+                  <p className="text-xs text-purple-600 mt-1">
+                    {kpis.callbacksByAgent.length > 0 
+                      ? `${kpis.callbacksByAgent[0]?.count || 0} callbacks`
+                      : '0 callbacks'}
+                  </p>
+                </div>
+                <div className="p-3 bg-purple-500 rounded-full">
+                  <Users className="h-8 w-8 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-orange-100">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Active Callbacks</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm font-medium text-orange-700">Active Callbacks</p>
+                <p className="text-3xl font-bold text-orange-900">
                   {kpis.pendingCallbacks + kpis.contactedCallbacks}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-orange-600 mt-1">
                   Need attention
                 </p>
               </div>
-              <Activity className="h-8 w-8 text-orange-600" />
+              <div className="p-3 bg-orange-500 rounded-full">
+                <Activity className="h-8 w-8 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -455,40 +655,108 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
         </CardContent>
       </Card>
 
-      {/* Response Time Metrics */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Response Time Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">
-                {formatResponseTime(kpis.responseTimeMetrics.averageHours)}
-              </p>
-              <p className="text-sm text-gray-600">Average</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">
-                {formatResponseTime(kpis.responseTimeMetrics.medianHours)}
-              </p>
-              <p className="text-sm text-gray-600">Median</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">
-                {formatResponseTime(kpis.responseTimeMetrics.fastest)}
-              </p>
-              <p className="text-sm text-gray-600">Fastest</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-orange-600">
-                {formatResponseTime(kpis.responseTimeMetrics.slowest)}
-              </p>
-              <p className="text-sm text-gray-600">Slowest</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Manager: Revenue by User Count + Team Performance */}
+      {userRole === 'manager' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Revenue by User Count (Per Team)</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant={timeframe === '30d' ? 'default' : 'outline'} size="sm" onClick={() => setTimeframe('30d')}>Last 30d</Button>
+                  <Button variant={timeframe === 'month' ? 'default' : 'outline'} size="sm" onClick={() => setTimeframe('month')}>This Month</Button>
+                  <Button variant={timeframe === 'ytd' ? 'default' : 'outline'} size="sm" onClick={() => setTimeframe('ytd')}>YTD</Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {teamAnalysis?.perTeam && teamAnalysis.perTeam.length > 0 ? (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={teamAnalysis.perTeam}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="team" tick={{ fontSize: 12 }} />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Revenue / User']} />
+                      <Bar dataKey="revenuePerUser" fill="#0ea5e9" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No team/deal data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Team Deals vs Revenue vs Targets</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {teamAnalysis?.perTeam && teamAnalysis.perTeam.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 cursor-pointer" onClick={() => { setSortKey('team'); setSortDir(sortKey==='team' && sortDir==='asc' ? 'desc' : 'asc') }}>Team</th>
+                        <th className="text-left py-2 cursor-pointer" onClick={() => { setSortKey('members'); setSortDir(sortKey==='members' && sortDir==='asc' ? 'desc' : 'asc') }}>Members</th>
+                        <th className="text-left py-2 cursor-pointer" onClick={() => { setSortKey('deals'); setSortDir(sortKey==='deals' && sortDir==='asc' ? 'desc' : 'asc') }}>Deals</th>
+                        <th className="text-left py-2 cursor-pointer" onClick={() => { setSortKey('revenue'); setSortDir(sortKey==='revenue' && sortDir==='asc' ? 'desc' : 'asc') }}>Revenue</th>
+                        <th className="text-left py-2 cursor-pointer" onClick={() => { setSortKey('revenuePerUser'); setSortDir(sortKey==='revenuePerUser' && sortDir==='asc' ? 'desc' : 'asc') }}>Rev/User</th>
+                        <th className="text-left py-2">Target (Rev)</th>
+                        <th className="text-left py-2">Target (Deals)</th>
+                        <th className="text-left py-2 cursor-pointer" onClick={() => { setSortKey('performanceRevenuePct'); setSortDir(sortKey==='performanceRevenuePct' && sortDir==='asc' ? 'desc' : 'asc') }}>Perf (Rev)</th>
+                        <th className="text-left py-2 cursor-pointer" onClick={() => { setSortKey('performanceDealsPct'); setSortDir(sortKey==='performanceDealsPct' && sortDir==='asc' ? 'desc' : 'asc') }}>Perf (Deals)</th>
+                        <th className="text-left py-2">Trend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamAnalysis.perTeam.map((row, idx) => (
+                        <tr key={idx} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
+                          <td className="py-2 font-medium">{row.team}</td>
+                          <td className="py-2">{row.members}</td>
+                          <td className="py-2">{row.deals}</td>
+                          <td className="py-2">${""}{row.revenue.toLocaleString()}</td>
+                          <td className="py-2">${""}{row.revenuePerUser.toLocaleString()}</td>
+                          <td className="py-2">{row.targetRevenue ? `$${row.targetRevenue.toLocaleString()}` : '—'}</td>
+                          <td className="py-2">{row.targetDeals ?? '—'}</td>
+                          <td className="py-2">
+                            {row.performanceRevenuePct !== undefined ? (
+                              <span className={row.performanceRevenuePct >= 100 ? 'text-green-600 font-semibold' : 'text-orange-600 font-medium'}>
+                                {row.performanceRevenuePct.toFixed(0)}%
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td className="py-2">
+                            {row.performanceDealsPct !== undefined ? (
+                              <span className={row.performanceDealsPct >= 100 ? 'text-green-600 font-semibold' : 'text-orange-600 font-medium'}>
+                                {row.performanceDealsPct.toFixed(0)}%
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td className="py-2">
+                            {row.trend && row.trend.length > 0 ? (
+                              <div className="w-28 h-10">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <LineChart data={row.trend}>
+                                    <Line type="monotone" dataKey="y" stroke="#10b981" strokeWidth={2} dot={false} />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              </div>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No team/deal data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

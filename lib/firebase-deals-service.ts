@@ -57,45 +57,53 @@ function safeToDate(timestamp: any): Date | null {
 
 export interface Deal {
   id?: string;
-  DealID: string;
-  signup_date: string;
-  end_date: string;
+  DealID?: string;
   customer_name: string;
   email: string;
   phone_number: string;
   country: string;
+  custom_country?: string;
+  signup_date: string;
   amount_paid: number;
-  paid_per_month: number;
   duration_months: number;
+  duration_years?: number;
+  number_of_users: number;
+  product_type?: string;
+  service_tier: string;
   sales_agent: string;
   closing_agent: string;
   sales_team: string;
-  product_type: string;
-  service_tier: string;
-  data_month: number;
-  data_year: number;
-  invoice_link?: string;
+  SalesAgentID: string;
+  ClosingAgentID: string;
   is_ibo_player: boolean;
   is_bob_player: boolean;
   is_smarters: boolean;
   is_ibo_pro: boolean;
-  days_remaining: number;
-  paid_per_day: number;
-  duration_mean_paid: number;
-  agent_avg_paid: number;
-  is_above_avg: boolean;
-  paid_rank: number;
-  end_year: number;
-  sales_agent_norm: string;
-  closing_agent_norm: string;
-  SalesAgentID: string;
-  ClosingAgentID: string;
-  
-  // Additional tracking fields
-  status: 'pending' | 'active' | 'completed' | 'cancelled' | 'refunded';
+  is_iboss: boolean;
+  invoice_link?: string;
+  device_key?: string;
+  device_id?: string;
+  notes?: string;
+  status: 'active' | 'inactive' | 'cancelled' | 'completed';
   stage: 'lead' | 'qualified' | 'proposal' | 'negotiation' | 'closed-won' | 'closed-lost';
   priority: 'low' | 'medium' | 'high';
-  notes?: string;
+  
+  // Auto-calculated fields
+  end_date?: string;
+  paid_per_month?: number;
+  paid_per_day?: number;
+  days_remaining?: number;
+  data_month?: number;
+  data_year?: number;
+  end_year?: number;
+  sales_agent_norm?: string;
+  closing_agent_norm?: string;
+  duration_mean_paid?: number;
+  agent_avg_paid?: number;
+  is_above_avg?: boolean;
+  paid_rank?: number;
+  
+  // Commission fields
   commission_sales?: number;
   commission_closing?: number;
   created_at?: Timestamp;
@@ -200,11 +208,14 @@ export class FirebaseDealsService {
         ClosingAgentID: processedDeal.ClosingAgentID,
         DealID: processedDeal.DealID,
         email: processedDeal.email,
-        phone: processedDeal.phone_number,
+        phone_number: processedDeal.phone_number,
         country: processedDeal.country,
         duration_months: processedDeal.duration_months,
         type_program: processedDeal.product_type,
         invoice: processedDeal.invoice_link,
+        end_date: processedDeal.end_date,
+        device_key: processedDeal.device_key,
+        device_id: processedDeal.device_id,
         created_at: serverTimestamp(),
         updated_at: serverTimestamp()
       };
@@ -221,84 +232,6 @@ export class FirebaseDealsService {
         processedDeal.customer_name
       );
 
-      // Create notifications for sales agent, closing agent, and managers
-      const notifications = [
-        // Notification for sales agent
-        {
-          title: 'New Deal Created',
-          message: `You created a new deal for ${processedDeal.customer_name} worth $${processedDeal.amount_paid}`,
-          type: 'deal' as const,
-          priority: 'medium' as const,
-          from: processedDeal.created_by || 'System',
-          to: [processedDeal.SalesAgentID],
-          dealId: docRef.id,
-          dealName: processedDeal.customer_name,
-          dealValue: processedDeal.amount_paid,
-          dealStage: processedDeal.stage,
-          isRead: false,
-          actionRequired: false
-        },
-        // Notification for closing agent (if different from sales agent)
-        ...(processedDeal.ClosingAgentID && processedDeal.ClosingAgentID !== processedDeal.SalesAgentID ? [{
-          title: 'New Deal Assigned',
-          message: `You've been assigned as closing agent for ${processedDeal.customer_name}'s deal`,
-          type: 'deal' as const,
-          priority: 'medium' as const,
-          from: processedDeal.created_by || 'System',
-          to: [processedDeal.ClosingAgentID],
-          dealId: docRef.id,
-          dealName: processedDeal.customer_name,
-          dealValue: processedDeal.amount_paid,
-          dealStage: processedDeal.stage,
-          isRead: false,
-          actionRequired: true
-        }] : []),
-        // Enhanced notification for all managers with detailed agent information
-        {
-          title: '💰 New Deal Created',
-          message: `Agent ${processedDeal.created_by} created a new deal:\n• Customer: ${processedDeal.customer_name}\n• Value: $${processedDeal.amount_paid?.toLocaleString()}\n• Service: ${processedDeal.type_service || 'N/A'}\n• Stage: ${processedDeal.stage}\n• Sales Agent: ${processedDeal.sales_agent}\n• Team: ${processedDeal.sales_team || 'N/A'}`,
-          type: 'deal' as const,
-          priority: processedDeal.amount_paid > 10000 ? 'high' as const : 'medium' as const,
-          from: processedDeal.created_by || 'System',
-          to: ['manager'], // This will be expanded to all managers in notification service
-          dealId: docRef.id,
-          dealName: processedDeal.customer_name,
-          dealValue: processedDeal.amount_paid,
-          dealStage: processedDeal.stage,
-          salesAgent: processedDeal.sales_agent,
-          salesAgentId: processedDeal.SalesAgentID,
-          closingAgent: processedDeal.closing_agent,
-          closingAgentId: processedDeal.ClosingAgentID,
-          serviceType: processedDeal.type_service,
-          teamName: processedDeal.sales_team,
-          isRead: false,
-          actionRequired: false,
-          timestamp: serverTimestamp()
-        }
-      ];
-
-      if (processedDeal.ClosingAgentID !== processedDeal.SalesAgentID) {
-        notifications.push({
-          title: 'Deal Assignment',
-          message: `You have been assigned as closing agent for deal "${processedDeal.customer_name}" worth $${processedDeal.amount_paid}.`,
-          type: 'deal' as const,
-          priority: 'medium' as const,
-          from: processedDeal.created_by,
-          dealStage: processedDeal.stage,
-          to: [processedDeal.ClosingAgentID],
-          dealId: docRef.id,
-          dealName: processedDeal.customer_name,
-          dealValue: processedDeal.amount_paid,
-          isRead: false,
-          actionRequired: true
-        });
-      }
-
-      // Send notifications
-      for (const notification of notifications) {
-        await notificationService.addNotification(notification);
-      }
-      
       return docRef.id;
     } catch (error) {
       console.error('Error creating deal:', error);
@@ -569,11 +502,12 @@ export class FirebaseDealsService {
     
     // Group by service
     const dealsByService = deals.reduce((acc, deal) => {
-      if (!acc[deal.product_type]) {
-        acc[deal.product_type] = { deals: 0, revenue: 0 };
+      const productType = deal.product_type || 'Unknown';
+      if (!acc[productType]) {
+        acc[productType] = { deals: 0, revenue: 0 };
       }
-      acc[deal.product_type].deals += 1;
-      acc[deal.product_type].revenue += deal.amount_paid;
+      acc[productType].deals += 1;
+      acc[productType].revenue += deal.amount_paid;
       return acc;
     }, {} as Record<string, { deals: number; revenue: number }>);
     

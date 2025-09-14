@@ -10,22 +10,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { showDealAdded, showError, showLoading } from "@/lib/sweetalert";
+import { showDealAdded, showError } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
-import { useNotifications } from "@/hooks/use-notifications";
 import { User, getUsersByRole } from "@/lib/auth";
 import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
 import { dealsService } from "@/lib/firebase-deals-service";
+import { useToast } from "@/hooks/use-toast";
 
 export function AddDealPage() {
   const { user } = useAuth();
-  const { addNotification } = useNotifications();
+  const { toast } = useToast();
   const [salesmanOptions, setSalesmanOptions] = useState<User[]>([]);
   const [allUserOptions, setAllUserOptions] = useState<User[]>([]);
   const isSalesman = user?.role === 'salesman'
-  const { sales, addSale } = useFirebaseSalesData(user?.role || 'manager', user?.id, user?.name)
+  const { sales } = useFirebaseSalesData(user?.role || 'manager', user?.id, user?.name)
 
   // Load users from Firebase
   useEffect(() => {
@@ -237,6 +236,11 @@ export function AddDealPage() {
           await callbacksService.addCallback(callbackData);
           
           await showDealAdded(0, formData.customer_name, 'Callback scheduled successfully!');
+          // Toast detailed notification for callback creation
+          toast({
+            title: "Callback scheduled",
+            description: `Customer: ${formData.customer_name} | Phone: ${formData.phone} | First call: ${formData.first_call_date} ${formData.first_call_time} | Sales: ${formData.sales_agent}${formData.team ? ` (${formData.team})` : ''}`,
+          });
         } catch (error) {
           console.error('Error saving callback:', error);
           showError("Error", "Failed to save callback. Please try again.");
@@ -283,6 +287,11 @@ export function AddDealPage() {
         console.log('Deal created successfully with ID:', dealId);
 
         await showDealAdded(parseFloat(formData.amount), formData.customer_name);
+        // Toast detailed notification for deal creation
+        toast({
+          title: "Deal created",
+          description: `Customer: ${formData.customer_name} | Amount: ${formData.amount} | Program: ${formData.type_program} | Duration: ${formData.duration} | Service: ${formData.type_service} | Sales: ${formData.sales_agent}${formData.team ? ` (${formData.team})` : ''}`,
+        });
       }
 
       setFormData({

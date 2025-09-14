@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { userService } from "@/lib/firebase-user-service"
 import { User } from "@/lib/auth"
-import { showSuccess } from "@/lib/sweetalert"
+import { showSuccess, showToast } from "@/lib/sweetalert"
 
 const TEAMS = [
   'ALI ASHRAF',
@@ -111,8 +111,8 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       resetForm()
       setError(null)
       
-      // Show success message
-      await showSuccess('User Created', `User "${formData.name}" created successfully!`)
+      // Show success toast notification at the top
+      await showToast(`User "${formData.name}" created successfully!`, 'success')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create user'
       setError(errorMessage)

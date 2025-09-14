@@ -80,15 +80,23 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return () => { mounted = false; clearInterval(id) }
   }, [user?.id, user?.role])
 
-  // Show toasts for new notifications
+  // Show toasts for new notifications (only show recent notifications, not old ones on login)
   useEffect(() => {
     const prevIds = knownIdsRef.current
+    const now = new Date()
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000) // 5 minutes ago
+    
     for (const n of notifications) {
       if (!prevIds.has(n.id)) {
         prevIds.add(n.id)
         const addressedToUser = Array.isArray(n.to) && (n.to.includes('ALL') || (user?.id && n.to.includes(user.id)))
         const managerSeesAll = user?.role === 'manager'
-        if ((addressedToUser || managerSeesAll) && !n.read) {
+        
+        // Only show toast if notification is recent (within last 5 minutes) and unread
+        const notificationTime = new Date(n.timestamp)
+        const isRecent = notificationTime > fiveMinutesAgo
+        
+        if ((addressedToUser || managerSeesAll) && !n.read && isRecent) {
           // Use SweetAlert2 toast matching app design
           const title = n.title ? `${n.title}` : 'Notification'
           const message = n.message ? ` ${n.message}` : ''
