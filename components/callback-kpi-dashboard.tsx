@@ -388,7 +388,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                 </thead>
                 <tbody>
                   {kpis.topPerformingAgents.map((agent, index) => (
-                    <tr key={index} className="border-b hover:bg-gray-50">
+                    <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                       <td className="py-2 font-medium">{agent.agent}</td>
                       <td className="py-2">{agent.totalCallbacks}</td>
                       <td className="py-2 font-semibold">{agent.conversionRate.toFixed(1)}%</td>
@@ -432,7 +432,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               </thead>
               <tbody>
                 {kpis.recentCallbacks.map((callback, index) => (
-                  <tr key={index} className="border-b hover:bg-gray-50">
+                  <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                     <td className="py-2 font-medium">{callback.customer_name}</td>
                     <td className="py-2">{callback.phone_number}</td>
                     <td className="py-2">

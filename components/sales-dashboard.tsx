@@ -512,7 +512,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
               </thead>
               <tbody>
                 {analytics.recentDeals.map((deal, index) => (
-                  <tr key={index} className="border-b hover:bg-gray-50">
+                  <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                     <td className="py-2">{deal.date.toLocaleDateString()}</td>
                     <td className="py-2">{deal.customer_name}</td>
                     <td className="py-2 font-semibold">${deal.amount}</td>
@@ -551,7 +551,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                 </thead>
                 <tbody>
                   {analytics.topAgents.map((agent, index) => (
-                    <tr key={index} className="border-b hover:bg-gray-50">
+                    <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                       <td className="py-2 capitalize font-medium">{agent.agent}</td>
                       <td className="py-2 font-semibold">${agent.sales.toLocaleString()}</td>
                       <td className="py-2">{agent.deals}</td>

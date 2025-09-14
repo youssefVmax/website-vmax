@@ -171,7 +171,6 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
       return [
         ...baseItems,
         { id: "callbacks-manage", icon: Phone, label: "Manage Callbacks" } as const,
-        { id: "callbacks-new", icon: Plus, label: "New Callback" } as const,
         { id: "user-management", icon: Users, label: "User Management" } as const,
         { id: "team-targets", icon: Target, label: "Team Targets" } as const,
         { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
@@ -527,8 +526,6 @@ function PageContent({
       return <CompetitionDashboard />
     case "callbacks-manage":
       return <ManageCallbacksPage />
-    case "callbacks-new":
-      return <NewCallbackPage />
     case "settings":
       return <ProfileSettings user={user} />
     default:
