@@ -90,6 +90,32 @@ export class FirebaseTargetProgressService {
     }
   }
 
+  // Bulk update agent display name in all progress docs for an agent
+  async updateAgentName(agentId: string, newName: string): Promise<number> {
+    try {
+      const q = query(
+        collection(db, this.COLLECTION),
+        where('agentId', '==', agentId)
+      );
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return 0;
+
+      const batch = writeBatch(db);
+      snapshot.docs.forEach(docSnap => {
+        batch.update(docSnap.ref, {
+          agentName: newName,
+          updated_at: Timestamp.now(),
+          lastUpdated: Timestamp.now()
+        });
+      });
+      await batch.commit();
+      return snapshot.size;
+    } catch (error) {
+      console.error('Error bulk-updating agent name in target progress:', error);
+      return 0;
+    }
+  }
+
   // Update target progress when a deal is created
   async updateProgressOnDealCreation(agentId: string, dealAmount: number, dealId: string, customerName: string, period: string): Promise<void> {
     try {

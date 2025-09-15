@@ -106,6 +106,9 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
           targetsService.getTeamTargets(user.id)
         ])
         
+        console.log('🎯 EnhancedTargetDashboard: Targets loaded:', targetsData);
+        console.log('🎯 EnhancedTargetDashboard: Team targets loaded:', teamTargetsData);
+        
         // Load progress for individual targets using Firebase data
         const targetsWithProgress = targetsData.map((target) => {
           // Find matching progress data from Firebase
