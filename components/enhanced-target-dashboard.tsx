@@ -72,6 +72,25 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
 
     loadTargetProgress();
   }, [user?.id, userRole]);
+
+  // Refresh target progress periodically
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!user?.id) return;
+      
+      try {
+        console.log('🔄 EnhancedTargetDashboard: Refreshing target progress...');
+        const { dealsService } = await import('@/lib/firebase-deals-service');
+        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
+        console.log('🔄 EnhancedTargetDashboard: Target progress refreshed:', progress);
+        setTargetProgress(progress);
+      } catch (error) {
+        console.error('EnhancedTargetDashboard: Failed to refresh target progress:', error);
+      }
+    }, 15000); // Refresh every 15 seconds
+
+    return () => clearInterval(interval);
+  }, [user?.id, userRole]);
   
   // Strict access control - only managers can manage targets
   const canManageTargets = userRole === 'manager'
@@ -87,30 +106,44 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
           targetsService.getTeamTargets(user.id)
         ])
         
-        // Load progress for individual targets
-        const targetsWithProgress = await Promise.all(
-          targetsData.map(async (target) => {
-            const progress = await targetsService.getTargetProgress(target.agentId!, target.period)
-            const salesProgress = target.monthlyTarget > 0 ? (progress.currentSales / target.monthlyTarget) * 100 : 0
-            const dealsProgress = target.dealsTarget > 0 ? (progress.currentDeals / target.dealsTarget) * 100 : 0
-            
-            let status: 'on-track' | 'behind' | 'exceeded' = 'on-track'
-            if (salesProgress >= 100 || dealsProgress >= 100) {
-              status = 'exceeded'
-            } else if (salesProgress < 70 && dealsProgress < 70) {
-              status = 'behind'
-            }
+        // Load progress for individual targets using Firebase data
+        const targetsWithProgress = targetsData.map((target) => {
+          // Find matching progress data from Firebase
+          const progressData = targetProgress.find(p => 
+            p.agentId === target.agentId && p.period === target.period
+          );
+          
+          console.log(`🎯 EnhancedTargetDashboard: Processing target for ${target.agentName} (${target.agentId}) - ${target.period}:`, {
+            target,
+            progressData,
+            targetProgressArray: targetProgress
+          });
+          
+          const currentSales = progressData?.currentSales || 0;
+          const currentDeals = progressData?.currentDeals || 0;
+          
+          const salesProgress = target.monthlyTarget > 0 ? (currentSales / target.monthlyTarget) * 100 : 0
+          const dealsProgress = target.dealsTarget > 0 ? (currentDeals / target.dealsTarget) * 100 : 0
+          
+          let status: 'on-track' | 'behind' | 'exceeded' = 'on-track'
+          if (salesProgress >= 100 || dealsProgress >= 100) {
+            status = 'exceeded'
+          } else if (salesProgress < 70 && dealsProgress < 70) {
+            status = 'behind'
+          }
 
-            return {
-              ...target,
-              currentSales: progress.currentSales,
-              currentDeals: progress.currentDeals,
-              salesProgress,
-              dealsProgress,
-              status
-            }
-          })
-        )
+          const processedTarget = {
+            ...target,
+            currentSales,
+            currentDeals,
+            salesProgress,
+            dealsProgress,
+            status
+          };
+
+          console.log(`🎯 EnhancedTargetDashboard: Processed target result:`, processedTarget);
+          return processedTarget;
+        })
 
         // Load progress for team targets (simplified for now)
         const teamTargetsWithProgress = teamTargetsData.map(teamTarget => ({
@@ -167,7 +200,7 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
 
   useEffect(() => {
     loadData()
-  }, [user.id, userRole, isManager])
+  }, [targetProgress]) // Reload when target progress data changes
 
   // Filter targets
   const filteredTargets = useMemo(() => {
