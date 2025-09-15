@@ -44,6 +44,7 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
   const [editingTarget, setEditingTarget] = useState<TargetWithProgress | null>(null)
+  const [targetProgress, setTargetProgress] = useState<any[]>([])
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState("")
@@ -52,6 +53,25 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
   const [teamFilter, setTeamFilter] = useState<string>("all")
 
   const isManager = userRole === 'manager'
+  
+  // Load target progress from Firebase
+  useEffect(() => {
+    const loadTargetProgress = async () => {
+      if (!user?.id) return;
+      
+      try {
+        console.log('🎯 EnhancedTargetDashboard: Loading target progress for user:', user.id, 'role:', userRole);
+        const { dealsService } = await import('@/lib/firebase-deals-service');
+        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
+        console.log('🎯 EnhancedTargetDashboard: Target progress loaded:', progress);
+        setTargetProgress(progress);
+      } catch (error) {
+        console.error('EnhancedTargetDashboard: Failed to load target progress:', error);
+      }
+    };
+
+    loadTargetProgress();
+  }, [user?.id, userRole]);
   
   // Strict access control - only managers can manage targets
   const canManageTargets = userRole === 'manager'

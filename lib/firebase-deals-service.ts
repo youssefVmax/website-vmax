@@ -635,15 +635,22 @@ export class FirebaseDealsService {
   // Get target progress for managers and salesmen
   async getTargetProgressForUser(userId: string, userRole: string): Promise<any[]> {
     try {
+      console.log('🎯 getTargetProgressForUser called with:', { userId, userRole });
       const { targetProgressService } = await import('./firebase-target-progress-service');
       
+      let progressData: any[] = [];
       if (userRole === 'manager') {
         // Managers see all target progress
-        return await targetProgressService.getAllTargetProgress();
+        console.log('🎯 Fetching all target progress for manager...');
+        progressData = await targetProgressService.getAllTargetProgress();
       } else {
         // Salesmen see only their own progress
-        return await targetProgressService.getAgentTargetProgress(userId);
+        console.log('🎯 Fetching agent target progress for salesman:', userId);
+        progressData = await targetProgressService.getAgentTargetProgress(userId);
       }
+      
+      console.log('🎯 Target progress data fetched:', progressData);
+      return progressData;
     } catch (error) {
       console.error('Error fetching target progress for user:', error);
       return [];
