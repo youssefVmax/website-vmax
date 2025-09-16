@@ -130,17 +130,17 @@ function LandingPageContent({ onGetStarted }: { onGetStarted: () => void }) {
         <div className="max-w-6xl mx-auto text-center">
           <div className={`transition-all duration-1000 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'} delay-500`}>
             <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold text-white mb-6 leading-tight">
-              Advanced Sales
+              Sales Deals 
               <br />
               <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent animate-pulse">
-                Analytics
+                Management
               </span>
             </h1>
           </div>
           
           <div className={`transition-all duration-1000 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'} delay-700`}>
             <p className="text-xl md:text-2xl text-slate-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-              Transform your IPTV sales with our powerful dashboard. Track performance, 
+              Transform your sales with our powerful dashboard. Track performance, 
               manage targets, and boost revenue with <span className="text-indigo-400 font-semibold">real-time analytics</span> and intelligent insights.
             </p>
           </div>
@@ -217,7 +217,7 @@ function LandingPageContent({ onGetStarted }: { onGetStarted: () => void }) {
               <div className="text-slate-400 text-sm">Support</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-2">150+</div>
+              <div className="text-3xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-2">15+</div>
               <div className="text-slate-400 text-sm">Countries</div>
             </div>
           </div>
@@ -230,6 +230,7 @@ function LandingPageContent({ onGetStarted }: { onGetStarted: () => void }) {
           <p className="text-slate-400 mb-4">
             2025 Vmax Sales Management. Empowering sales teams worldwide with advanced analytics.
           </p>
+          <p className="text-slate-400">All rights reserved | Youssef Bassiony</p>
         </div>
       </footer>
     </div>
