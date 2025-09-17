@@ -253,14 +253,20 @@ export const callbacksService = {
   },
 
   // Real-time callbacks listener
-  onCallbacksChange(callback: (callbacks: Callback[]) => void, userRole?: string, userId?: string, userName?: string) {
+  onCallbacksChange(callback: (callbacks: Callback[]) => void, userRole?: string, userId?: string, userName?: string, team?: string) {
     let q = query(
       collection(db, COLLECTIONS.CALLBACKS || 'callbacks'),
       orderBy('created_at', 'desc')
     );
     
     // Apply role-based filtering
-    if (userRole === 'salesman' && (userId || userName)) {
+    if (userRole === 'team-leader' && team) {
+      q = query(
+        collection(db, COLLECTIONS.CALLBACKS || 'callbacks'),
+        where('sales_team', '==', team),
+        orderBy('created_at', 'desc')
+      );
+    } else if (userRole === 'salesman' && (userId || userName)) {
       if (userId) {
         q = query(
           collection(db, COLLECTIONS.CALLBACKS || 'callbacks'),

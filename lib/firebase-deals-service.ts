@@ -357,20 +357,26 @@ export class FirebaseDealsService {
     }
   }
 
-  // Get deals by team
-  async getDealsByTeam(team: string): Promise<Deal[]> {
+  // Get deals by team (for team leaders)
+  async getDealsByTeam(teamName: string): Promise<Deal[]> {
     try {
       const q = query(
         collection(db, this.COLLECTION),
-        where('sales_team', '==', team),
-        orderBy('created_at', 'desc')
+        where('sales_team', '==', teamName)
       );
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map((doc) => ({
+      const deals = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data()
       } as Deal));
+      
+      // Sort in memory to maintain order without composite index
+      return deals.sort((a, b) => {
+        const dateA = safeToDate(a.created_at) || new Date(0);
+        const dateB = safeToDate(b.created_at) || new Date(0);
+        return dateB.getTime() - dateA.getTime(); // desc order
+      });
     } catch (error) {
       console.error('Error fetching deals by team:', error);
       throw new Error('Failed to fetch deals by team');
@@ -658,12 +664,14 @@ export class FirebaseDealsService {
   }
 
   // Get deals with target progress information
-  async getDealsWithTargetProgress(userId?: string, userRole?: string): Promise<any[]> {
+  async getDealsWithTargetProgress(userId?: string, userRole?: string, teamName?: string): Promise<any[]> {
     try {
       let deals: Deal[] = [];
       
       if (userRole === 'manager') {
         deals = await this.getAllDeals();
+      } else if (userRole === 'team-leader' && teamName) {
+        deals = await this.getDealsByTeam(teamName);
       } else if (userId) {
         deals = await this.getDealsByAgent(userId);
       }

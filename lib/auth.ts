@@ -3,8 +3,9 @@ export interface User {
   username: string;
   password: string;
   name: string;
-  role: 'manager' | 'salesman' | 'customer-service';
+  role: 'manager' | 'salesman' | 'team-leader';
   team?: string;
+  managedTeam?: string; // For team leaders - which team they manage
   email?: string;
   phone?: string;
   created_at?: string;

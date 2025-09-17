@@ -28,9 +28,10 @@ export interface CallbackFilters {
   dateRange?: 'today' | 'week' | 'month' | 'quarter' | 'year';
   status?: 'pending' | 'contacted' | 'completed' | 'cancelled';
   agent?: string;
-  userRole?: 'manager' | 'salesman' | 'customer-service';
+  userRole?: 'manager' | 'salesman' | 'team-leader';
   userId?: string;
   userName?: string;
+  team?: string;
 }
 
 export class CallbackAnalyticsService {
@@ -40,11 +41,15 @@ export class CallbackAnalyticsService {
       // Fetch callbacks with role-based filtering
       console.log('Fetching callbacks with filters:', filters);
       
-      // For managers, fetch all callbacks without user filtering
+      // For managers and team leaders, fetch all callbacks without user filtering
       let callbacks;
       if (filters.userRole === 'manager') {
         callbacks = await callbacksService.getCallbacks('manager');
+      } else if (filters.userRole === 'team-leader' && filters.team) {
+        // For team leaders, filter by team
+        callbacks = await callbacksService.getCallbacks('team-leader', undefined, undefined, filters.team);
       } else {
+        // For regular users, filter by user
         callbacks = await callbacksService.getCallbacks(filters.userRole, filters.userId, filters.userName);
       }
       

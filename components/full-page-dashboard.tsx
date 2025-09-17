@@ -191,7 +191,19 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
         { id: "team-targets", icon: Target, label: "Team Targets" } as const,
         { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
         { id: "datacenter", icon: Database, label: "Data Center" } as const,
+        { id: "backup", icon: Download, label: "Database Backup", href: "/backup" } as const,
         { id: "settings", icon: Settings, label: "Settings" } as const,
+      ]
+    } else if (user.role === 'team-leader') {
+      return [
+        ...baseItems,
+        { id: "callbacks-manage", icon: Phone, label: "Team Callbacks" } as const,
+        { id: "callbacks-new", icon: Plus, label: "New Callback" } as const,
+        { id: "my-deals", icon: FileText, label: "Team Deals" } as const,
+        { id: "add-deal", icon: Plus, label: "Add Deal" } as const,
+        { id: "my-targets", icon: Target, label: "Team Targets" } as const,
+        { id: "analytics", icon: BarChart3, label: "Team Analytics" } as const,
+        { id: "datacenter", icon: Database, label: "Data Center" } as const,
       ]
     } else if (user.role === 'salesman') {
       return [

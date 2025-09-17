@@ -21,8 +21,14 @@ import { targetsService } from '@/lib/firebase-targets-service';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
 interface CallbackKPIDashboardProps {
-  userRole: 'manager' | 'salesman' | 'customer-service';
-  user: { id: string; name: string; username: string };
+  userRole: 'manager' | 'salesman' | 'team-leader';
+  user: { 
+    id: string; 
+    name: string; 
+    username: string;
+    team?: string;
+    managedTeam?: string;
+  };
 }
 
 export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDashboardProps) {
@@ -53,19 +59,40 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
   const [sortKey, setSortKey] = useState<'team' | 'members' | 'deals' | 'revenue' | 'revenuePerUser' | 'performanceRevenuePct' | 'performanceDealsPct'>('revenuePerUser')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
+  // Get the user's team for filtering
+  const getUserTeam = useCallback(() => {
+    // For team leaders, use their managed team
+    if (userRole === 'team-leader' && user.managedTeam) {
+      return user.managedTeam;
+    }
+    // For other users, use their assigned team
+    return user.team || '';
+  }, [user, userRole]);
+
   const loadKPIs = useCallback(async () => {
     setLoading(true);
     try {
-      console.log('Loading KPIs with user info:', { id: user.id, name: user.name, role: userRole });
+      const userTeam = getUserTeam();
+      console.log('Loading KPIs with user info:', { 
+        id: user.id, 
+        name: user.name, 
+        role: userRole,
+        team: userTeam
+      });
       
-      // For managers, don't pass userId/userName filters to get all callbacks
-      const filters: CallbackFilters = userRole === 'manager' ? {
-        userRole: 'manager'
-      } : {
-        userRole,
-        userId: user.id,
-        userName: user.name
-      };
+      // Set up filters based on user role
+      const filters: CallbackFilters = {};
+      
+      if (userRole === 'manager') {
+        filters.userRole = 'manager';
+      } else if (userRole === 'team-leader' && userTeam) {
+        filters.userRole = 'team-leader';
+        filters.team = userTeam;
+      } else {
+        filters.userRole = userRole as any;
+        filters.userId = user.id;
+        filters.userName = user.name;
+      }
       
       console.log('Using filters for KPIs:', filters);
       
@@ -77,17 +104,22 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
     } finally {
       setLoading(false);
     }
-  }, [userRole, user.id, user.name]);
+  }, [userRole, user.id, user.name, getUserTeam]);
 
   const refreshData = async () => {
     setRefreshing(true);
-    await loadKPIs();
-    setRefreshing(false);
-  };
+    try {
+      await loadKPIs();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     loadKPIs();
-  }, [loadKPIs]);
+  }, [loadKPIs, user.team, user.managedTeam]);
 
   // Auto-refresh every 30 seconds for live data
   useEffect(() => {
@@ -97,18 +129,20 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
 
   // Real-time listener for live updates
   useEffect(() => {
+    const team = getUserTeam();
     const unsubscribe = callbacksService.onCallbacksChange(
-      () => {
-        // Refresh KPIs when callbacks change
-        loadKPIs();
+      (callbacks) => {
+        // Update state with new callbacks
+        console.log('Received real-time callbacks update:', callbacks.length);
       },
       userRole,
-      user.id,
-      user.name
+      userRole === 'manager' || userRole === 'team-leader' ? undefined : user.id,
+      userRole === 'manager' || userRole === 'team-leader' ? undefined : user.name,
+      userRole === 'team-leader' ? team : undefined
     );
 
     return () => unsubscribe();
-  }, [userRole, user.id, user.name]);
+  }, [userRole, user.id, user.name, getUserTeam]);
 
   // Load manager analysis: revenue by user count and team performance
   useEffect(() => {
@@ -327,10 +361,12 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Callback Analytics</h2>
           <p className="text-sm text-muted-foreground">
             {userRole === 'manager' 
-              ? `Team callback performance • ${kpis.totalCallbacks} total callbacks`
+              ? `Team callback performance • ${kpis?.totalCallbacks || 0} total callbacks`
+              : userRole === 'team-leader'
+              ? `Team callback performance • ${kpis?.totalCallbacks || 0} team callbacks`
               : userRole === 'salesman'
-              ? `Your callback performance • ${kpis.totalCallbacks} callbacks`
-              : `Support callback metrics • ${kpis.totalCallbacks} interactions`}
+              ? `Your callback performance • ${kpis?.totalCallbacks || 0} callbacks`
+              : `Support callback metrics • ${kpis?.totalCallbacks || 0} interactions`}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -526,8 +562,8 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                   <XAxis type="number" />
                   <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
                   <Tooltip formatter={(value, name) => [value, name === 'count' ? 'Callbacks' : 'Conversions']} />
-                  <Bar dataKey="count" fill="#8884d8" />
-                  <Bar dataKey="conversions" fill="#82ca9d" />
+                  <Bar key="callbacks" dataKey="count" fill="#8884d8" name="Callbacks" />
+                  <Bar key="conversions" dataKey="conversions" fill="#82ca9d" name="Conversions" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

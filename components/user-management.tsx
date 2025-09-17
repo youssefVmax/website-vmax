@@ -24,11 +24,11 @@ const TEAMS = [
 
 const ROLES = [
   { value: 'salesman', label: 'Salesman' },
-  { value: 'customer-service', label: 'Customer Service' }
+  { value: 'team-leader', label: 'Team Leader' }
 ];
 
 interface UserManagementProps {
-  userRole: 'manager' | 'salesman' | 'customer-service'
+  userRole: 'manager' | 'salesman' | 'team-leader'
   user: { name: string; username: string; id: string }
 }
 
@@ -63,6 +63,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
     name: '',
     role: 'salesman' as User['role'],
     team: '',
+    managedTeam: '', // For team leaders
     email: '',
     phone: ''
   })
@@ -92,6 +93,12 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       // Validate required fields
       if (!formData.username || !formData.password || !formData.name || !formData.role || !formData.team) {
         setError('Please fill in all required fields (username, password, name, role, and team)')
+        return
+      }
+
+      // Validate managed team for team leaders
+      if (formData.role === 'team-leader' && !formData.managedTeam) {
+        setError('Please select a team to manage for team leaders')
         return
       }
 
@@ -165,6 +172,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       name: '',
       role: 'salesman',
       team: '',
+      managedTeam: '',
       email: '',
       phone: ''
     })
@@ -178,6 +186,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       name: user.name,
       role: user.role,
       team: user.team || '',
+      managedTeam: user.managedTeam || '',
       email: user.email || '',
       phone: user.phone || ''
     })
@@ -200,7 +209,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
   const getRoleBadgeColor = (role: User['role']) => {
     switch (role) {
       case 'salesman': return 'bg-blue-100 text-blue-800'
-      case 'customer-service': return 'bg-green-100 text-green-800'
+      case 'team-leader': return 'bg-purple-100 text-purple-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -211,7 +220,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
         <div>
           <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
           <p className="text-muted-foreground">
-            Manage salesman and customer service accounts
+            Manage salesman and team leader accounts
           </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -225,7 +234,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
             <DialogHeader>
               <DialogTitle>Add New User</DialogTitle>
               <DialogDescription>
-                Create a new salesman or customer service account.
+                Create a new salesman or team leader account.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -300,6 +309,22 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
                   </SelectContent>
                 </Select>
               </div>
+              {formData.role === 'team-leader' && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="managedTeam" className="text-right">
+                    Managed Team *
+                  </Label>
+                  <Select value={formData.managedTeam} onValueChange={(value) => setFormData(prev => ({ ...prev, managedTeam: value }))}>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select team to manage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
+                      <SelectItem value="CS TEAM">CS TEAM</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="email" className="text-right">
                   Email
@@ -360,7 +385,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
             Salesmen: {users.filter(u => u.role === 'salesman').length}
           </Badge>
           <Badge variant="outline" className="px-3 py-1">
-            Support: {users.filter(u => u.role === 'customer-service').length}
+            Team Leaders: {users.filter(u => u.role === 'team-leader').length}
           </Badge>
         </div>
       </div>
@@ -414,7 +439,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
                     </TableCell>
                     <TableCell>
                       <Badge className={getRoleBadgeColor(user.role)}>
-                        {user.role === 'customer-service' ? 'Support' : 'Sales'}
+                        {user.role === 'team-leader' ? 'Team Leader' : 'Salesman'}
                       </Badge>
                     </TableCell>
                     <TableCell>{user.team}</TableCell>
@@ -524,6 +549,22 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
                 </SelectContent>
               </Select>
             </div>
+            {formData.role === 'team-leader' && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-managedTeam" className="text-right">
+                  Managed Team *
+                </Label>
+                <Select value={formData.managedTeam} onValueChange={(value) => setFormData(prev => ({ ...prev, managedTeam: value }))}>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select team to manage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
+                    <SelectItem value="CS TEAM">CS TEAM</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-email" className="text-right">
                 Email
