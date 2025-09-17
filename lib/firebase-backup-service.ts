@@ -105,23 +105,47 @@ class FirebaseBackupService {
    * Download backup as JSON file
    */
   downloadBackupAsJSON(backupData: BackupData, filename?: string): void {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const defaultFilename = `firebase-backup-${timestamp}.json`;
-    const finalFilename = filename || defaultFilename;
+    try {
+      console.log('🔄 Starting JSON download process...');
+      console.log('📊 Backup data size:', JSON.stringify(backupData).length, 'characters');
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const defaultFilename = `firebase-backup-${timestamp}.json`;
+      const finalFilename = filename || defaultFilename;
 
-    const jsonString = JSON.stringify(backupData, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+      console.log('📝 Creating JSON string...');
+      const jsonString = JSON.stringify(backupData, null, 2);
+      
+      console.log('🗂️ Creating blob...');
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      
+      console.log('🔗 Creating download URL...');
+      const url = URL.createObjectURL(blob);
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = finalFilename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+      console.log('📎 Creating download link...');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = finalFilename;
+      link.style.display = 'none';
+      
+      console.log('⬇️ Triggering download...');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-    console.log(`📁 Backup downloaded as: ${finalFilename}`);
+      console.log(`✅ Backup download initiated: ${finalFilename}`);
+      console.log(`📁 File should appear in your Downloads folder`);
+      
+      // Show user-friendly message
+      alert(`✅ Backup file "${finalFilename}" should now be downloading to your Downloads folder!`);
+      
+    } catch (error) {
+      console.error('❌ Error during download:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`❌ Download failed: ${errorMessage}`);
+      throw error;
+    }
   }
 
   /**

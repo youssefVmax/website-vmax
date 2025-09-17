@@ -207,9 +207,11 @@ export interface SalesMetrics {
 // Firebase collection names
 export const COLLECTIONS = {
   SALES: 'sales',
+  DEALS: 'deals',
   USERS: 'users',
   NOTIFICATIONS: 'notifications',
   TARGETS: 'targets',
+  TARGET_PROGRESS: 'target_progress',
   SETTINGS: 'settings',
   CALLBACKS: 'callbacks'
 } as const;
