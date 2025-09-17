@@ -187,92 +187,167 @@ class FirebaseBackupService {
   }
 
   /**
-   * Fallback: show backup data in new window for manual saving
+   * Fallback: show backup data for manual copying (CSP-compliant)
    */
   private showBackupInNewWindow(content: string, filename: string): void {
-    const newWindow = window.open('', '_blank');
-    if (newWindow) {
-      newWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Firebase Backup - ${filename}</title>
-          <style>
-            body { font-family: monospace; margin: 20px; background: #f5f5f5; }
-            .container { max-width: 1200px; margin: 0 auto; }
-            .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .content { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            textarea { width: 100%; height: 400px; font-family: monospace; font-size: 12px; border: 1px solid #ddd; padding: 10px; }
-            button { background: #007cba; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
-            button:hover { background: #005a87; }
-            .instructions { background: #e7f3ff; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🔄 Firebase Backup: ${filename}</h1>
-              <div class="instructions">
-                <strong>📋 How to save this backup:</strong><br>
-                1. Click "Select All" button below<br>
-                2. Copy the selected text (Ctrl+C)<br>
-                3. Open a text editor (Notepad, VS Code, etc.)<br>
-                4. Paste the content (Ctrl+V)<br>
-                5. Save as "${filename}"
-              </div>
-              <button onclick="selectAll()">📋 Select All</button>
-              <button onclick="copyToClipboard()">📄 Copy to Clipboard</button>
-              <button onclick="downloadFile()">💾 Try Download Again</button>
-            </div>
-            <div class="content">
-              <textarea id="backupContent" readonly>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
-            </div>
-          </div>
-          
-          <script>
-            function selectAll() {
-              document.getElementById('backupContent').select();
-            }
-            
-            function copyToClipboard() {
-              const textarea = document.getElementById('backupContent');
-              textarea.select();
-              document.execCommand('copy');
-              alert('✅ Backup data copied to clipboard!');
-            }
-            
-            function downloadFile() {
-              const content = document.getElementById('backupContent').value;
-              const blob = new Blob([content], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = '${filename}';
-              a.click();
-              URL.revokeObjectURL(url);
-            }
-          </script>
-        </body>
-        </html>
-      `);
-      newWindow.document.close();
-    } else {
-      // If popup is blocked, show an alert with instructions
-      alert(`
-        ⚠️ Popup blocked! Here's how to get your backup:
-        
-        1. Allow popups for this site
-        2. Or open browser console (F12)
-        3. The backup data is logged there
-        4. Copy and save it manually
-        
-        Backup filename: ${filename}
-      `);
-      console.log('=== FIREBASE BACKUP DATA ===');
-      console.log('Filename:', filename);
-      console.log('Content:', content);
-      console.log('=== END BACKUP DATA ===');
-    }
+    // Instead of opening a new window with inline scripts, 
+    // use a simpler approach that's CSP-compliant
+    this.showBackupModal(content, filename);
+  }
+
+  /**
+   * Show backup in a modal overlay (CSP-compliant)
+   */
+  private showBackupModal(content: string, filename: string): void {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: monospace;
+    `;
+
+    // Create modal content
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 90%;
+      max-height: 90%;
+      overflow: auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    `;
+
+    // Create header
+    const header = document.createElement('div');
+    header.innerHTML = `
+      <h2 style="margin: 0 0 15px 0; color: #333;">🔄 Firebase Backup: ${filename}</h2>
+      <div style="background: #e7f3ff; padding: 15px; border-radius: 4px; margin-bottom: 20px; font-size: 14px;">
+        <strong>📋 How to save this backup:</strong><br>
+        1. Click in the text area below<br>
+        2. Select all text (Ctrl+A)<br>
+        3. Copy the text (Ctrl+C)<br>
+        4. Open a text editor (Notepad, VS Code, etc.)<br>
+        5. Paste and save as "${filename}"
+      </div>
+    `;
+
+    // Create textarea
+    const textarea = document.createElement('textarea');
+    textarea.value = content;
+    textarea.readOnly = true;
+    textarea.style.cssText = `
+      width: 100%;
+      height: 400px;
+      font-family: monospace;
+      font-size: 12px;
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-bottom: 15px;
+      box-sizing: border-box;
+    `;
+
+    // Create buttons container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'text-align: center;';
+
+    // Select All button
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.textContent = '📋 Select All';
+    selectAllBtn.style.cssText = `
+      background: #007cba;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    `;
+    selectAllBtn.addEventListener('click', () => {
+      textarea.select();
+      textarea.setSelectionRange(0, 99999); // For mobile devices
+    });
+
+    // Copy button
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = '📄 Copy to Clipboard';
+    copyBtn.style.cssText = selectAllBtn.style.cssText;
+    copyBtn.addEventListener('click', async () => {
+      try {
+        textarea.select();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(content);
+          alert('✅ Backup data copied to clipboard!');
+        } else {
+          // Fallback for older browsers
+          document.execCommand('copy');
+          alert('✅ Backup data copied to clipboard!');
+        }
+      } catch (error) {
+        alert('❌ Copy failed. Please select all text and copy manually (Ctrl+C)');
+      }
+    });
+
+    // Download button
+    const downloadBtn = document.createElement('button');
+    downloadBtn.textContent = '💾 Try Download';
+    downloadBtn.style.cssText = selectAllBtn.style.cssText;
+    downloadBtn.addEventListener('click', () => {
+      this.downloadUsingDataURI(content, filename) || this.downloadUsingBlob(content, filename);
+    });
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '❌ Close';
+    closeBtn.style.cssText = `
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    `;
+    closeBtn.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+    });
+
+    // Assemble modal
+    buttonContainer.appendChild(selectAllBtn);
+    buttonContainer.appendChild(copyBtn);
+    buttonContainer.appendChild(downloadBtn);
+    buttonContainer.appendChild(closeBtn);
+
+    modal.appendChild(header);
+    modal.appendChild(textarea);
+    modal.appendChild(buttonContainer);
+    overlay.appendChild(modal);
+
+    // Add to page
+    document.body.appendChild(overlay);
+
+    // Auto-select text for easy copying
+    setTimeout(() => {
+      textarea.focus();
+      textarea.select();
+    }, 100);
+
+    // Also log to console as backup
+    console.log('=== FIREBASE BACKUP DATA ===');
+    console.log('Filename:', filename);
+    console.log('Content:', content);
+    console.log('=== END BACKUP DATA ===');
   }
 
   /**
