@@ -107,44 +107,171 @@ class FirebaseBackupService {
   downloadBackupAsJSON(backupData: BackupData, filename?: string): void {
     try {
       console.log('🔄 Starting JSON download process...');
-      console.log('📊 Backup data size:', JSON.stringify(backupData).length, 'characters');
       
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const defaultFilename = `firebase-backup-${timestamp}.json`;
       const finalFilename = filename || defaultFilename;
 
-      console.log('📝 Creating JSON string...');
       const jsonString = JSON.stringify(backupData, null, 2);
       
-      console.log('🗂️ Creating blob...');
-      const blob = new Blob([jsonString], { type: 'application/json' });
+      // Try multiple download methods for better compatibility
+      if (this.downloadUsingDataURI(jsonString, finalFilename)) {
+        console.log(`✅ Backup downloaded using data URI: ${finalFilename}`);
+        return;
+      }
       
-      console.log('🔗 Creating download URL...');
-      const url = URL.createObjectURL(blob);
-
-      console.log('📎 Creating download link...');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = finalFilename;
-      link.style.display = 'none';
+      if (this.downloadUsingBlob(jsonString, finalFilename)) {
+        console.log(`✅ Backup downloaded using blob: ${finalFilename}`);
+        return;
+      }
       
-      console.log('⬇️ Triggering download...');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      console.log(`✅ Backup download initiated: ${finalFilename}`);
-      console.log(`📁 File should appear in your Downloads folder`);
-      
-      // Show user-friendly message
-      alert(`✅ Backup file "${finalFilename}" should now be downloading to your Downloads folder!`);
+      // Fallback: show data in a new window for manual saving
+      this.showBackupInNewWindow(jsonString, finalFilename);
       
     } catch (error) {
       console.error('❌ Error during download:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`❌ Download failed: ${errorMessage}`);
-      throw error;
+      
+      // Fallback: show data for manual copy
+      this.showBackupInNewWindow(JSON.stringify(backupData, null, 2), filename || 'firebase-backup.json');
+    }
+  }
+
+  /**
+   * Download using data URI (more compatible with CSP)
+   */
+  private downloadUsingDataURI(content: string, filename: string): boolean {
+    try {
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(content);
+      const link = document.createElement('a');
+      link.setAttribute('href', dataUri);
+      link.setAttribute('download', filename);
+      link.style.display = 'none';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      return true;
+    } catch (error) {
+      console.warn('Data URI download failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Download using blob URL
+   */
+  private downloadUsingBlob(content: string, filename: string): boolean {
+    try {
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.style.display = 'none';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      
+      return true;
+    } catch (error) {
+      console.warn('Blob download failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Fallback: show backup data in new window for manual saving
+   */
+  private showBackupInNewWindow(content: string, filename: string): void {
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Firebase Backup - ${filename}</title>
+          <style>
+            body { font-family: monospace; margin: 20px; background: #f5f5f5; }
+            .container { max-width: 1200px; margin: 0 auto; }
+            .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .content { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            textarea { width: 100%; height: 400px; font-family: monospace; font-size: 12px; border: 1px solid #ddd; padding: 10px; }
+            button { background: #007cba; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+            button:hover { background: #005a87; }
+            .instructions { background: #e7f3ff; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🔄 Firebase Backup: ${filename}</h1>
+              <div class="instructions">
+                <strong>📋 How to save this backup:</strong><br>
+                1. Click "Select All" button below<br>
+                2. Copy the selected text (Ctrl+C)<br>
+                3. Open a text editor (Notepad, VS Code, etc.)<br>
+                4. Paste the content (Ctrl+V)<br>
+                5. Save as "${filename}"
+              </div>
+              <button onclick="selectAll()">📋 Select All</button>
+              <button onclick="copyToClipboard()">📄 Copy to Clipboard</button>
+              <button onclick="downloadFile()">💾 Try Download Again</button>
+            </div>
+            <div class="content">
+              <textarea id="backupContent" readonly>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+            </div>
+          </div>
+          
+          <script>
+            function selectAll() {
+              document.getElementById('backupContent').select();
+            }
+            
+            function copyToClipboard() {
+              const textarea = document.getElementById('backupContent');
+              textarea.select();
+              document.execCommand('copy');
+              alert('✅ Backup data copied to clipboard!');
+            }
+            
+            function downloadFile() {
+              const content = document.getElementById('backupContent').value;
+              const blob = new Blob([content], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = '${filename}';
+              a.click();
+              URL.revokeObjectURL(url);
+            }
+          </script>
+        </body>
+        </html>
+      `);
+      newWindow.document.close();
+    } else {
+      // If popup is blocked, show an alert with instructions
+      alert(`
+        ⚠️ Popup blocked! Here's how to get your backup:
+        
+        1. Allow popups for this site
+        2. Or open browser console (F12)
+        3. The backup data is logged there
+        4. Copy and save it manually
+        
+        Backup filename: ${filename}
+      `);
+      console.log('=== FIREBASE BACKUP DATA ===');
+      console.log('Filename:', filename);
+      console.log('Content:', content);
+      console.log('=== END BACKUP DATA ===');
     }
   }
 
