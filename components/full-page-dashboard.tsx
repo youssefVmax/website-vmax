@@ -12,6 +12,7 @@ import {
   Target,
   TrendingUp,
   FileText,
+  FileSpreadsheet,
   LogOut,
   User,
   Upload,
@@ -46,7 +47,6 @@ import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import EnhancedAnalytics from "@/components/enhanced-analytics"
 import MyDealsTable from "@/components/my-deals-table"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
 import { ImportExportControls } from "@/components/import-export-controls"
 import UserManagement from "@/components/user-management"
 import { AnimatedMetricCard } from "@/components/animated-metrics"
@@ -54,6 +54,7 @@ import AccessDenied from "@/components/access-denied"
 import { CallbacksManagement } from "@/components/callbacks-management"
 import ManageCallbacksPage from "@/components/manage-callback"
 import NewCallbackPage from "@/components/new-callback"
+import { apiService, Deal, Callback, User } from '@/lib/api-service'
 
 interface FullPageDashboardProps {
   user: any;
@@ -61,6 +62,8 @@ interface FullPageDashboardProps {
 }
 
 export default function FullPageDashboard({ user, onLogout }: FullPageDashboardProps) {
+  console.log('FullPageDashboard: Component initializing...')
+  
   const [isDark, setIsDark] = useState(true)
   const [activeTab, setActiveTab] = useState("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -80,18 +83,15 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
   useEffect(() => {
     const initializeTargetSystem = async () => {
       try {
-        const { dealsService } = await import('@/lib/firebase-deals-service')
-        await dealsService.autoSyncOnStartup()
+        // Initialize API connection
+        await apiService.getUsers({ role: 'salesman' })
+        console.log('API service initialized successfully')
       } catch (error) {
-        console.error('Failed to initialize target system:', error)
+        console.error('Failed to initialize API service:', error)
       }
     }
-
-    // Only run once when component mounts and user is available
-    if (user?.id) {
-      initializeTargetSystem()
-    }
-  }, [user?.id])
+    initializeTargetSystem()
+  }, [])
 
   // Apply theme to document
   useEffect(() => {
@@ -174,8 +174,18 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
   // Removed auto-redirect. Salesmen now land on Dashboard and stay there unless they choose another tab.
 
   if (!user) {
-    return null // This should be handled by the auth wrapper
+    console.log('FullPageDashboard: No user provided')
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+          <p className="text-slate-300">Loading user...</p>
+        </div>
+      </div>
+    )
   }
+
+  console.log('FullPageDashboard: User loaded:', user.name, user.role)
 
   const getNavItems = () => {
     const baseItems = [
@@ -191,7 +201,10 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
         { id: "team-targets", icon: Target, label: "Team Targets" } as const,
         { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
         { id: "datacenter", icon: Database, label: "Data Center" } as const,
-        { id: "backup", icon: Download, label: "Database Backup", href: "/backup" } as const,
+        { id: "admin-backup", icon: Download, label: "Database Backup" } as const,
+        { id: "admin-data-export", icon: FileSpreadsheet, label: "Data Export" } as const,
+        { id: "admin-deals-table", icon: Users, label: "All Deals Table" } as const,
+        { id: "admin-callbacks-table", icon: Phone, label: "All Callbacks Table" } as const,
         { id: "settings", icon: Settings, label: "Settings" } as const,
       ]
     } else if (user.role === 'team-leader') {
@@ -228,7 +241,10 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
 
   const navItems = getNavItems()
 
-  return (
+  console.log('FullPageDashboard: Rendering with activeTab:', activeTab)
+
+  try {
+    return (
     <div className={`min-h-screen transition-colors duration-500 ${
       isDark 
         ? 'dark bg-slate-950' 
@@ -409,6 +425,23 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
       </div>
     </div>
   )
+  } catch (error) {
+    console.error('FullPageDashboard render error:', error)
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="text-center">
+          <div className="text-red-400 mb-4">⚠️ Dashboard Error</div>
+          <p className="text-slate-300 mb-4">Something went wrong loading the dashboard</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    )
+  }
 }
 
 function NavItem({
@@ -482,6 +515,14 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "Manage Callbacks"
     case "callbacks-new":
       return "New Callback"
+    case "admin-backup":
+      return "Database Backup"
+    case "admin-data-export":
+      return "Data Export"
+    case "admin-deals-table":
+      return "All Deals Table"
+    case "admin-callbacks-table":
+      return "All Callbacks Table"
     case "settings":
       return "Settings"
     default:
@@ -537,6 +578,14 @@ function PageContent({
       return <ManageCallbacksPage />
     case "callbacks-new":
       return <NewCallbackPage />
+    case "admin-backup":
+      return <AdminBackupPage user={user} setActiveTab={setActiveTab} />
+    case "admin-data-export":
+      return <AdminDataExportPage user={user} setActiveTab={setActiveTab} />
+    case "admin-deals-table":
+      return <AdminDealsTablePage user={user} setActiveTab={setActiveTab} />
+    case "admin-callbacks-table":
+      return <AdminCallbacksTablePage user={user} setActiveTab={setActiveTab} />
     case "settings":
       return <ProfileSettings user={user} />
     default:
@@ -545,10 +594,38 @@ function PageContent({
 }
 
 function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
-  // Prefer more specific identifiers to maximize match with stored deals
-  const preferredUserId = user?.SalesAgentID || user?.id
-  const preferredUserName = user?.username || user?.name
-  const { sales = [], metrics, loading, error } = useFirebaseSalesData(user.role, preferredUserId, preferredUserName)
+  // State for dashboard data
+  const [sales, setSales] = useState<Deal[]>([])
+  const [metrics, setMetrics] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Load dashboard data
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true)
+        if (user.role === 'manager') {
+          const companyData = await apiService.getCompanyAnalytics()
+          setSales(companyData.deals)
+          setMetrics(companyData)
+        } else if (user.role === 'team-leader' && user.team) {
+          const teamData = await apiService.getTeamAnalytics(user.team)
+          setSales(teamData.deals)
+          setMetrics(teamData)
+        } else if (user.role === 'salesman' && user.id) {
+          const userPerf = await apiService.getUserPerformance(user.id)
+          setSales(userPerf.deals)
+          setMetrics(userPerf)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadDashboardData()
+  }, [user.role, user.id, user.team])
 
   const [totalAgents, setTotalAgents] = useState(0)
 
@@ -556,13 +633,10 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     const loadAgentCount = async () => {
       if (user.role === 'manager') {
         try {
-          const { userService } = await import('@/lib/firebase-user-service')
-          const allUsers = await userService.getAllUsers()
-          const agentCount = allUsers.filter(u => u.role === 'salesman').length
-          setTotalAgents(agentCount)
+          const allUsers = await apiService.getUsers({ role: 'salesman' })
+          setTotalAgents(allUsers.length)
         } catch (error) {
           console.error('Error loading agent count:', error)
-          setTotalAgents(0)
         }
       }
     }
@@ -685,6 +759,18 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
                 <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("analytics")}>
                   <BarChart3 className="h-6 w-6 mb-2" />
                   Analytics
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("admin-deals-table")}>
+                  <Users className="h-6 w-6 mb-2" />
+                  All Deals
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("admin-callbacks-table")}>
+                  <Phone className="h-6 w-6 mb-2" />
+                  All Callbacks
+                </Button>
+                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("admin-backup")}>
+                  <Download className="h-6 w-6 mb-2" />
+                  Backup
                 </Button>
                 <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("notifications")}>
                   <Bell className="h-6 w-6 mb-2" />
@@ -847,23 +933,26 @@ function DealsManagement({ user }: { user: any }) {
 
 
 function TeamManagement({ user }: { user: any }) {
-  const [users, setUsers] = useState<any[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [sales, setSales] = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
-  const { sales = [] } = useFirebaseSalesData('manager', user.id, user.name)
 
   useEffect(() => {
-    const loadUsers = async () => {
+    const loadData = async () => {
       try {
-        const { userService } = await import('@/lib/firebase-user-service')
-        const allUsers = await userService.getAllUsers()
+        const [allUsers, allDeals] = await Promise.all([
+          apiService.getUsers(),
+          apiService.getDeals()
+        ])
         setUsers(allUsers)
+        setSales(allDeals)
       } catch (error) {
-        console.error('Error loading users:', error)
+        console.error('Error loading data:', error)
       } finally {
         setLoading(false)
       }
     }
-    loadUsers()
+    loadData()
   }, [])
 
   if (user.role !== 'manager') {
@@ -1005,5 +1094,327 @@ function CompetitionDashboard() {
       className="w-full h-[calc(100vh-200px)] border-0 rounded-lg"
       title="Sales Competition Dashboard"
     />
+  )
+}
+
+// Admin Page Components
+function AdminBackupPage({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Database Backup</h1>
+          <p className="text-muted-foreground">
+            Manage and create backups of your MySQL database
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Shield className="h-4 w-4" />
+          Admin Only
+        </div>
+      </div>
+
+      <Card className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
+            <Download className="h-5 w-5" />
+            Quick Backup Actions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Button className="h-16 flex flex-col gap-2" onClick={() => window.open('/admin/backup', '_blank')}>
+              <Download className="h-6 w-6" />
+              Open Full Backup Page
+            </Button>
+            <Button variant="outline" className="h-16 flex flex-col gap-2" onClick={() => window.open('/admin/data-export', '_blank')}>
+              <FileSpreadsheet className="h-6 w-6" />
+              Open Data Export
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function AdminDataExportPage({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Data Export</h1>
+          <p className="text-muted-foreground">
+            Export and download your data in various formats
+          </p>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" />
+            Export Options
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Button className="h-16 flex flex-col gap-2" onClick={() => window.open('/admin/data-export', '_blank')}>
+              <FileSpreadsheet className="h-6 w-6" />
+              Open Full Export Page
+            </Button>
+            <Button variant="outline" className="h-16 flex flex-col gap-2" onClick={() => setActiveTab("admin-deals-table")}>
+              <Users className="h-6 w-6" />
+              View Deals Table
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
+  const [deals, setDeals] = useState<Deal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchDeals = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        console.log('Fetching deals...')
+        const allDeals = await dealsService.getAllDeals()
+        console.log('Deals fetched:', allDeals.length)
+        setDeals(allDeals)
+      } catch (error) {
+        console.error('Error fetching deals:', error)
+        setError(error instanceof Error ? error.message : 'Unknown error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDeals()
+  }, [])
+
+  const exportToCSV = () => {
+    if (deals.length === 0) return
+
+    const headers = ['Deal ID', 'Customer Name', 'Email', 'Phone', 'Amount Paid', 'Sales Agent', 'Status']
+    const csvData = deals.map(deal => [
+      deal.DealID || deal.id || '',
+      deal.customer_name || '',
+      deal.email || '',
+      deal.phone_number || '',
+      deal.amount_paid || 0,
+      deal.sales_agent || '',
+      deal.status || ''
+    ])
+
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `deals_export.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-muted rounded w-1/4"></div>
+          <div className="h-64 bg-muted rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <p className="text-red-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">All Deals Table</h1>
+          <p className="text-muted-foreground">
+            {deals.length} deals from all salesmen
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={exportToCSV} disabled={deals.length === 0}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button variant="outline" onClick={() => window.open('/admin/deals-table', '_blank')}>
+            <Users className="h-4 w-4 mr-2" />
+            Full Table View
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Deals ({Math.min(10, deals.length)})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {deals.slice(0, 10).map((deal, index) => (
+              <div key={deal.id || index} className="flex justify-between items-center p-3 border rounded">
+                <div>
+                  <div className="font-medium">{deal.customer_name}</div>
+                  <div className="text-sm text-muted-foreground">{deal.sales_agent}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium">${deal.amount_paid?.toLocaleString()}</div>
+                  <div className="text-sm text-muted-foreground">{deal.status}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
+  const [callbacks, setCallbacks] = useState<Callback[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchCallbacks = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        console.log('Fetching callbacks...')
+        const allCallbacks = await callbacksService.getCallbacks('manager')
+        console.log('Callbacks fetched:', allCallbacks.length)
+        setCallbacks(allCallbacks)
+      } catch (error) {
+        console.error('Error fetching callbacks:', error)
+        setError(error instanceof Error ? error.message : 'Unknown error')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchCallbacks()
+  }, [])
+
+  const exportToCSV = () => {
+    if (callbacks.length === 0) return
+
+    const headers = ['Customer Name', 'Phone', 'Email', 'Sales Agent', 'Status', 'Call Date']
+    const csvData = callbacks.map(callback => [
+      callback.customer_name || '',
+      callback.phone_number || '',
+      callback.email || '',
+      callback.sales_agent || '',
+      callback.status || '',
+      callback.first_call_date || ''
+    ])
+
+    const csvContent = [headers, ...csvData]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `callbacks_export.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-muted rounded w-1/4"></div>
+          <div className="h-64 bg-muted rounded"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <p className="text-red-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">All Callbacks Table</h1>
+          <p className="text-muted-foreground">
+            {callbacks.length} callbacks from all salesmen
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={exportToCSV} disabled={callbacks.length === 0}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button variant="outline" onClick={() => window.open('/admin/callbacks-table', '_blank')}>
+            <Phone className="h-4 w-4 mr-2" />
+            Full Table View
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Callbacks ({Math.min(10, callbacks.length)})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {callbacks.slice(0, 10).map((callback, index) => (
+              <div key={callback.id || index} className="flex justify-between items-center p-3 border rounded">
+                <div>
+                  <div className="font-medium">{callback.customer_name}</div>
+                  <div className="text-sm text-muted-foreground">{callback.sales_agent}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium">{callback.status}</div>
+                  <div className="text-sm text-muted-foreground">{callback.first_call_date}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

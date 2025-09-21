@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter, ZAxis } from 'recharts';
 import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3, Phone, Clock } from 'lucide-react';
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
+import { useMySQLSalesData } from "@/hooks/useMySQLSalesData";
 import { callbackAnalyticsService } from '@/lib/callback-analytics-service';
 import CallbackKPIDashboard from './callback-kpi-dashboard';
 
@@ -23,8 +23,8 @@ interface DealData {
 }
 
 interface SalesAnalysisDashboardProps {
-  userRole: 'manager' | 'salesman' | 'customer-service';
-  user: { id: string; name: string; username: string };
+  userRole: 'manager' | 'salesman' | 'team-leader';
+  user: { id: string; name: string; username: string; managedTeam?: string };
 }
 
 interface AnalyticsData {
@@ -47,7 +47,12 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   const [callbackMetrics, setCallbackMetrics] = useState<any>(null);
 
   // Use live data with real-time updates via SSE
-  const { sales, loading, error, refresh } = useFirebaseSalesData(userRole, user?.id, user?.name);
+  const { deals, callbacks, targets, loading, error, refreshData, analytics: hookAnalytics } = useMySQLSalesData({ 
+    userRole: userRole, 
+    userId: user?.id, 
+    userName: user?.name,
+    managedTeam: user?.managedTeam
+  });
 
   // Load callback metrics for quick overview with real-time updates
   useEffect(() => {
@@ -74,21 +79,21 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   }, [user, userRole]);
 
   // Normalize to DealData for charts/KPIs
-  const salesData: DealData[] = (sales || []).map((row: any) => ({
+  const salesData: DealData[] = (deals || []).map((row: any) => ({
     ...row,
-    date: new Date(row.date),
-    amount: typeof row.amount === 'number' ? row.amount : parseFloat(String(row.amount)) || 0,
-    salesAgent: row.sales_agent_norm?.toLowerCase?.() || row.sales_agent?.toLowerCase?.() || '',
-    closingAgent: row.closing_agent_norm?.toLowerCase?.() || row.closing_agent?.toLowerCase?.() || '',
-    service: row.type_service || row.service_tier || 'Unknown',
-    program: row.product_type || row.service_tier || 'Unknown',
-    team: row.team || row.sales_team || 'Unknown',
-    duration: row.duration || `${row.duration_months || ''}`,
-    customer_name: row.customer_name || 'Unknown',
+    date: new Date(row.signupDate || row.createdAt),
+    amount: typeof row.amountPaid === 'number' ? row.amountPaid : parseFloat(String(row.amountPaid)) || 0,
+    salesAgent: row.salesAgentName?.toLowerCase?.() || '',
+    closingAgent: row.closingAgentName?.toLowerCase?.() || '',
+    service: row.serviceTier || 'Unknown',
+    program: row.serviceTier || 'Unknown',
+    team: row.salesTeam || 'Unknown',
+    duration: `${row.durationMonths || ''}`,
+    customer_name: row.customerName || 'Unknown',
   }));
 
   // Calculate metrics based on role
-  const analytics = useMemo<AnalyticsData | null>(() => {
+  const computedAnalytics = useMemo<AnalyticsData | null>(() => {
     if (!salesData.length) return null;
 
     let filteredData = salesData;
@@ -99,6 +104,13 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
       filteredData = salesData.filter(deal => 
         (deal.salesAgent?.toLowerCase() === agentName) || 
         (deal.closingAgent?.toLowerCase() === agentName)
+      );
+    } else if (userRole === 'team-leader' && user?.managedTeam) {
+      // Team leaders see their team's data + their own deals
+      filteredData = salesData.filter(deal => 
+        deal.team === user.managedTeam || 
+        deal.salesAgent?.toLowerCase() === user.name.toLowerCase() ||
+        deal.closingAgent?.toLowerCase() === user.name.toLowerCase()
       );
     }
 
@@ -225,7 +237,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
       <Card>
         <CardContent className="p-6">
           <p className="text-red-600">Error loading data: {error.message}</p>
-          <button onClick={refresh} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded">
+          <button onClick={refreshData} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded">
             Retry
           </button>
         </CardContent>
@@ -233,7 +245,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
     );
   }
 
-  const hasData = !!analytics && analytics.totalDeals > 0;
+  const hasData = !!computedAnalytics && computedAnalytics.totalDeals > 0;
 
   return (
     <div className="space-y-6">
@@ -264,10 +276,10 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <h2 className="text-xl font-bold">Sales Analytics</h2>
           <p className="text-sm text-muted-foreground">
             {userRole === 'manager' 
-              ? `Team performance • ${analytics.totalDeals} deals • $${analytics.totalSales.toLocaleString()}`
-              : userRole === 'salesman'
-              ? `Your performance • ${analytics.totalDeals} deals • $${analytics.totalSales.toLocaleString()}`
-              : `Support metrics • ${analytics.totalDeals} interactions`}
+              ? `Team performance • ${computedAnalytics.totalDeals} deals • $${computedAnalytics.totalSales.toLocaleString()}`
+              : userRole === 'team-leader'
+              ? `Team ${user?.managedTeam} + Personal • ${computedAnalytics.totalDeals} deals • $${computedAnalytics.totalSales.toLocaleString()}`
+              : `Your performance • ${computedAnalytics.totalDeals} deals • $${computedAnalytics.totalSales.toLocaleString()}`}
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-green-600">
@@ -288,7 +300,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={analytics.dailyTrend}>
+                <LineChart data={computedAnalytics.dailyTrend}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                   <YAxis />
@@ -309,7 +321,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.topAgents.slice(0, 8)} layout="horizontal">
+                <BarChart data={computedAnalytics.topAgents.slice(0, 8)} layout="horizontal">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
@@ -335,7 +347,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={analytics.salesByService}
+                    data={computedAnalytics.salesByService}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -343,9 +355,9 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                     fill="#8884d8"
                     dataKey="sales"
                     nameKey="service"
-                    label={(entry: any) => `${entry.service}: ${((entry.sales / analytics.totalSales) * 100 || 0).toFixed(0)}%`}
+                    label={(entry: any) => `${entry.service}: ${((entry.sales / computedAnalytics.totalSales) * 100 || 0).toFixed(0)}%`}
                   >
-                    {analytics.salesByService.map((_, index) => (
+                    {computedAnalytics.salesByService.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -364,7 +376,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.salesByTeam}>
+                <BarChart data={computedAnalytics.salesByTeam}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="team" tick={{ fontSize: 12 }} />
                   <YAxis />
@@ -392,7 +404,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.userAnalysisData}>
+                <BarChart data={computedAnalytics.userAnalysisData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -427,7 +439,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-white">
-                    {analytics.salesByAgent.length}
+                    {computedAnalytics.salesByAgent.length}
                   </div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide">
                     {userRole === 'salesman' ? 'Closing Agents' : 'Sales Agents'}
@@ -439,7 +451,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80 mb-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.salesByAgent.slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                <BarChart data={computedAnalytics.salesByAgent.slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis 
                     dataKey="agent" 
@@ -488,19 +500,19 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-600 shadow-sm">
                 <div className="text-lg font-semibold text-white">
-                  ${analytics.salesByAgent.reduce((sum, agent) => sum + agent.sales, 0).toLocaleString()}
+                  ${computedAnalytics.salesByAgent.reduce((sum, agent) => sum + agent.sales, 0).toLocaleString()}
                 </div>
                 <div className="text-xs text-gray-400 uppercase tracking-wide mt-1">Total Revenue</div>
               </div>
               <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-600 shadow-sm">
                 <div className="text-lg font-semibold text-emerald-400">
-                  {analytics.salesByAgent.reduce((sum, agent) => sum + agent.deals, 0)}
+                  {computedAnalytics.salesByAgent.reduce((sum, agent) => sum + agent.deals, 0)}
                 </div>
                 <div className="text-xs text-gray-400 uppercase tracking-wide mt-1">Total Deals</div>
               </div>
               <div className="text-center p-3 bg-gray-800 rounded-lg border border-gray-600 shadow-sm">
                 <div className="text-lg font-semibold text-amber-400">
-                  ${Math.round(analytics.salesByAgent.reduce((sum, agent) => sum + agent.sales, 0) / Math.max(analytics.salesByAgent.reduce((sum, agent) => sum + agent.deals, 0), 1)).toLocaleString()}
+                  ${Math.round(computedAnalytics.salesByAgent.reduce((sum, agent) => sum + agent.sales, 0) / Math.max(computedAnalytics.salesByAgent.reduce((sum, agent) => sum + agent.deals, 0), 1)).toLocaleString()}
                 </div>
                 <div className="text-xs text-gray-400 uppercase tracking-wide mt-1">Avg Deal Size</div>
               </div>
@@ -529,7 +541,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                 </tr>
               </thead>
               <tbody>
-                {analytics.recentDeals.map((deal, index) => (
+                {computedAnalytics.recentDeals.map((deal, index) => (
                   <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                     <td className="py-2">{deal.date.toLocaleDateString()}</td>
                     <td className="py-2">{deal.customer_name}</td>
@@ -569,7 +581,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                   </tr>
                 </thead>
                 <tbody>
-                  {analytics.topAgents.map((agent, index) => (
+                  {computedAnalytics.topAgents.map((agent, index) => (
                     <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                       <td className="py-2 capitalize font-medium">{agent.agent}</td>
                       <td className="py-2 font-semibold">${agent.sales.toLocaleString()}</td>
@@ -580,11 +592,11 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                           <div className="w-20 bg-gray-200 rounded-full h-2 mr-2">
                             <div 
                               className="bg-blue-600 h-2 rounded-full" 
-                              style={{ width: `${(agent.sales / analytics.topAgents[0].sales) * 100}%` }}
+                              style={{ width: `${(agent.sales / computedAnalytics.topAgents[0].sales) * 100}%` }}
                             ></div>
                           </div>
                           <span className="text-xs">
-                            {((agent.sales / analytics.topAgents[0].sales) * 100).toFixed(0)}%
+                            {((agent.sales / computedAnalytics.topAgents[0].sales) * 100).toFixed(0)}%
                           </span>
                         </div>
                       </td>

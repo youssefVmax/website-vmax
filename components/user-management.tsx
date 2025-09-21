@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { userService } from "@/lib/firebase-user-service"
+import { apiService, User as APIUser } from "@/lib/api-service"
 import { User } from "@/lib/auth"
 import { showSuccess, showToast } from "@/lib/sweetalert"
 

@@ -12,8 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Target, Users, Edit, Trash2, BarChart3, TrendingUp, Filter, Search, Calendar, Award, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { targetsService } from "@/lib/firebase-targets-service"
-import { Target as TargetType, TeamTarget } from "@/types/firebase"
+import { apiService, SalesTarget, Deal, User } from "@/lib/api-service"
 import { DynamicTargetCreator } from "./dynamic-target-creator"
 
 interface EnhancedTargetDashboardProps {
@@ -21,7 +20,7 @@ interface EnhancedTargetDashboardProps {
   user: { name: string; username: string; id: string; team?: string }
 }
 
-interface TargetWithProgress extends TargetType {
+interface TargetWithProgress extends SalesTarget {
   currentSales: number
   currentDeals: number
   salesProgress: number
@@ -54,7 +53,7 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
 
   const isManager = userRole === 'manager'
   
-  // Load target progress from Firebase
+  // Load target progress from MySQL
   useEffect(() => {
     const loadTargetProgress = async () => {
       if (!user?.id) return;
@@ -109,9 +108,9 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
         console.log('🎯 EnhancedTargetDashboard: Targets loaded:', targetsData);
         console.log('🎯 EnhancedTargetDashboard: Team targets loaded:', teamTargetsData);
         
-        // Load progress for individual targets using Firebase data
+        // Load progress for individual targets using MySQL data
         const targetsWithProgress = targetsData.map((target) => {
-          // Find matching progress data from Firebase
+          // Find matching progress data from MySQL
           const progressData = targetProgress.find(p => 
             p.agentId === target.agentId && p.period === target.period
           );

@@ -14,9 +14,9 @@ import {
   RefreshCw, Filter, User
 } from 'lucide-react';
 import { callbackAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/callback-analytics-service';
-import { callbacksService } from '@/lib/firebase-callbacks-service';
-import { dealsService } from '@/lib/firebase-deals-service';
-import { targetsService } from '@/lib/firebase-targets-service';
+import { callbacksService } from '@/lib/mysql-callbacks-service';
+import { dealsService } from '@/lib/mysql-deals-service';
+import { targetsService } from '@/lib/mysql-targets-service';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -149,15 +149,14 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
     if (userRole !== 'manager') return
     const load = async () => {
       try {
-        const [deals, teamTargets, teamsWithMembers] = await Promise.all([
-          dealsService.getAllDeals(),
-          targetsService.getTeamTargets(user.id),
-          targetsService.getTeamsWithMembers()
+        const [deals, teamTargets] = await Promise.all([
+          dealsService.getDeals(),
+          targetsService.getTargets({ managerId: user.id })
         ])
 
-        // Build members per team map from users list
+        // Build members per team map from deals
         const membersByTeam = new Map<string, number>()
-        teamsWithMembers.forEach(t => membersByTeam.set(t.name, t.members.length))
+        // For now, we'll calculate team members from deals data
 
         // Filter deals by timeframe
         const now = new Date()
@@ -172,7 +171,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
         }
 
         const inRangeDeals = deals.filter(d => {
-          const dateStr = d.signup_date || (d as any).date
+          const dateStr = d.signupDate || (d as any).date
           const dt = dateStr ? new Date(dateStr) : (d as any).created_at ? new Date((d as any).created_at) : null
           if (!dt || isNaN(dt.getTime())) return false
           return dt >= start && dt <= now
@@ -193,12 +192,12 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
         }
 
         inRangeDeals.forEach(d => {
-          const team = d.sales_team || 'Unknown'
+          const team = d.salesTeam || 'Unknown'
           if (!map.has(team)) map.set(team, { team, members: 0, deals: 0, revenue: 0 })
           const rec = map.get(team)!
           rec.deals += 1
-          rec.revenue += Number(d.amount_paid || 0)
-          const agentId = (d as any).SalesAgentID || (d as any).sales_agent_id || d.sales_agent
+          rec.revenue += Number(d.amountPaid || 0)
+          const agentId = (d as any).SalesAgentID || (d as any).sales_agent_id || d.salesAgentName
           if (!distinctAgentsPerTeam.has(team)) distinctAgentsPerTeam.set(team, new Set<string>())
           if (agentId) distinctAgentsPerTeam.get(team)!.add(String(agentId))
         })
@@ -213,8 +212,8 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
         // Targets by team (latest period per team)
         const targetsByTeam = new Map<string, { revenue?: number; deals?: number }>()
         teamTargets.forEach(t => {
-          const prev = targetsByTeam.get(t.teamName) || {}
-          targetsByTeam.set(t.teamName, { revenue: t.monthlyTarget ?? prev.revenue, deals: t.dealsTarget ?? prev.deals })
+          const prev = targetsByTeam.get(t.agentName) || {}
+          targetsByTeam.set(t.agentName, { revenue: t.monthlyTarget ?? prev.revenue, deals: t.dealsTarget ?? prev.deals })
         })
 
         // Build sparkline trends per team
@@ -226,12 +225,12 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               const monthStart = new Date(now.getFullYear(), m, 1)
               const monthEnd = new Date(now.getFullYear(), m + 1, 0)
               const sum = inRangeDeals
-                .filter(d => (d.sales_team || 'Unknown') === team)
+                .filter(d => (d.salesTeam || 'Unknown') === team)
                 .filter(d => {
-                  const dt = new Date(d.signup_date || (d as any).date)
+                  const dt = new Date(d.signupDate || (d as any).date)
                   return dt >= monthStart && dt <= monthEnd
                 })
-                .reduce((s, d) => s + Number(d.amount_paid || 0), 0)
+                .reduce((s, d) => s + Number(d.amountPaid || 0), 0)
               points.push({ x: m + 1, y: sum })
             }
           } else {
@@ -243,12 +242,12 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               const bucketStart = new Date(bucketEnd)
               bucketStart.setDate(bucketEnd.getDate() - 6)
               const sum = inRangeDeals
-                .filter(d => (d.sales_team || 'Unknown') === team)
+                .filter(d => (d.salesTeam || 'Unknown') === team)
                 .filter(d => {
-                  const dt = new Date(d.signup_date || (d as any).date)
+                  const dt = new Date(d.signupDate || (d as any).date)
                   return dt >= bucketStart && dt <= bucketEnd
                 })
-                .reduce((s, d) => s + Number(d.amount_paid || 0), 0)
+                .reduce((s, d) => s + Number(d.amountPaid || 0), 0)
               const idx = weeks - w
               points.push({ x: idx, y: sum })
             }

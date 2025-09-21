@@ -1,5 +1,5 @@
-import { callbacksService, Callback } from './firebase-callbacks-service';
-import { dealsService } from './firebase-deals-service';
+import { callbacksService, Callback } from './mysql-callbacks-service';
+import { dealsService } from './mysql-deals-service';
 import { callbackAnalyticsService } from './callback-analytics-service';
 
 export interface IntegratedDataService {
@@ -63,10 +63,8 @@ class IntegratedDataServiceImpl implements IntegratedDataService {
       
       // Update callback to mark as converted
       await callbacksService.updateCallback(callbackId, {
-        converted_to_deal: true,
-        converted_at: new Date().toISOString(),
-        converted_by: user?.name || 'Unknown',
-        status: 'completed'
+        status: 'completed',
+        callbackNotes: 'Converted to deal'
       });
       
       // Trigger analytics refresh
@@ -152,39 +150,40 @@ export const DataUtils = {
   normalizeCallback: (callback: any): Callback => {
     return {
       id: callback.id,
-      customer_name: callback.customer_name || '',
-      phone_number: callback.phone_number || '',
+      customerName: callback.customer_name || callback.customerName || '',
+      phoneNumber: callback.phone_number || callback.phoneNumber || '',
       email: callback.email || '',
-      sales_agent: callback.sales_agent || '',
-      sales_team: callback.sales_team || '',
-      first_call_date: callback.first_call_date || '',
-      first_call_time: callback.first_call_time || '',
-      callback_notes: callback.callback_notes || '',
-      callback_reason: callback.callback_reason || '',
+      salesAgentName: callback.sales_agent || callback.salesAgentName || '',
+      salesTeam: callback.sales_team || callback.salesTeam || '',
+      firstCallDate: callback.first_call_date || callback.firstCallDate || '',
+      firstCallTime: callback.first_call_time || callback.firstCallTime || '',
+      callbackNotes: callback.callback_notes || callback.callbackNotes || '',
+      callbackReason: callback.callback_reason || callback.callbackReason || '',
       status: callback.status || 'pending',
-      created_by: callback.created_by || '',
-      created_by_id: callback.created_by_id || '',
-      SalesAgentID: callback.SalesAgentID || '',
-      created_at: callback.created_at,
-      updated_at: callback.updated_at,
-      converted_to_deal: callback.converted_to_deal || false,
-      converted_at: callback.converted_at,
-      converted_by: callback.converted_by
+      createdBy: callback.created_by || callback.createdBy || '',
+      createdById: callback.created_by_id || callback.createdById || '',
+      salesAgentId: callback.SalesAgentID || callback.salesAgentId || '',
+      createdAt: callback.created_at || callback.createdAt,
+      updatedAt: callback.updated_at || callback.updatedAt,
+      scheduledDate: callback.scheduledDate,
+      scheduledTime: callback.scheduledTime,
+      priority: callback.priority || 'medium',
+      followUpRequired: callback.followUpRequired || false
     };
   },
   
   // Convert callback to deal data
   callbackToDealData: (callback: Callback, additionalData: any = {}): any => {
     return {
-      customer_name: callback.customer_name,
-      phone_number: callback.phone_number,
+      customerName: callback.customerName,
+      phoneNumber: callback.phoneNumber,
       email: callback.email,
-      sales_agent: callback.sales_agent,
-      sales_team: callback.sales_team,
-      SalesAgentID: callback.SalesAgentID,
-      created_by: callback.created_by,
-      created_by_id: callback.created_by_id,
-      notes: `Converted from callback: ${callback.callback_notes}`,
+      salesAgentName: callback.salesAgentName,
+      salesTeam: callback.salesTeam,
+      salesAgentId: callback.salesAgentId,
+      createdBy: callback.createdBy,
+      createdById: callback.createdById,
+      notes: `Converted from callback: ${callback.callbackNotes}`,
       status: 'active',
       stage: 'qualified',
       priority: 'high',
@@ -196,19 +195,19 @@ export const DataUtils = {
   validateCallbackData: (data: Partial<Callback>): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
     
-    if (!data.customer_name?.trim()) {
+    if (!data.customerName?.trim()) {
       errors.push('Customer name is required');
     }
     
-    if (!data.phone_number?.trim()) {
+    if (!data.phoneNumber?.trim()) {
       errors.push('Phone number is required');
     }
     
-    if (!data.sales_agent?.trim()) {
+    if (!data.salesAgentName?.trim()) {
       errors.push('Sales agent is required');
     }
     
-    if (!data.callback_reason?.trim()) {
+    if (!data.callbackReason?.trim()) {
       errors.push('Callback reason is required');
     }
     

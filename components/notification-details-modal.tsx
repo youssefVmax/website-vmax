@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Calendar, User, DollarSign, Building, Phone, Mail, MapPin, Clock, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
 import { Notification } from '@/types/notification'
-import { useFirebaseSalesData } from '@/hooks/useFirebaseSalesData'
+import { useMySQLSalesData } from '@/hooks/useMySQLSalesData'
 import { callbackAnalyticsService } from '@/lib/callback-analytics-service'
 
 interface NotificationDetailsModalProps {
@@ -62,7 +62,7 @@ export default function NotificationDetailsModal({
   const [dealDetails, setDealDetails] = useState<DealDetails | null>(null)
   const [callbackDetails, setCallbackDetails] = useState<CallbackDetails | null>(null)
   const [loading, setLoading] = useState(false)
-  const { sales } = useFirebaseSalesData(userRole, userId, '')
+  const { deals } = useMySQLSalesData({ userRole: userRole as any, userId, userName: '' })
 
   useEffect(() => {
     if (!notification || !isOpen) {

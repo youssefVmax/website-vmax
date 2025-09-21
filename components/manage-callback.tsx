@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { callbacksService } from "@/lib/firebase-callbacks-service";
+import { callbacksService } from "@/lib/mysql-callbacks-service";
 import { 
   Phone, 
   Plus, 

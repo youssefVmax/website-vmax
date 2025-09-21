@@ -1,15 +1,18 @@
 export interface User {
   id: string;
   username: string;
-  password: string;
+  password?: string;
   name: string;
   role: 'manager' | 'salesman' | 'team-leader';
   team?: string;
   managedTeam?: string; // For team leaders - which team they manage
   email?: string;
   phone?: string;
-  created_at?: string;
-  created_by?: string;
+  isActive?: boolean;
+  lastLogin?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
 }
 
 // Manager credentials - hardcoded as requested
@@ -37,7 +40,7 @@ export function authenticateManager(username: string, password: string): User | 
   return null;
 }
 
-// Authenticate any user (manager or salesman from Firebase)
+// Authenticate any user (manager or from MySQL database)
 export async function authenticateUser(username: string, password: string): Promise<User | null> {
   console.log('Authenticating user:', username);
   
@@ -48,15 +51,15 @@ export async function authenticateUser(username: string, password: string): Prom
     return manager;
   }
   
-  // For salesmen, check Firebase
+  // For other users, check MySQL database
   try {
-    console.log('Checking Firebase for user:', username);
-    const { userService } = await import('./firebase-user-service');
-    const user = await userService.authenticateUser(username, password);
+    console.log('Checking MySQL database for user:', username);
+    const { authenticateUser: mysqlAuth } = await import('./mysql-auth-service');
+    const user = await mysqlAuth(username, password);
     if (user) {
-      console.log('Firebase user authenticated successfully:', user.name);
+      console.log('MySQL user authenticated successfully:', user.name);
     } else {
-      console.log('Firebase authentication failed for user:', username);
+      console.log('MySQL authentication failed for user:', username);
     }
     return user;
   } catch (error) {
@@ -65,13 +68,13 @@ export async function authenticateUser(username: string, password: string): Prom
   }
 }
 
-// Firebase-integrated helper functions
+// MySQL-integrated helper functions
 export async function getUserById(id: string): Promise<User | null> {
   if (id === MANAGER_USER.id) return MANAGER_USER;
   
   try {
-    const { userService } = await import('./firebase-user-service');
-    return await userService.getUserById(id);
+    const { getUserById: mysqlGetUserById } = await import('./mysql-auth-service');
+    return await mysqlGetUserById(id);
   } catch (error) {
     console.error('Error fetching user by ID:', error);
     return null;
@@ -82,8 +85,8 @@ export async function getUsersByRole(role: User['role']): Promise<User[]> {
   if (role === 'manager') return [MANAGER_USER];
   
   try {
-    const { userService } = await import('./firebase-user-service');
-    return await userService.getUsersByRole(role);
+    const { getUsersByRole: mysqlGetUsersByRole } = await import('./mysql-auth-service');
+    return await mysqlGetUsersByRole(role);
   } catch (error) {
     console.error('Error fetching users by role:', error);
     return [];
@@ -94,8 +97,8 @@ export async function getUsersByTeam(team: string): Promise<User[]> {
   if (team === 'MANAGEMENT') return [MANAGER_USER];
   
   try {
-    const { userService } = await import('./firebase-user-service');
-    return await userService.getUsersByTeam(team);
+    const { getUsersByTeam: mysqlGetUsersByTeam } = await import('./mysql-auth-service');
+    return await mysqlGetUsersByTeam(team);
   } catch (error) {
     console.error('Error fetching users by team:', error);
     return [];

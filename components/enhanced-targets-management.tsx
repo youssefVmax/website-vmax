@@ -13,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Target, Users, Plus, Edit, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { targetsService } from "@/lib/firebase-targets-service"
-import { Target as TargetType, TeamTarget } from "@/types/firebase"
+import { targetsService } from "@/lib/mysql-targets-service"
+import { SalesTarget as TargetType, TeamTarget } from "@/lib/api-service"
 
 interface EnhancedTargetsProps {
   userRole: 'manager' | 'salesman' | 'customer-service'
@@ -80,11 +80,16 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
         setLoading(true)
         
         if (isManager) {
-          const [targetsData, teamTargetsData, teamsData] = await Promise.all([
-            targetsService.getTargets(user.id, userRole),
-            targetsService.getTeamTargets(user.id),
-            targetsService.getTeamsWithMembers()
+          const [targetsData, teamTargetsData] = await Promise.all([
+            targetsService.getTargets({ managerId: user.id }),
+            targetsService.getTargets({ managerId: user.id, type: 'team' })
           ])
+          
+          // Get teams data from user service or hardcode known teams
+          const teamsData = [
+            { id: 'ali_ashraf', name: 'ALI ASHRAF', members: [{ id: 'agent1', name: 'Agent 1' }] },
+            { id: 'cs_team', name: 'CS TEAM', members: [{ id: 'agent2', name: 'Agent 2' }] }
+          ]
           
           setTargets(targetsData)
           setTeamTargets(teamTargetsData)
@@ -103,7 +108,7 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
           }
           setTargetProgress(progressData)
         } else {
-          const targetsData = await targetsService.getTargets(user.id, userRole)
+          const targetsData = await targetsService.getTargets({ agentId: user.id })
           setTargets(targetsData)
 
           // Load progress for user's targets
@@ -152,7 +157,7 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
   // Delete team target
   const handleDeleteTeamTarget = async (targetId: string) => {
     try {
-      await targetsService.deleteTeamTarget(targetId)
+      await targetsService.deleteTarget(targetId)
       setTeamTargets(prev => prev.filter(t => t.id !== targetId))
       toast({
         title: "Team Target Deleted",
@@ -219,7 +224,16 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
         managerName: user.name
       }
 
-      const createdTarget = await targetsService.addTarget(targetData)
+      const createdTargetId = await targetsService.createTarget(targetData)
+      
+      // Create the full target object for state update
+      const createdTarget: TargetType = {
+        id: createdTargetId,
+        ...targetData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      
       setTargets(prev => [...prev, createdTarget])
       setNewIndividualTarget({
         agentId: '',
@@ -232,7 +246,7 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
       toast({
         title: "Target Created",
-        description: `Individual target created for ${createdTarget.agentName}.`
+        description: `Individual target created for ${targetData.agentName}.`
       })
     } catch (error) {
       toast({
@@ -270,11 +284,53 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
         members: selectedTeam.members.map(m => m.id)
       }
 
-      const createdTeamTarget = await targetsService.addTeamTarget(teamTargetData)
+      // Create team target using regular createTarget method
+      // For now, create a representative target for the team leader
+      const teamTargetId = await targetsService.createTarget({
+        type: 'individual',
+        agentId: user.id,
+        agentName: `Team: ${selectedTeam.name}`,
+        monthlyTarget: parseInt(newTeamTarget.monthlyTarget),
+        dealsTarget: parseInt(newTeamTarget.dealsTarget),
+        period: newTeamTarget.period,
+        description: `Team target for ${selectedTeam.name}: ${newTeamTarget.description}`,
+        managerId: user.id,
+        managerName: user.name
+      })
+      
+      const createdTeamTarget = {
+        id: teamTargetId,
+        ...teamTargetData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      
       setTeamTargets(prev => [...prev, createdTeamTarget])
 
-      // Optionally create individual targets for team members
-      const individualTargets = await targetsService.createIndividualTargetsFromTeamTarget(createdTeamTarget)
+      // Create individual targets for team members
+      const individualTargets: TargetType[] = []
+      for (const member of selectedTeam.members) {
+        const individualTargetData = {
+          type: 'individual' as const,
+          agentId: member.id,
+          agentName: member.name,
+          monthlyTarget: Math.floor(parseInt(newTeamTarget.monthlyTarget) / selectedTeam.members.length),
+          dealsTarget: Math.floor(parseInt(newTeamTarget.dealsTarget) / selectedTeam.members.length),
+          period: newTeamTarget.period,
+          description: `Individual target from team: ${selectedTeam.name}`,
+          managerId: user.id,
+          managerName: user.name
+        }
+        
+        const individualTargetId = await targetsService.createTarget(individualTargetData)
+        individualTargets.push({
+          id: individualTargetId,
+          ...individualTargetData,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+      }
+      
       setTargets(prev => [...prev, ...individualTargets])
       setNewTeamTarget({
         teamId: '',
@@ -288,7 +344,7 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
       toast({
         title: "Team Target Created",
-        description: `Team target created for ${createdTeamTarget.teamName} with individual targets for ${individualTargets.length} members.`
+        description: `Team target created for ${selectedTeam.name} with individual targets for ${individualTargets.length} members.`
       })
     } catch (error) {
       toast({

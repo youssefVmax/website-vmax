@@ -10,8 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts'
 import { TrendingUp, TrendingDown, DollarSign, Users, Target, Calendar, Filter, Download, Upload, Plus, Search, Eye, Edit, Trash2, Award, Activity, Briefcase, UserCheck } from "lucide-react"
-import { userAnalyticsService, UserPerformanceMetrics, TeamAnalytics, CompanyAnalytics } from "@/lib/firebase-user-analytics-service"
-import { dealsService, Deal } from "@/lib/firebase-deals-service"
+import { apiService, User, Deal, SalesTarget, Callback } from "@/lib/api-service"
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7C7C']
 
@@ -28,11 +27,13 @@ export default function ComprehensiveAnalyticsDashboard({ userRole, userId, user
   const [activeTab, setActiveTab] = useState("overview")
   
   // Analytics data
-  const [companyAnalytics, setCompanyAnalytics] = useState<CompanyAnalytics | null>(null)
-  const [userMetrics, setUserMetrics] = useState<UserPerformanceMetrics | null>(null)
-  const [teamAnalytics, setTeamAnalytics] = useState<TeamAnalytics | null>(null)
-  const [leaderboard, setLeaderboard] = useState<UserPerformanceMetrics[]>([])
+  const [companyAnalytics, setCompanyAnalytics] = useState<any>(null)
+  const [userMetrics, setUserMetrics] = useState<any>(null)
+  const [teamAnalytics, setTeamAnalytics] = useState<any>(null)
+  const [leaderboard, setLeaderboard] = useState<any[]>([])
   const [deals, setDeals] = useState<Deal[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [callbacks, setCallbacks] = useState<Callback[]>([])
   
   // Filters
   const [dateFilter, setDateFilter] = useState("all")
@@ -47,43 +48,56 @@ export default function ComprehensiveAnalyticsDashboard({ userRole, userId, user
     try {
       setLoading(true)
       setError(null)
-
-      // Load company analytics (for managers)
+      
+      // Load data based on user role
       if (userRole === 'manager') {
-        const companyData = await userAnalyticsService.getCompanyAnalytics()
+        // Load company-wide analytics
+        const companyData = await apiService.getCompanyAnalytics()
         setCompanyAnalytics(companyData)
+        setDeals(companyData.deals)
+        setUsers(companyData.users)
+        setCallbacks(companyData.callbacks)
         
-        const leaderboardData = await userAnalyticsService.getUserLeaderboard(10)
-        setLeaderboard(leaderboardData)
+        // Create leaderboard from user performances
+        const userPerformances = await Promise.all(
+          companyData.users
+            .filter((user: User) => user.role === 'salesman')
+            .map((user: User) => apiService.getUserPerformance(user.id))
+        )
+        setLeaderboard(userPerformances.sort((a, b) => b.totalRevenue - a.totalRevenue))
         
-        const allDeals = await dealsService.getAllDeals()
-        setDeals(allDeals)
-      }
-
-      // Load user-specific metrics
-      if (userId) {
-        const userMetricsData = await userAnalyticsService.getUserPerformanceMetrics(userId)
-        setUserMetrics(userMetricsData)
-        
-        if (userRole !== 'manager') {
-          const userDeals = await dealsService.getDealsByAgent(userId)
-          setDeals(userDeals)
-        }
-      }
-
-      // Load team analytics
-      if (userTeam) {
-        const teamData = await userAnalyticsService.getTeamAnalytics(userTeam)
+      } else if (userRole === 'team-leader' && userTeam) {
+        // Load team analytics
+        const teamData = await apiService.getTeamAnalytics(userTeam)
         setTeamAnalytics(teamData)
+        setDeals(teamData.deals)
+        
+        const teamUsers = await apiService.getUsers({ team: userTeam })
+        setUsers(teamUsers)
+        
+        const teamCallbacks = await apiService.getCallbacks({ salesTeam: userTeam })
+        setCallbacks(teamCallbacks)
+        
+        setLeaderboard(teamData.userPerformances.sort((a: any, b: any) => b.totalRevenue - a.totalRevenue))
+        
+      } else if (userRole === 'salesman' && userId) {
+        // Load individual user metrics
+        const userPerf = await apiService.getUserPerformance(userId)
+        setUserMetrics(userPerf)
+        setDeals(userPerf.deals)
+        
+        const userCallbacks = await apiService.getCallbacks({ salesAgentId: userId })
+        setCallbacks(userCallbacks)
       }
-
+      
     } catch (err) {
-      console.error('Error loading analytics:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load analytics')
+      console.error('Error loading analytics data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load analytics data')
     } finally {
       setLoading(false)
     }
   }
+
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {

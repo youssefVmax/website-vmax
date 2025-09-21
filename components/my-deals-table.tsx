@@ -12,15 +12,50 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useToast } from "@/hooks/use-toast"
 import { useNotifications } from "@/hooks/use-notifications"
 import { ArrowUpDown, Eye, Edit as EditIcon, RotateCcw } from "lucide-react"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { apiService, Deal } from "@/lib/api-service"
+import { useEffect } from "react"
 
 interface MyDealsTableProps {
   user: { id: string; name: string; username: string; role: 'manager'|'salesman'|'customer-service' }
 }
 
 export default function MyDealsTable({ user }: MyDealsTableProps) {
-  // Fetch scoped rows for the salesman using streaming hook
-  const { sales = [], loading, error } = useFirebaseSalesData('salesman', user.id, user.name)
+  // State for deals data
+  const [sales, setSales] = useState<Deal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Fetch deals data from API
+  useEffect(() => {
+    const fetchDeals = async () => {
+      try {
+        setLoading(true)
+        let filters: Record<string, string> = {}
+        
+        if (user.role === 'salesman') {
+          filters.salesAgentId = user.id
+        } else if (user.role === 'team-leader' && (user as any).managedTeam) {
+          filters.salesTeam = (user as any).managedTeam
+        }
+        
+        const dealsData = await apiService.getDeals(filters)
+        setSales(dealsData)
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching deals:', err)
+        setError(err instanceof Error ? err.message : 'Failed to fetch deals')
+        toast({
+          title: "Error",
+          description: "Failed to load deals data",
+          variant: "destructive"
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchDeals()
+  }, [user.id, user.role])
   const { toast } = useToast()
   const { addNotification } = useNotifications()
 

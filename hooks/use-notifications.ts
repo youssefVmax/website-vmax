@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Notification } from "@/types/notification"
 import { useAuth } from "@/hooks/useAuth"
 import { showToast } from "@/lib/sweetalert"
-import { notificationService } from "@/lib/firebase-services"
+import { notificationService } from "@/lib/mysql-notifications-service"
 
 interface NotificationsContextType {
   notifications: Notification[]
@@ -22,7 +22,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const knownIdsRef = React.useRef<Set<string>>(new Set())
 
-  // Load notifications from Firebase
+  // Load notifications from MySQL
   useEffect(() => {
     let mounted = true
 
@@ -30,44 +30,25 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       try {
         if (!user?.id || !user?.role) return
         const data = await notificationService.getNotifications(user.id, user.role)
-        // Map Firebase notifications to expected format
-        const mapped: Notification[] = data.map((n: any) => {
-          // Safe timestamp conversion
-          const safeToDate = (value: any) => {
-            if (!value) return new Date();
-            try {
-              if (typeof value?.toDate === 'function') return value.toDate();
-              if (value instanceof Date) return value;
-              if (typeof value === 'string') return new Date(value);
-              if (typeof value === 'object' && typeof value.seconds === 'number') {
-                return new Date(value.seconds * 1000);
-              }
-              if (typeof value === 'number') return new Date(value);
-            } catch (error) {
-              console.warn('Failed to convert notification timestamp:', value, error);
-            }
-            return new Date();
-          };
-
-          return {
-            id: n.id,
-            title: n.title,
-            message: n.message,
-            type: n.type,
-            priority: n.priority || 'medium',
-            from: n.from || 'System',
-            fromAvatar: n.fromAvatar,
-            to: n.to || [],
-            timestamp: safeToDate(n.created_at),
-            read: n.isRead || false,
-            dealId: n.dealId,
-            dealName: n.dealName,
-            dealStage: n.dealStage,
-            dealValue: n.dealValue,
-            isManagerMessage: n.isManagerMessage,
-            actionRequired: n.actionRequired
-          };
-        })
+        // Notifications are already in the correct format from MySQL service
+        const mapped: Notification[] = data.map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: n.type,
+          priority: n.priority || 'medium',
+          from: n.from || 'System',
+          fromAvatar: n.fromAvatar,
+          to: n.to || [],
+          timestamp: n.timestamp,
+          read: n.isRead || false,
+          dealId: n.dealId,
+          dealName: n.dealName,
+          dealStage: n.dealStage,
+          dealValue: n.dealValue,
+          isManagerMessage: n.isManagerMessage,
+          actionRequired: n.actionRequired
+        }))
         if (mounted) setNotifications(mapped)
       } catch (e) {
         console.error('Notifications fetch failed', e)
@@ -112,44 +93,25 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     try {
       if (!user?.id || !user?.role) return
       const data = await notificationService.getNotifications(user.id, user.role)
-      // Map Firebase notifications to expected format
-      const mapped: Notification[] = data.map((n: any) => {
-        // Safe timestamp conversion
-        const safeToDate = (value: any) => {
-          if (!value) return new Date();
-          try {
-            if (typeof value?.toDate === 'function') return value.toDate();
-            if (value instanceof Date) return value;
-            if (typeof value === 'string') return new Date(value);
-            if (typeof value === 'object' && typeof value.seconds === 'number') {
-              return new Date(value.seconds * 1000);
-            }
-            if (typeof value === 'number') return new Date(value);
-          } catch (error) {
-            console.warn('Failed to convert notification timestamp:', value, error);
-          }
-          return new Date();
-        };
-
-        return {
-          id: n.id,
-          title: n.title,
-          message: n.message,
-          type: n.type,
-          priority: n.priority || 'medium',
-          from: n.from || 'System',
-          fromAvatar: n.fromAvatar,
-          to: n.to || [],
-          timestamp: safeToDate(n.created_at),
-          read: n.isRead || false,
-          dealId: n.dealId,
-          dealName: n.dealName,
-          dealStage: n.dealStage,
-          dealValue: n.dealValue,
-          isManagerMessage: n.isManagerMessage,
-          actionRequired: n.actionRequired
-        };
-      })
+      // Notifications are already in the correct format from MySQL service
+      const mapped: Notification[] = data.map((n: any) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        priority: n.priority || 'medium',
+        from: n.from || 'System',
+        fromAvatar: n.fromAvatar,
+        to: n.to || [],
+        timestamp: n.timestamp,
+        read: n.isRead || false,
+        dealId: n.dealId,
+        dealName: n.dealName,
+        dealStage: n.dealStage,
+        dealValue: n.dealValue,
+        isManagerMessage: n.isManagerMessage,
+        actionRequired: n.actionRequired
+      }))
       setNotifications(mapped)
     } catch (e) {
       console.error('Refresh notifications failed', e)
@@ -182,8 +144,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const addNotification = async (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     try {
-      // Map to Firebase format
-      const firebaseNotification = {
+      // Map to MySQL format
+      const mysqlNotification = {
         title: notification.title,
         message: notification.message,
         type: notification.type,
@@ -202,7 +164,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         actionRequired: notification.actionRequired
       }
       
-      const id = await notificationService.addNotification(firebaseNotification)
+      const id = await notificationService.addNotification(mysqlNotification)
       
       // Add to local state with proper format
       const newNotification: Notification = {

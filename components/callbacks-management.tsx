@@ -12,22 +12,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { showSuccess, showError } from "@/lib/sweetalert";
 import { Phone, Calendar, Clock, User, MessageSquare, CheckCircle, XCircle, Edit } from "lucide-react";
-import { callbacksService } from "@/lib/firebase-callbacks-service";
-import { dealsService } from "@/lib/firebase-deals-service";
+import { apiService, Callback as APICallback } from "@/lib/api-service";
 
 interface Callback {
   id?: string;
-  customer_name: string;
-  phone_number: string;
+  customerName: string;
+  phoneNumber: string;
   email: string;
-  sales_agent: string;
-  sales_team: string;
-  first_call_date: string;
-  first_call_time: string;
-  callback_notes: string;
-  callback_reason: string;
+  salesAgentName: string;
+  salesTeam: string;
+  firstCallDate: string;
+  firstCallTime: string;
+  callbackNotes: string;
+  callbackReason: string;
   status: 'pending' | 'contacted' | 'completed' | 'cancelled';
-  created_by: string;
+  createdBy: string;
   created_by_id: string;
   SalesAgentID: string;
   created_at?: any;
@@ -50,12 +49,39 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [filter, setFilter] = useState<string>('all');
 
-  // Fetch callbacks using Firebase service with real-time updates
+  // Fetch callbacks using API service
   const fetchCallbacks = async () => {
     try {
       setLoading(true);
-      const data = await callbacksService.getCallbacks(userRole, user?.id, user?.name);
-      setCallbacks(data);
+      let filters: Record<string, string> = {};
+      
+      if (userRole === 'salesman') {
+        filters.salesAgentId = user?.id;
+      } else if (userRole === 'team-leader' && user?.managedTeam) {
+        filters.salesTeam = user.managedTeam;
+      }
+      
+      const data = await apiService.getCallbacks(filters);
+      // Convert API format to component format
+      const convertedData = data.map((callback: APICallback) => ({
+        id: callback.id,
+        customerName: callback.customerName,
+        phoneNumber: callback.phoneNumber,
+        email: callback.email || '',
+        salesAgentName: callback.salesAgentName,
+        salesTeam: callback.salesTeam || '',
+        firstCallDate: callback.firstCallDate,
+        firstCallTime: callback.firstCallTime || '',
+        callbackNotes: callback.callbackNotes || '',
+        callbackReason: callback.callbackReason || '',
+        status: callback.status,
+        createdBy: callback.createdBy,
+        created_by_id: callback.createdById,
+        SalesAgentID: callback.salesAgentId,
+        created_at: callback.createdAt,
+        updated_at: callback.updatedAt
+      }));
+      setCallbacks(convertedData);
     } catch (error) {
       console.error('Error fetching callbacks:', error);
       showError('Error', 'Failed to load callbacks');
@@ -67,55 +93,28 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
   useEffect(() => {
     if (!user) return;
     
-    // Set up real-time listener for callbacks
-    const unsubscribe = callbacksService.onCallbacksChange(
-      (updatedCallbacks) => {
-        setCallbacks(updatedCallbacks);
-        setLoading(false);
-      },
-      userRole,
-      user?.id,
-      user?.name
-    );
-
     // Initial load
     fetchCallbacks();
-
-    // Cleanup listener on unmount
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
+    
+    // Set up periodic refresh
+    const interval = setInterval(fetchCallbacks, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
   }, [userRole, user]);
 
-  // Real-time listener for live updates
-  useEffect(() => {
-    const unsubscribe = callbacksService.onCallbacksChange(
-      (updatedCallbacks) => {
-        setCallbacks(updatedCallbacks);
-      },
-      userRole,
-      user?.id,
-      user?.name
-    );
 
-    return () => unsubscribe();
-  }, [userRole, user?.id, user?.name]);
-
-  // Update callback status using Firebase service
+  // Update callback status using API service
   const updateCallbackStatus = async (id: string, status: string, notes?: string) => {
     try {
       const updates: any = {
-        status: status as 'pending' | 'contacted' | 'completed' | 'cancelled',
-        updated_by: user?.name || 'Unknown'
+        status: status as 'pending' | 'contacted' | 'completed' | 'cancelled'
       };
       
       if (notes) {
-        updates.callback_notes = notes;
+        updates.callbackNotes = notes;
       }
       
-      await callbacksService.updateCallback(id, updates);
+      await apiService.updateCallback(id, updates);
       showSuccess('Success', 'Callback updated successfully');
       fetchCallbacks();
     } catch (error) {

@@ -9,9 +9,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Upload, Download, Database, FileText, Users, Trash2, Plus, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { userService } from "@/lib/firebase-user-service"
-import { dataFilesService, numberAssignmentsService } from "@/lib/firebase-data-services"
-import { useFirebaseDataFiles } from "@/hooks/useFirebaseDataFiles"
+import { userService } from "@/lib/mysql-services"
+import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
 import { showInfo } from "@/lib/sweetalert"
 import { formatDisplayDate, sanitizeObject } from "@/lib/timestamp-utils"
 
@@ -37,7 +36,7 @@ interface NumberAssignment {
 }
 
 interface DataCenterProps {
-  userRole: 'manager' | 'salesman' | 'customer-service'
+  userRole: 'manager' | 'salesman' | 'team-leader'
   user: { name: string; username: string; id: string }
 }
 
@@ -47,7 +46,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const [users, setUsers] = useState<any[]>([])
   const [userLoading, setUserLoading] = useState(true)
 
-  const { files: uploadedFiles, assignments: numberAssignments, loading, error } = useFirebaseDataFiles(userRole, user.name)
+  const { deals, callbacks, loading, error } = useMySQLSalesData({ userRole, userId: user.id, userName: user.name })
 
   // Add error boundary for timestamp issues
   const [renderError, setRenderError] = useState<string | null>(null)

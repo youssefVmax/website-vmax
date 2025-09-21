@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { callbacksService } from "@/lib/firebase-callbacks-service";
+import { callbacksService } from "@/lib/mysql-callbacks-service";
 import { 
   Calendar, 
   Clock, 
@@ -79,23 +79,23 @@ export default function NewCallbackPage() {
     setLoading(true);
     try {
       const payload = {
-        customer_name: form.customer_name,
-        phone_number: form.phone_number,
+        customerName: form.customer_name,
+        phoneNumber: form.phone_number,
         email: form.email,
-        sales_agent: user.name,
-        sales_team: user.team || "Unknown",
-        first_call_date: form.first_call_date,
-        first_call_time: form.first_call_time,
-        callback_reason: form.callback_reason,
-        callback_notes: form.callback_notes,
+        salesAgentId: user.id || "",
+        salesAgentName: user.name,
+        salesTeam: user.team || "Unknown",
+        firstCallDate: form.first_call_date,
+        firstCallTime: form.first_call_time,
+        callbackReason: form.callback_reason,
+        callbackNotes: form.callback_notes,
         priority: form.priority,
-        scheduled_date: form.scheduled_date,
-        scheduled_time: form.scheduled_time,
-        follow_up_required: form.follow_up_required,
+        scheduledDate: form.scheduled_date,
+        scheduledTime: form.scheduled_time,
+        followUpRequired: form.follow_up_required,
         status: "pending" as const,
-        created_by: user.name,
-        created_by_id: user.id,
-        SalesAgentID: user.id || "",
+        createdBy: user.name,
+        createdById: user.id,
       };
 
       const id = await callbacksService.addCallback(payload);

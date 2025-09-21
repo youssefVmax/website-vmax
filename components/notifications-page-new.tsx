@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { formatDistanceToNow } from "date-fns"
 import { Notification, PriorityType, NotificationType } from "@/types/notification"
 import { useNotifications } from "@/hooks/use-notifications"
-import { userService } from "@/lib/firebase-services"
+import { userService } from "@/lib/mysql-services"
 
 type UserRole = "manager" | "salesman" | "customer-service"
 

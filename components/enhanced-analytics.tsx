@@ -11,13 +11,13 @@ import {
   TrendingUp, TrendingDown, Calendar, Filter, Download, 
   DollarSign, Target, Users, Award, BarChart3, Activity
 } from 'lucide-react';
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
+import { useMySQLSalesData } from "@/hooks/useMySQLSalesData";
 
 const COLORS = ['#06b6d4', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#6366f1', '#84cc16', '#f97316'];
 
 interface EnhancedAnalyticsProps {
-  userRole: 'manager' | 'salesman' | 'customer-service';
-  user: { id: string; name: string; username: string };
+  userRole: 'manager' | 'salesman' | 'team-leader';
+  user: { id: string; name: string; username: string; managedTeam?: string };
 }
 
 interface TimeSeriesData {
@@ -40,11 +40,16 @@ function EnhancedAnalytics({ userRole, user }: EnhancedAnalyticsProps) {
   const [chartType, setChartType] = useState('line');
   const [selectedMetric, setSelectedMetric] = useState('sales');
   
-  const { sales, loading, error } = useFirebaseSalesData(userRole, user?.id, user?.name);
+  const { deals, loading, error } = useMySQLSalesData({ 
+    userRole, 
+    userId: user?.id, 
+    userName: user?.name,
+    managedTeam: user?.managedTeam
+  });
 
   // Process data for time-series analysis
   const timeSeriesData = useMemo(() => {
-    if (!sales?.length) return [];
+    if (!deals?.length) return [];
 
     const now = new Date();
     const daysBack = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : timeRange === '90d' ? 90 : 365;

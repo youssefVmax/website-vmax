@@ -7,18 +7,22 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { RefreshCw } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
 
 export default function MyDeals() {
   const { user } = useAuth()
   const role = user?.role || 'salesman'
   const userId = user?.id
-  const { sales, loading, error, refresh } = useFirebaseSalesData(role, userId, user?.name)
+  const { deals, loading, error, refreshData } = useMySQLSalesData({ 
+    userRole: role as any, 
+    userId, 
+    userName: user?.name 
+  })
   const [filter, setFilter] = useState("")
   const [refreshing, setRefreshing] = useState(false)
 
   const myDeals = useMemo(() => {
-    const rows = (sales || [])
+    const rows = (deals || [])
       .filter((r: any) => r && r.customer_name && r.DealID)
       .filter((r: any) => {
         if (!filter) return true

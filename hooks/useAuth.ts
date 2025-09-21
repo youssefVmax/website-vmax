@@ -66,11 +66,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return false;
     try {
       let updatedUser: User = { ...user, ...updates } as User;
-      // Manager is not stored in Firebase; skip remote update for manager
+      // Manager is not stored in MySQL; skip remote update for manager
       if (user.id !== 'manager-001') {
-        const { userService } = await import('@/lib/firebase-user-service');
-        await userService.updateUser(user.id, updates);
-        const refreshed = await userService.getUserById(user.id);
+        const { updateUser, getUserById } = await import('@/lib/mysql-auth-service');
+        await updateUser(user.id, updates);
+        const refreshed = await getUserById(user.id);
         if (refreshed) {
           updatedUser = { ...updatedUser, ...refreshed } as User;
         }

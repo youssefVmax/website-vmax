@@ -108,8 +108,8 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
         return
       }
 
-      // Check Firebase users for salesmen and customer service
-      const { userService } = await import('@/lib/firebase-user-service')
+      // Check MySQL users for salesmen and customer service
+      const { userService } = await import('@/lib/mysql-services')
       const user = await userService.getUserByUsername(username)
       
       if (user) {
@@ -117,9 +117,13 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
         if (user.role === 'salesman') {
           setActiveTab('agent')
           setRoleMessage(`Sales agent account detected: ${user.name}`)
-        } else if (user.role === 'customer-service') {
+        } else if (user.role === 'team-leader') {
+          setActiveTab('agent') // Team leaders use agent tab
+          setRoleMessage(`Team leader account detected: ${user.name}`)
+        } else {
+          // Handle other roles like customer-service
           setActiveTab('support')
-          setRoleMessage(`Customer service account detected: ${user.name}`)
+          setRoleMessage(`Account detected: ${user.name} (${user.role})`)
         }
       } else {
         setDetectedRole(null)
@@ -168,8 +172,8 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
         console.log('UnifiedLogin: Login failed')
         setError("Invalid credentials")
         const failureReason = username === 'manager'
-          ? 'Incorrect manager credentials. The manager account is not in Firebase; only the configured manager username/password are accepted.'
-          : 'User not found or password mismatch in Firebase.'
+          ? 'Incorrect manager credentials. The manager account uses configured credentials, not database storage.'
+          : 'User not found or password mismatch in database.'
         // SweetAlert toast (top-right) with reason
         showToast(`Login failed: ${failureReason}`, 'error')
       }

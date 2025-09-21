@@ -8,21 +8,24 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts'
 import { TrendingUp, DollarSign, Users, Target, Calendar, Download, Filter, BarChart3, PieChart as PieChartIcon, Activity, Award } from "lucide-react"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
-import { Sale, Deal } from "@/types/firebase"
+import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
+import { Deal } from "@/lib/api-service"
 import { addDays, format } from "date-fns"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 
 interface AdvancedAnalyticsProps {
-  userRole: 'manager' | 'salesman' | 'customer-service'
-  user: { name: string; username: string; id: string }
+  userRole: 'manager' | 'salesman' | 'team-leader'
+  user: { name: string; username: string; id: string; managedTeam?: string }
 }
 
-type SaleOrDeal = Sale | Deal | any;
-
 export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
-  const { sales, loading, error, refresh } = useFirebaseSalesData(userRole, user.id, user.name)
+  const { deals, loading, error, refreshData } = useMySQLSalesData({ 
+    userRole, 
+    userId: user.id, 
+    userName: user.name,
+    managedTeam: user.managedTeam
+  })
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [dateRange, setDateRange] = useState({
     from: addDays(new Date(), -30),
@@ -32,32 +35,32 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   const [selectedService, setSelectedService] = useState("all")
   const [viewType, setViewType] = useState<'revenue' | 'deals' | 'performance'>('revenue')
 
-  // Update last updated timestamp whenever sales stream changes
+  // Update last updated timestamp whenever deals stream changes
   useEffect(() => {
-    if (sales && sales.length >= 0) {
+    if (deals && deals.length >= 0) {
       setLastUpdated(new Date())
     }
-  }, [sales])
+  }, [deals])
 
   const analytics = useMemo(() => {
-    if (!sales || sales.length === 0) return null
+    if (!deals || deals.length === 0) return null
 
     // Filter by date range
-    const filteredSales = sales.filter(sale => {
-      const saleDate = new Date((sale as any).date || (sale as any).signup_date || (sale as any).created_at)
-      return saleDate >= dateRange.from && saleDate <= dateRange.to
+    const filteredDeals = deals.filter(deal => {
+      const dealDate = new Date(deal.signupDate || deal.createdAt || new Date())
+      return dealDate >= dateRange.from && dealDate <= dateRange.to
     })
 
     // Further filter by team and service
-    const finalFilteredSales = filteredSales.filter(sale => {
-      const teamMatch = selectedTeam === "all" || (sale as any).team === selectedTeam || (sale as any).sales_team === selectedTeam
-      const serviceMatch = selectedService === "all" || (sale as any).type_service === selectedService || (sale as any).product_type === selectedService
+    const finalFilteredDeals = filteredDeals.filter(deal => {
+      const teamMatch = selectedTeam === "all" || deal.salesTeam === selectedTeam
+      const serviceMatch = selectedService === "all" || deal.serviceTier === selectedService
       return teamMatch && serviceMatch
     })
 
     // Calculate metrics
-    const totalRevenue = finalFilteredSales.reduce((sum, sale) => sum + ((sale as any).amount_paid || (sale as any).amount || 0), 0)
-    const totalDeals = finalFilteredSales.length
+    const totalRevenue = finalFilteredDeals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0)
+    const totalDeals = finalFilteredDeals.length
     const averageDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0
 
     // Time-based KPIs

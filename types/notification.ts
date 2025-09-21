@@ -1,4 +1,4 @@
-export type NotificationType = "info" | "warning" | "success" | "error" | "deal" | "message"
+export type NotificationType = "info" | "warning" | "success" | "error" | "deal" | "callback" | "message"
 export type PriorityType = "low" | "medium" | "high"
 
 export interface Notification {

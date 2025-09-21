@@ -5,21 +5,21 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Database, Trash2, RefreshCw, Shield } from "lucide-react"
 import { showSuccess, showError, showConfirm } from "@/lib/sweetalert"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
 
 interface ImportExportControlsProps {
-  userRole: 'manager' | 'salesman' | 'customer-service'
+  userRole: 'manager' | 'salesman' | 'team-leader'
 }
 
 export function ImportExportControls({ userRole }: ImportExportControlsProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const { refresh } = useFirebaseSalesData(userRole)
+  const { refreshData } = useMySQLSalesData({ userRole })
 
   const handleRefreshData = async () => {
     try {
       setIsRefreshing(true)
-      await refresh?.()
-      showSuccess("Data Refreshed", "Firebase data has been refreshed successfully.")
+      await refreshData?.()
+      showSuccess("Data Refreshed", "MySQL data has been refreshed successfully.")
     } catch (error) {
       console.error('Refresh error:', error)
       showError("Refresh Failed", "Failed to refresh data. Please try again.")

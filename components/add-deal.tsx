@@ -14,8 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showDealAdded, showError } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
 import { User, getUsersByRole } from "@/lib/auth";
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData";
-import { dealsService } from "@/lib/firebase-deals-service";
+import { apiService, Deal, User as APIUser } from "@/lib/api-service";
 import { useToast } from "@/hooks/use-toast";
 
 export function AddDealPage() {
@@ -24,18 +23,44 @@ export function AddDealPage() {
   const [salesmanOptions, setSalesmanOptions] = useState<User[]>([]);
   const [allUserOptions, setAllUserOptions] = useState<User[]>([]);
   const isSalesman = user?.role === 'salesman'
-  const { sales } = useFirebaseSalesData(user?.role || 'manager', user?.id, user?.name)
+  const [sales, setSales] = useState<Deal[]>([])
 
-  // Load users from Firebase
+  // Load users and sales data from API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [usersData, salesData] = await Promise.all([
+          apiService.getUsers(),
+          apiService.getDeals()
+        ])
+        
+        const salesmen = usersData.filter(u => u.role === 'salesman')
+        setSalesmanOptions(salesmen as User[])
+        setAllUserOptions(usersData as User[])
+        setSales(salesData)
+      } catch (error) {
+        console.error('Failed to load data:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load users and sales data",
+          variant: "destructive"
+        })
+      }
+    }
+    
+    loadData()
+  }, [])
+
+  // Original Firebase user loading (keeping for compatibility)
   useEffect(() => {
     const loadUsers = async () => {
       try {
         const salesmen = await getUsersByRole('salesman');
-        const customerService = await getUsersByRole('customer-service');
+        const teamLeaders = await getUsersByRole('team-leader');
         const managers = await getUsersByRole('manager');
         
         setSalesmanOptions(salesmen);
-        setAllUserOptions([...salesmen, ...customerService, ...managers]);
+        setAllUserOptions([...salesmen, ...teamLeaders, ...managers]);
       } catch (error) {
         console.error('Error loading users:', error);
       }
@@ -47,7 +72,7 @@ export function AddDealPage() {
   // Dynamic options from current data
   const teamOptions = useMemo(() => {
     const set = new Set<string>()
-    ;(sales || []).forEach(s => { if (s.team) set.add(s.team) })
+    ;(sales || []).forEach(s => { if (s.salesTeam) set.add(s.salesTeam) })
     // Ensure current defaults exist
     set.add("CS TEAM")
     set.add("ALI ASHRAF")
@@ -67,7 +92,7 @@ export function AddDealPage() {
   const programOptions = useMemo(() => {
     const set = new Set<string>()
     ;(sales || []).forEach(s => { 
-      const prog = (s.type_program || '').toString().toUpperCase()
+      const prog = (s.productType || '').toString().toUpperCase()
       if (prog) set.add(prog)
     })
     // Ensure sensible defaults are present
@@ -78,8 +103,8 @@ export function AddDealPage() {
   const durationOptions = useMemo(() => {
     const set = new Set<string>()
     ;(sales || []).forEach(s => { 
-      // Convert duration_months to duration labels
-      const months = s.duration_months
+      // Convert durationMonths to duration labels
+      const months = s.durationMonths
       let durLabel = ''
       if (months === 12) durLabel = 'YEAR'
       else if (months === 24) durLabel = 'TWO YEAR'
@@ -230,10 +255,25 @@ export function AddDealPage() {
 
         console.log('Creating callback:', callbackData);
         
-        // Save callback using Firebase service
+        // Save callback using API service
         try {
-          const { callbacksService } = await import('@/lib/firebase-callbacks-service');
-          await callbacksService.addCallback(callbackData);
+          await apiService.createCallback({
+            customerName: callbackData.customer_name,
+            phoneNumber: callbackData.phone_number,
+            email: callbackData.email,
+            salesAgentName: callbackData.sales_agent,
+            salesTeam: callbackData.sales_team,
+            firstCallDate: callbackData.first_call_date,
+            firstCallTime: callbackData.first_call_time,
+            callbackNotes: callbackData.callback_notes,
+            callbackReason: callbackData.callback_reason,
+            status: 'pending',
+            priority: 'medium',
+            followUpRequired: true,
+            createdBy: callbackData.created_by,
+            createdById: callbackData.created_by_id,
+            salesAgentId: callbackData.SalesAgentID
+          });
           
           await showDealAdded(0, formData.customer_name, 'Callback scheduled successfully!');
           // Toast detailed notification for callback creation
@@ -282,9 +322,28 @@ export function AddDealPage() {
 
         console.log('Creating deal with Firebase service:', dealData);
         
-        // Use Firebase deals service for proper integration with target progress
-        const dealId = await dealsService.createDeal(dealData, user);
-        console.log('Deal created successfully with ID:', dealId);
+        // Use API service to create deal
+        const result = await apiService.createDeal({
+          customerName: dealData.customer_name,
+          email: dealData.email,
+          phoneNumber: dealData.phone_number,
+          country: dealData.country,
+          amountPaid: dealData.amount_paid,
+          serviceTier: dealData.service_tier as 'Silver' | 'Gold' | 'Premium',
+          salesAgentId: dealData.SalesAgentID,
+          closingAgentId: dealData.ClosingAgentID,
+          salesTeam: dealData.sales_team,
+          stage: 'closed-won',
+          status: 'active',
+          priority: 'medium',
+          signupDate: dealData.signup_date,
+          durationYears: Math.floor(dealData.duration_months / 12),
+          durationMonths: dealData.duration_months,
+          numberOfUsers: dealData.no_user,
+          notes: dealData.notes,
+          createdBy: dealData.created_by
+        });
+        console.log('Deal created successfully with ID:', result.id);
 
         await showDealAdded(parseFloat(formData.amount), formData.customer_name);
         // Toast detailed notification for deal creation
@@ -355,7 +414,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="customer_name">Customer Name *</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.customer_name).filter(Boolean))].sort()}
+                  options={[...new Set((sales || []).map(s => s.customerName).filter(Boolean))].sort()}
                   value={formData.customer_name}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, customer_name: value }))}
                   placeholder="Select or type customer name"
@@ -367,7 +426,7 @@ export function AddDealPage() {
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number *</Label>
                 <Combobox
-                  options={[...new Set((sales || []).map(s => s.phone).filter(Boolean) as string[])].sort()}
+                  options={[...new Set((sales || []).map(s => s.phoneNumber).filter(Boolean) as string[])].sort()}
                   value={formData.phone}
                   onValueChange={(value) => setFormData(prev => ({ ...prev, phone: value }))}
                   placeholder="Select or type phone number"

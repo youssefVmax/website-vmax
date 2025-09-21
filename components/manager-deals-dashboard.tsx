@@ -9,22 +9,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts'
 import { TrendingUp, DollarSign, Users, Target, Calendar, Filter, Download, Upload, Plus, Search, Eye, Edit, Trash2 } from "lucide-react"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
 
 interface Deal {
-  DealID: string
-  customer_name: string
-  amount: number
-  sales_agent: string
-  closing_agent: string
-  team: string
-  type_service: string
-  date: string
+  dealId: string
+  customerName: string
+  amountPaid: number
+  salesAgentName: string
+  closingAgentName: string
+  salesTeam: string
+  serviceTier: string
+  signupDate: string
   status?: string
 }
 
 export default function ManagerDealsDashboard() {
-  const { sales, loading, error } = useFirebaseSalesData('manager')
+  const { deals, loading, error } = useMySQLSalesData({ userRole: 'manager' })
   const [searchTerm, setSearchTerm] = useState("")
   const [dateFilter, setDateFilter] = useState("")
   const [teamFilter, setTeamFilter] = useState("all")
@@ -50,44 +50,44 @@ export default function ManagerDealsDashboard() {
     )
   }
 
-  const deals = sales as Deal[]
+  // deals is already available from the hook
 
   // Filter deals based on search and filters
   const filteredDeals = deals.filter(deal => {
     const matchesSearch = 
-      deal.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      deal.DealID.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      deal.sales_agent.toLowerCase().includes(searchTerm.toLowerCase())
+      deal.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      deal.dealId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      deal.salesAgentName.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesTeam = teamFilter === "all" || deal.team === teamFilter
-    const matchesService = serviceFilter === "all" || deal.type_service === serviceFilter
-    const matchesClosedBy = closedByFilter === "all" || deal.closing_agent === closedByFilter
-    const matchesDate = !dateFilter || deal.date.includes(dateFilter)
+    const matchesTeam = teamFilter === "all" || deal.salesTeam === teamFilter
+    const matchesService = serviceFilter === "all" || deal.serviceTier === serviceFilter
+    const matchesClosedBy = closedByFilter === "all" || deal.closingAgentName === closedByFilter
+    const matchesDate = !dateFilter || deal.signupDate.includes(dateFilter)
 
     return matchesSearch && matchesTeam && matchesService && matchesClosedBy && matchesDate
   })
 
   // Calculate analytics
-  const totalRevenue = filteredDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0)
+  const totalRevenue = filteredDeals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0)
   const totalDeals = filteredDeals.length
   const averageDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0
 
   // Get unique values for filters
-  const teams = [...new Set(deals.map(deal => deal.team))].filter(Boolean)
-  const services = [...new Set(deals.map(deal => deal.type_service))].filter(Boolean)
-  const closers = [...new Set(deals.map(deal => deal.closing_agent))].filter(Boolean)
+  const teams = [...new Set(deals.map(deal => deal.salesTeam))].filter(Boolean)
+  const services = [...new Set(deals.map(deal => deal.serviceTier))].filter(Boolean)
+  const closers = [...new Set(deals.map(deal => deal.closingAgentName))].filter(Boolean)
 
   // Sales by team data for chart
   const salesByTeam = teams.map(team => ({
     team,
-    sales: deals.filter(deal => deal.team === team).reduce((sum, deal) => sum + deal.amount, 0),
-    deals: deals.filter(deal => deal.team === team).length
+    sales: deals.filter(deal => deal.salesTeam === team).reduce((sum, deal) => sum + deal.amountPaid, 0),
+    deals: deals.filter(deal => deal.salesTeam === team).length
   }))
 
   // Sales by service data for pie chart
   const salesByService = services.map(service => ({
     service,
-    sales: deals.filter(deal => deal.type_service === service).reduce((sum, deal) => sum + deal.amount, 0)
+    sales: deals.filter(deal => deal.serviceTier === service).reduce((sum, deal) => sum + deal.amountPaid, 0)
   }))
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D']
@@ -335,24 +335,24 @@ export default function ManagerDealsDashboard() {
                 </TableHeader>
                 <TableBody>
                   {filteredDeals.map((deal) => (
-                    <TableRow key={deal.DealID}>
-                      <TableCell className="font-medium">{deal.DealID}</TableCell>
-                      <TableCell>{deal.customer_name}</TableCell>
+                    <TableRow key={deal.dealId}>
+                      <TableCell className="font-medium">{deal.dealId}</TableCell>
+                      <TableCell>{deal.customerName}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{deal.sales_agent}</Badge>
+                        <Badge variant="outline">{deal.salesAgentName}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{deal.closing_agent}</Badge>
+                        <Badge variant="outline">{deal.closingAgentName}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{deal.team}</Badge>
+                        <Badge variant="secondary">{deal.salesTeam}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{deal.type_service}</Badge>
+                        <Badge variant="outline">{deal.serviceTier}</Badge>
                       </TableCell>
-                      <TableCell>{deal.date}</TableCell>
+                      <TableCell>{deal.signupDate}</TableCell>
                       <TableCell className="text-right font-medium">
-                        ${deal.amount?.toFixed(2) || '0.00'}
+                        ${deal.amountPaid?.toFixed(2) || '0.00'}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -375,29 +375,29 @@ export default function ManagerDealsDashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredDeals.map((deal) => (
-                <Card key={deal.DealID} className="hover:shadow-md transition-shadow">
+                <Card key={deal.dealId} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-medium">{deal.customer_name}</h4>
-                      <Badge variant="outline">{deal.type_service}</Badge>
+                      <h4 className="font-medium">{deal.customerName}</h4>
+                      <Badge variant="outline">{deal.serviceTier}</Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">ID: {deal.DealID}</p>
+                    <p className="text-sm text-muted-foreground mb-2">ID: {deal.dealId}</p>
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span>Sales Agent:</span>
-                        <span className="font-medium">{deal.sales_agent}</span>
+                        <span className="font-medium">{deal.salesAgentName}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Team:</span>
-                        <Badge variant="secondary" className="text-xs">{deal.team}</Badge>
+                        <Badge variant="secondary" className="text-xs">{deal.salesTeam}</Badge>
                       </div>
                       <div className="flex justify-between">
                         <span>Amount:</span>
-                        <span className="font-bold text-green-600">${deal.amount?.toFixed(2)}</span>
+                        <span className="font-bold text-green-600">${deal.amountPaid?.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Date:</span>
-                        <span>{deal.date}</span>
+                        <span>{deal.signupDate}</span>
                       </div>
                     </div>
                     <div className="flex gap-1 mt-3">

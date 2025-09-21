@@ -12,8 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Target, TrendingUp, Calendar, Award, Edit, Plus, Users, BarChart3 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
-import { useFirebaseTargets } from "@/hooks/useFirebaseTargets"
+import { apiService, SalesTarget as APISalesTarget, Deal } from "@/lib/api-service"
 
 interface SalesTarget {
   id: string
@@ -35,11 +34,11 @@ interface SalesTargetsProps {
 
 export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
   const { toast } = useToast()
-  const { sales } = useFirebaseSalesData(userRole, user.id, user.name)
-  const { targets: firebaseTargets, loading: targetsLoading, addTarget, updateTarget } = useFirebaseTargets(user.id, userRole)
+  const [sales, setSales] = useState<Deal[]>([])
+  const [targets, setTargets] = useState<APISalesTarget[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [targetProgress, setTargetProgress] = useState<any[]>([])
   const [progressLoading, setProgressLoading] = useState(true)
+  const [agentOptions, setAgentOptions] = useState<{ id: string; name: string; team: string }[]>([])
 
   const [newTarget, setNewTarget] = useState({
     agentId: '',
@@ -54,100 +53,95 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
 
   const isManager = userRole === 'manager'
 
-  // Update loading state based on Firebase targets loading
+  // Load data from API
   useEffect(() => {
-    setIsLoading(targetsLoading)
-  }, [targetsLoading])
-
-  // Load target progress from Firebase
-  useEffect(() => {
-    const loadTargetProgress = async () => {
-      if (!user?.id) return;
-      
+    const loadData = async () => {
       try {
-        setProgressLoading(true);
-        console.log('🎯 Loading target progress for user:', user.id, 'role:', userRole);
-        const { dealsService } = await import('@/lib/firebase-deals-service');
-        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
-        console.log('🎯 Target progress loaded:', progress);
-        setTargetProgress(progress);
+        setIsLoading(true)
+        setProgressLoading(true)
+        
+        const [salesData, targetsData, usersData] = await Promise.all([
+          userRole === 'manager' ? apiService.getDeals() : apiService.getDeals({ salesAgentId: user.id }),
+          userRole === 'manager' ? apiService.getSalesTargets() : apiService.getSalesTargets({ agentId: user.id }),
+          apiService.getUsers({ role: 'salesman' })
+        ])
+        
+        setSales(salesData)
+        setTargets(targetsData)
+        setAgentOptions(usersData.map(u => ({ id: u.id, name: u.name, team: u.team })))
+        
       } catch (error) {
-        console.error('Failed to load target progress:', error);
+        console.error('Failed to load data:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load sales targets data",
+          variant: "destructive"
+        })
       } finally {
-        setProgressLoading(false);
+        setIsLoading(false)
+        setProgressLoading(false)
       }
-    };
+    }
 
-    loadTargetProgress();
+    loadData()
   }, [user?.id, userRole])
 
-  // Refresh target progress periodically to catch updates
+  // Refresh data periodically
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!user?.id) return;
       
       try {
-        console.log('🔄 Refreshing target progress...');
-        const { dealsService } = await import('@/lib/firebase-deals-service');
-        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
-        console.log('🔄 Target progress refreshed:', progress);
-        setTargetProgress(progress);
+        const [salesData, targetsData] = await Promise.all([
+          userRole === 'manager' ? apiService.getDeals() : apiService.getDeals({ salesAgentId: user.id }),
+          userRole === 'manager' ? apiService.getSalesTargets() : apiService.getSalesTargets({ agentId: user.id })
+        ])
+        setSales(salesData)
+        setTargets(targetsData)
       } catch (error) {
-        console.error('Failed to refresh target progress:', error);
+        console.error('Failed to refresh data:', error)
       }
-    }, 15000); // Refresh every 15 seconds
+    }, 30000) // Refresh every 30 seconds
 
-    return () => clearInterval(interval);
+    return () => clearInterval(interval)
   }, [user?.id, userRole])
 
-  // Filter and process targets based on user role and Firebase target progress data
+  // Process targets with current sales data
   const processedTargets: SalesTarget[] = useMemo(() => {
-    const targetsToProcess = userRole === 'salesman' 
-      ? firebaseTargets.filter(t => t.agentName?.toLowerCase() === user.name.toLowerCase() || t.agentId === user.id)
-      : firebaseTargets;
-
-    return targetsToProcess.map(target => {
-      // Find matching progress data from Firebase
-      const progressData = targetProgress.find(p => 
-        p.agentId === target.agentId && p.period === target.period
-      );
+    return targets.map(target => {
+      // Calculate current sales and deals for this agent and period
+      const agentSales = sales.filter(sale => 
+        sale.salesAgentId === target.agentId && 
+        sale.stage === 'closed-won'
+      )
       
-      console.log(`🎯 Processing target for ${target.agentName} (${target.agentId}) - ${target.period}:`, {
-        target,
-        progressData,
-        targetProgressArray: targetProgress
-      });
+      const currentSales = agentSales.reduce((sum, sale) => sum + sale.amountPaid, 0)
+      const currentDeals = agentSales.length
       
-      const currentSales = progressData?.currentSales || 0;
-      const currentDeals = progressData?.currentDeals || 0;
+      const salesProgress = target.monthlyTarget > 0 ? (currentSales / target.monthlyTarget) * 100 : 0
+      const dealsProgress = target.dealsTarget > 0 ? (currentDeals / target.dealsTarget) * 100 : 0
       
-      const salesProgress = target.monthlyTarget > 0 ? (currentSales / target.monthlyTarget) * 100 : 0;
-      const dealsProgress = target.dealsTarget > 0 ? (currentDeals / target.dealsTarget) * 100 : 0;
-      
-      let status: 'on-track' | 'behind' | 'exceeded' = 'on-track';
+      let status: 'on-track' | 'behind' | 'exceeded' = 'on-track'
       if (salesProgress >= 100 || dealsProgress >= 100) {
-        status = 'exceeded';
+        status = 'exceeded'
       } else if (salesProgress < 70 && dealsProgress < 70) {
-        status = 'behind';
+        status = 'behind'
       }
 
-      const processedTarget = {
-        id: target.id || '',
-        agentId: target.agentId || '',
-        agentName: target.agentName || 'Unknown',
-        team: target.team || 'Unknown',
+      return {
+        id: target.id,
+        agentId: target.agentId,
+        agentName: target.agentName,
+        team: 'Unknown', // Will be filled from user data
         monthlyTarget: target.monthlyTarget,
         currentSales,
         dealsTarget: target.dealsTarget,
         currentDeals,
         period: target.period,
         status
-      } as SalesTarget;
-
-      console.log(`🎯 Processed target result:`, processedTarget);
-      return processedTarget;
-    });
-  }, [firebaseTargets, targetProgress, userRole, user.name, user.id]);
+      } as SalesTarget
+    })
+  }, [targets, sales])
 
   // Calculate statistics from processed targets
   const totalTargets = processedTargets.length
@@ -160,57 +154,16 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
   const salesAgents = useMemo(() => {
     if (!sales) return []
     const agents = sales.reduce((acc: any[], sale: any) => {
-      const agentName = sale.sales_agent_norm || sale.sales_agent
-      const agentId = sale.SalesAgentID
+      const agentName = sale.salesAgentName || sale.salesAgent
+      const agentId = sale.salesAgentId
       if (agentName && agentId && !acc.some((a: any) => a.id === agentId)) {
-        acc.push({ id: agentId, name: agentName, team: sale.team || 'Unknown' })
+        acc.push({ id: agentId, name: agentName, team: sale.salesTeam || 'Unknown' })
       }
       return acc
     }, [] as { id: string, name: string, team: string }[])
     return agents.sort((a: any, b: any) => a.name.localeCompare(b.name))
   }, [sales])
 
-  // Load agents from Firebase users (preferred source). Fallback to derived list if empty.
-  const [agentOptions, setAgentOptions] = useState<{ id: string; name: string; team: string }[]>([])
-  const [loadingAgents, setLoadingAgents] = useState(false)
-
-  useEffect(() => {
-    let mounted = true
-    const loadAgents = async () => {
-      try {
-        setLoadingAgents(true)
-        const { userService } = await import('@/lib/firebase-user-service')
-        const agents = await userService.getAllUsers();
-        const firebaseAgents = agents.filter((user: any) => user.role === 'salesman' || user.role === 'manager')
-        if (mounted) {
-          const mapped = firebaseAgents.map((u: any) => ({
-            id: u.id,
-            name: u.name || u.username || 'Unknown',
-            team: u.team || 'Unknown'
-          }))
-          setAgentOptions(mapped.sort((a: any, b: any) => a.name.localeCompare(b.name)))
-        }
-      } catch (e) {
-        console.error('Failed to load agents from users collection', e)
-        // Fallback to sales data if user service fails
-        if (mounted && sales) {
-          const mapped = sales.reduce((acc: any[], sale: any) => {
-            const agentName = sale.sales_agent_norm || sale.sales_agent
-            const agentId = sale.SalesAgentID
-            if (agentName && agentId && !acc.some((a: any) => a.id === agentId)) {
-              acc.push({ id: agentId, name: agentName, team: sale.team || 'Unknown' })
-            }
-            return acc
-          }, [])
-          setAgentOptions(mapped.sort((a: any, b: any) => a.name.localeCompare(b.name)))
-        }
-      } finally {
-        if (mounted) setLoadingAgents(false)
-      }
-    }
-    loadAgents()
-    return () => { mounted = false }
-  }, [sales])
 
   const availableAgents = agentOptions.length > 0 ? agentOptions : salesAgents
 
@@ -240,8 +193,12 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
     };
 
     try {
-      await addTarget(payload)
+      await apiService.createSalesTarget(payload)
       setNewTarget({ agentId: '', agentName: '', team: '', monthlyTarget: '', dealsTarget: '', period: 'January 2025' })
+      
+      // Refresh targets
+      const newTargets = await apiService.getSalesTargets()
+      setTargets(newTargets)
       
       toast({
         title: "Target Created",
@@ -261,14 +218,21 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
     if (!editingTarget) return
 
     try {
-        const res = await updateTarget(editingTarget.id, {
+        await apiService.updateSalesTarget(editingTarget.id, {
           agentId: editingTarget.agentId,
           agentName: editingTarget.agentName,
-          team: editingTarget.team,
           monthlyTarget: editingTarget.monthlyTarget,
           dealsTarget: editingTarget.dealsTarget,
-          period: editingTarget.period
+          period: editingTarget.period,
+          managerId: user.id,
+          managerName: user.name,
+          type: 'individual'
         })
+        
+        // Refresh targets
+        const newTargets = await apiService.getSalesTargets()
+        setTargets(newTargets)
+        
         setEditingTarget(null)
         toast({
             title: "Target Updated",
@@ -341,7 +305,7 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
                     }
                   }}>
                     <SelectTrigger>
-                      <SelectValue placeholder={loadingAgents ? 'Loading agents...' : 'Select agent'} />
+                      <SelectValue placeholder="Select agent" />
                     </SelectTrigger>
                     <SelectContent>
                       {availableAgents.map(agent => (
