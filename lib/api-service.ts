@@ -1,5 +1,7 @@
+import { API_CONFIG, getApiUrl } from './config';
+
 // API Service for MySQL Backend
-const API_BASE_URL = '/api/mysql-service.php';
+const API_BASE_URL = getApiUrl('/api/mysql-service.php');
 
 // Manager API Service for direct MySQL access
 export class ManagerApiService {
