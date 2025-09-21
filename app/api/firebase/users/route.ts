@@ -1,29 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userService } from '@/lib/firebase-services';
-import { User } from '@/types/firebase';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost';
+
+async function callMySQLAPI(endpoint: string, options: RequestInit = {}) {
+  const url = `${API_BASE_URL}/api/users-api.php${endpoint}`;
+  
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`MySQL API error: ${response.status}`);
+  }
+
+  return response.json();
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    const email = searchParams.get('email');
-
-    if (id) {
-      const user = await userService.getUser(id);
-      return NextResponse.json(user);
-    } else if (email) {
-      const user = await userService.getUserByEmail(email);
-      return NextResponse.json(user);
-    } else {
-      return NextResponse.json(
-        { error: 'User ID or email is required' },
-        { status: 400 }
-      );
-    }
+    const queryString = searchParams.toString();
+    const endpoint = queryString ? `?${queryString}` : '';
+    
+    const data = await callMySQLAPI(endpoint);
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching user:', error);
+    console.error('Error fetching users:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch user' },
+      { success: false, error: 'Failed to fetch users' },
       { status: 500 }
     );
   }
@@ -33,33 +41,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    if (!body.name || !body.email || !body.role) {
-      return NextResponse.json(
-        { error: 'Name, email, and role are required' },
-        { status: 400 }
-      );
-    }
-
-    const userData: Omit<User, 'id' | 'created_at' | 'updated_at'> = {
-      name: body.name,
-      email: body.email,
-      role: body.role,
-      team: body.team || '',
-      SalesAgentID: body.SalesAgentID || '',
-      ClosingAgentID: body.ClosingAgentID || '',
-      isActive: body.isActive !== false
-    };
-
-    const userId = await userService.addUser(userData);
+    const data = await callMySQLAPI('', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
     
-    return NextResponse.json(
-      { success: true, id: userId },
-      { status: 201 }
-    );
+    return NextResponse.json(data, { status: data.success ? 201 : 400 });
   } catch (error) {
     console.error('Error creating user:', error);
     return NextResponse.json(
-      { error: 'Failed to create user' },
+      { success: false, error: 'Failed to create user' },
       { status: 500 }
     );
   }
@@ -68,22 +59,17 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, ...updates } = body;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
-
-    await userService.updateUser(id, updates);
     
-    return NextResponse.json({ success: true });
+    const data = await callMySQLAPI('', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Error updating user:', error);
     return NextResponse.json(
-      { error: 'Failed to update user' },
+      { success: false, error: 'Failed to update user' },
       { status: 500 }
     );
   }

@@ -14,7 +14,7 @@ import {
   FileText,
   FileSpreadsheet,
   LogOut,
-  User,
+  User as UserIcon,
   Upload,
   Download,
   Plus,
@@ -670,7 +670,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
             <div className="space-y-3">
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full flex items-center justify-center">
-                  <User className="h-6 w-6 text-white" />
+                  <UserIcon className="h-6 w-6 text-white" />
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-cyan-400 dark:to-blue-400 bg-clip-text text-transparent">

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showDealAdded, showError } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
-import { User, getUsersByRole } from "@/lib/auth";
+import { User } from "@/lib/auth";
 import { apiService, Deal, User as APIUser } from "@/lib/api-service";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,7 +25,7 @@ export function AddDealPage() {
   const isSalesman = user?.role === 'salesman'
   const [sales, setSales] = useState<Deal[]>([])
 
-  // Load users and sales data from API
+  // Load users and sales data from MySQL API only
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -35,8 +35,11 @@ export function AddDealPage() {
         ])
         
         const salesmen = usersData.filter(u => u.role === 'salesman')
+        const teamLeaders = usersData.filter(u => u.role === 'team-leader')
+        const managers = usersData.filter(u => u.role === 'manager')
+        
         setSalesmanOptions(salesmen as User[])
-        setAllUserOptions(usersData as User[])
+        setAllUserOptions([...salesmen, ...teamLeaders, ...managers] as User[])
         setSales(salesData)
       } catch (error) {
         console.error('Failed to load data:', error)
@@ -49,25 +52,7 @@ export function AddDealPage() {
     }
     
     loadData()
-  }, [])
-
-  // Original Firebase user loading (keeping for compatibility)
-  useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const salesmen = await getUsersByRole('salesman');
-        const teamLeaders = await getUsersByRole('team-leader');
-        const managers = await getUsersByRole('manager');
-        
-        setSalesmanOptions(salesmen);
-        setAllUserOptions([...salesmen, ...teamLeaders, ...managers]);
-      } catch (error) {
-        console.error('Error loading users:', error);
-      }
-    };
-    
-    loadUsers();
-  }, []);
+  }, [toast])
 
   // Dynamic options from current data
   const teamOptions = useMemo(() => {
@@ -88,7 +73,7 @@ export function AddDealPage() {
     return ["GOLD", "PREMIUM", "SILVER"]
   }, [])
 
-  // Program and Duration options derived from Firebase data
+  // Program and Duration options derived from MySQL data
   const programOptions = useMemo(() => {
     const set = new Set<string>()
     ;(sales || []).forEach(s => { 
@@ -288,60 +273,28 @@ export function AddDealPage() {
           return;
         }
       } else {
-        // Prepare deal data for Firebase deals service
-        const dealData = {
-          customer_name: formData.customer_name,
-          phone_number: formData.phone,
-          email: formData.email,
-          amount_paid: parseFloat(formData.amount) || 0,
-          duration_months: getDurationMonths(formData.duration),
-          sales_agent: formData.sales_agent,
-          closing_agent: formData.closing_agent,
-          sales_team: formData.team,
-          product_type: formData.type_program,
-          service_tier: formData.type_service,
-          signup_date: formData.date,
-          notes: formData.comment,
-          status: 'active' as const,
-          stage: 'closed-won' as const,
-          priority: 'medium' as const,
-          SalesAgentID: formData.SalesAgentID || user?.id || '',
-          ClosingAgentID: formData.ClosingAgentID || user?.id || '',
-          created_by: user?.name || 'Unknown',
-          created_by_id: user?.id || '',
-          // Additional fields from original form
-          username: formData.username,
-          invoice: formData.invoice,
-          device_id: formData.device_id,
-          device_key: formData.device_key,
-          no_user: parseInt(formData.no_user) || 1,
-          // Required fields for Deal interface
-          country: 'Unknown',
-          invoice_link: formData.invoice
-        };
-
-        console.log('Creating deal with Firebase service:', dealData);
+        // Create deal using MySQL API service
+        console.log('Creating deal with MySQL API service');
         
-        // Use API service to create deal
         const result = await apiService.createDeal({
-          customerName: dealData.customer_name,
-          email: dealData.email,
-          phoneNumber: dealData.phone_number,
-          country: dealData.country,
-          amountPaid: dealData.amount_paid,
-          serviceTier: dealData.service_tier as 'Silver' | 'Gold' | 'Premium',
-          salesAgentId: dealData.SalesAgentID,
-          closingAgentId: dealData.ClosingAgentID,
-          salesTeam: dealData.sales_team,
+          customerName: formData.customer_name,
+          email: formData.email,
+          phoneNumber: formData.phone,
+          country: 'Unknown',
+          amountPaid: parseFloat(formData.amount) || 0,
+          serviceTier: formData.type_service as 'Silver' | 'Gold' | 'Premium',
+          salesAgentId: formData.SalesAgentID || user?.id || '',
+          closingAgentId: formData.ClosingAgentID || user?.id || '',
+          salesTeam: formData.team,
           stage: 'closed-won',
           status: 'active',
           priority: 'medium',
-          signupDate: dealData.signup_date,
-          durationYears: Math.floor(dealData.duration_months / 12),
-          durationMonths: dealData.duration_months,
-          numberOfUsers: dealData.no_user,
-          notes: dealData.notes,
-          createdBy: dealData.created_by
+          signupDate: formData.date,
+          durationYears: Math.floor(getDurationMonths(formData.duration) / 12),
+          durationMonths: getDurationMonths(formData.duration),
+          numberOfUsers: parseInt(formData.no_user) || 1,
+          notes: formData.comment,
+          createdBy: user?.name || 'Unknown'
         });
         console.log('Deal created successfully with ID:', result.id);
 

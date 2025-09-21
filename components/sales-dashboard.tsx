@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter, ZAxis } from 'recharts';
 import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3, Phone, Clock } from 'lucide-react';
 import { useMySQLSalesData } from "@/hooks/useMySQLSalesData";
-import { callbackAnalyticsService } from '@/lib/callback-analytics-service';
+import { mysqlAnalyticsService } from '@/lib/mysql-analytics-service';
 import CallbackKPIDashboard from './callback-kpi-dashboard';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
@@ -61,7 +61,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
     const loadCallbackMetrics = async () => {
       try {
         console.log('Loading callback metrics for:', { userRole, userId: user.id, userName: user.name });
-        const metrics = await callbackAnalyticsService.getLiveCallbackMetrics(userRole, user.id, user.name);
+        const metrics = await mysqlAnalyticsService.getLiveCallbackMetrics(userRole, user.id, user.name);
         console.log('Callback metrics loaded:', metrics);
         setCallbackMetrics(metrics);
       } catch (err) {

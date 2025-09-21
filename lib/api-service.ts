@@ -1,6 +1,91 @@
 // API Service for MySQL Backend
 const API_BASE_URL = '/api/mysql-service.php';
 
+// Manager API Service for direct MySQL access
+export class ManagerApiService {
+  // Deals API
+  async getDealsWithPagination(filters: Record<string, any> = {}): Promise<any> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, value.toString());
+      }
+    });
+
+    const response = await fetch(`/api/deals-api.php?${queryParams}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getDealStats(filters: Record<string, any> = {}): Promise<any> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '' && key !== 'page' && key !== 'limit') {
+        queryParams.append(key, value.toString());
+      }
+    });
+
+    const response = await fetch(`/api/deals-api.php?action=stats&${queryParams}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  // Callbacks API
+  async getCallbacksWithPagination(filters: Record<string, any> = {}): Promise<any> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, value.toString());
+      }
+    });
+
+    const response = await fetch(`/api/callbacks-api.php?${queryParams}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async getCallbackStats(filters: Record<string, any> = {}): Promise<any> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '' && key !== 'page' && key !== 'limit') {
+        queryParams.append(key, value.toString());
+      }
+    });
+
+    const response = await fetch(`/api/callbacks-api.php?action=stats&${queryParams}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async updateCallbackStatus(callbackId: string, status: string): Promise<any> {
+    const response = await fetch('/api/callbacks-api.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        id: callbackId,
+        status: status
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+}
+
+export const managerApiService = new ManagerApiService();
+
 export interface User {
   id: string;
   username: string;
@@ -237,6 +322,28 @@ class ApiService {
     return this.makeRequest(`notifications&id=${id}`, {
       method: 'PUT',
       body: JSON.stringify(notificationData),
+    });
+  }
+
+  // Targets API
+  async createTarget(targetData: any): Promise<{ success: boolean; id: string }> {
+    return this.makeRequest('targets', {
+      method: 'POST',
+      body: JSON.stringify(targetData),
+    });
+  }
+
+  async createTeamTarget(teamTargetData: any): Promise<{ success: boolean; id: string }> {
+    return this.makeRequest('team-targets', {
+      method: 'POST',
+      body: JSON.stringify(teamTargetData),
+    });
+  }
+
+  async createIndividualTargetsFromTeamTarget(teamTarget: any): Promise<{ success: boolean }> {
+    return this.makeRequest('distribute-team-target', {
+      method: 'POST',
+      body: JSON.stringify(teamTarget),
     });
   }
 

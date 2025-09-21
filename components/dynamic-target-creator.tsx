@@ -15,8 +15,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
 import { Target, Users, Plus, Edit, Trash2, BarChart3, TrendingUp, Calendar, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { targetsService } from "@/lib/firebase-targets-service"
-import { userService } from "@/lib/firebase-user-service"
+import { apiService } from "@/lib/api-service"
 
 interface DynamicTargetCreatorProps {
   userRole: 'manager' | 'salesman' | 'customer-service'
@@ -83,8 +82,8 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
         setLoadingData(true)
         
         // Get all salesmen
-        const salesmen = await userService.getUsersByRole('salesman')
-        const members: TeamMember[] = salesmen.map(user => ({
+        const salesmen = await apiService.getUsers({ role: 'salesman' })
+        const members: TeamMember[] = salesmen.map((user: any) => ({
           id: user.id,
           name: user.name || user.username,
           username: user.username,
@@ -239,7 +238,7 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
           managerName: user.name
         }
 
-        await targetsService.addTarget(targetData)
+        await apiService.createTarget(targetData)
         
         toast({
           title: "Individual Target Created",
@@ -259,11 +258,11 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
           members: formData.teamMembers
         }
 
-        const createdTeamTarget = await targetsService.addTeamTarget(teamTargetData)
+        const createdTeamTarget = await apiService.createTeamTarget(teamTargetData)
         
         // Optionally create individual targets for team members
         if (formData.autoDistribute) {
-          await targetsService.createIndividualTargetsFromTeamTarget(createdTeamTarget)
+          await apiService.createIndividualTargetsFromTeamTarget(createdTeamTarget)
         }
 
         toast({

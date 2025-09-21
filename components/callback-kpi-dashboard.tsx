@@ -13,7 +13,7 @@ import {
   XCircle, AlertCircle, Calendar, Target, Award, Activity,
   RefreshCw, Filter, User
 } from 'lucide-react';
-import { callbackAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/callback-analytics-service';
+import { mysqlAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/mysql-analytics-service';
 import { callbacksService } from '@/lib/mysql-callbacks-service';
 import { dealsService } from '@/lib/mysql-deals-service';
 import { targetsService } from '@/lib/mysql-targets-service';
@@ -96,7 +96,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
       
       console.log('Using filters for KPIs:', filters);
       
-      const data = await callbackAnalyticsService.getCallbackKPIs(filters);
+      const data = await mysqlAnalyticsService.getCallbackKPIs(filters);
       console.log('KPIs loaded:', data);
       setKpis(data);
     } catch (error) {

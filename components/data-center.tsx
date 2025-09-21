@@ -9,8 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Upload, Download, Database, FileText, Users, Trash2, Plus, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { userService } from "@/lib/mysql-services"
-import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
+import { apiService } from "@/lib/api-service"
 import { showInfo } from "@/lib/sweetalert"
 import { formatDisplayDate, sanitizeObject } from "@/lib/timestamp-utils"
 
@@ -46,7 +45,10 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const [users, setUsers] = useState<any[]>([])
   const [userLoading, setUserLoading] = useState(true)
 
-  const { deals, callbacks, loading, error } = useMySQLSalesData({ userRole, userId: user.id, userName: user.name })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<DataFile[]>([])
+  const [numberAssignments, setNumberAssignments] = useState<NumberAssignment[]>([])
 
   // Add error boundary for timestamp issues
   const [renderError, setRenderError] = useState<string | null>(null)
@@ -55,6 +57,25 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     // Reset render error when data changes
     setRenderError(null)
   }, [uploadedFiles, numberAssignments])
+
+  // Load data files and assignments
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        // For now, initialize with empty arrays since we don't have data file APIs yet
+        setUploadedFiles([])
+        setNumberAssignments([])
+        setError(null)
+      } catch (err) {
+        console.error('Error loading data:', err)
+        setError('Failed to load data')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [])
 
   // Defensive: sanitize incoming arrays one more time before usage in JSX
   const sanitizedFiles = (uploadedFiles || []).map((f: any) => sanitizeObject(f))
@@ -108,12 +129,12 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     { id: 'management', name: 'Management' }
   ]
 
-  // Load users from Firebase
+  // Load users from MySQL
   useEffect(() => {
     const loadUsers = async () => {
       try {
         setUserLoading(true)
-        const allUsers = await userService.getAllUsers()
+        const allUsers = await apiService.getUsers({})
         setUsers(allUsers)
       } catch (error) {
         console.error('Error loading users:', error)
@@ -145,7 +166,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       return;
     }
 
-    // Create file record in Firebase (initially unassigned)
+    // Create file record in MySQL (initially unassigned)
     const fileData = {
       name: file.name,
       type: file.name.endsWith('.csv') ? 'csv' as const : file.name.endsWith('.xlsx') ? 'xlsx' as const : 'txt' as const,
@@ -160,7 +181,13 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     };
 
     try {
-      await dataFilesService.createDataFile(fileData)
+      // TODO: Implement data file creation in MySQL API
+      const newFile: DataFile = {
+        id: Date.now().toString(),
+        ...fileData,
+        assignedTo: fileData.assignedTo || []
+      }
+      setUploadedFiles(prev => [...prev, newFile])
       toast({
         title: "File Uploaded Successfully",
         description: `${file.name} has been uploaded. You can now assign it to teams or individuals.`
@@ -210,9 +237,12 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         }
       }
 
-      await dataFilesService.updateDataFile(selectedFileForAssign, {
-        assignedTo: newAssignments
-      });
+      // TODO: Implement data file update in MySQL API
+      setUploadedFiles(prev => prev.map(file => 
+        file.id === selectedFileForAssign 
+          ? { ...file, assignedTo: newAssignments }
+          : file
+      ));
 
       setShowAssignModal(false);
       setSelectedFileForAssign(null);
@@ -246,13 +276,16 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     const numbers = bulkNumbers.split('\n').filter(n => n.trim())
     
     try {
-      await numberAssignmentsService.createNumberAssignment({
+      // TODO: Implement number assignment creation in MySQL API
+      const newAssignment: NumberAssignment = {
+        id: Date.now().toString(),
         numbers,
         assignedTo: selectedAgent,
         assignedBy: user.name,
-        assignedById: user.id,
-        notes: 'Bulk assignment via Data Center'
-      })
+        assignDate: new Date().toISOString(),
+        status: 'assigned'
+      }
+      setNumberAssignments(prev => [...prev, newAssignment])
 
       setBulkNumbers('')
       setSelectedAgent('')
@@ -282,7 +315,8 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
 
     try {
-      await dataFilesService.deleteDataFile(fileId)
+      // TODO: Implement data file deletion in MySQL API
+      setUploadedFiles(prev => prev.filter(file => file.id !== fileId))
       toast({
         title: "File Deleted",
         description: "File has been removed from the system."
@@ -308,7 +342,8 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
 
     try {
-      await numberAssignmentsService.deleteAssignment(assignmentId)
+      // TODO: Implement number assignment deletion in MySQL API
+      setNumberAssignments(prev => prev.filter(assignment => assignment.id !== assignmentId))
       toast({
         title: "Assignment Deleted",
         description: "The number assignment has been removed."

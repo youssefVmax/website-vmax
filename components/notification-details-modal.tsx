@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Calendar, User, DollarSign, Building, Phone, Mail, MapPin, Clock, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
 import { Notification } from '@/types/notification'
 import { useMySQLSalesData } from '@/hooks/useMySQLSalesData'
-import { callbackAnalyticsService } from '@/lib/callback-analytics-service'
+import { mysqlAnalyticsService } from '@/lib/mysql-analytics-service'
 
 interface NotificationDetailsModalProps {
   notification: Notification | null
@@ -75,8 +75,8 @@ export default function NotificationDetailsModal({
       setLoading(true)
       try {
         // Load deal details if dealId exists
-        if (notification.dealId && sales) {
-          const deal = sales.find((s: any) => s.id === notification.dealId)
+        if (notification.dealId && deals) {
+          const deal = deals.find((s: any) => s.id === notification.dealId)
           if (deal) {
             setDealDetails({
               id: deal.id,
@@ -100,10 +100,10 @@ export default function NotificationDetailsModal({
         // Load callback details if it's a callback notification
         if (notification.type === 'callback' || notification.message.toLowerCase().includes('callback')) {
           try {
-            const callbacks = await callbackAnalyticsService.getLiveCallbackMetrics(userRole, userId, '')
-            if (callbacks?.recentCallbacks) {
+            const callbackKPIs = await mysqlAnalyticsService.getCallbackKPIs({ userRole: userRole as any, userId })
+            if (callbackKPIs?.recentCallbacks) {
               // Try to match callback by customer name or other criteria
-              const callback = callbacks.recentCallbacks.find((c: any) => 
+              const callback = callbackKPIs.recentCallbacks.find((c: any) => 
                 c.customer_name === notification.dealName ||
                 c.id === notification.dealId
               )
@@ -136,7 +136,7 @@ export default function NotificationDetailsModal({
     }
 
     loadDetails()
-  }, [notification, isOpen, sales, userRole, userId])
+  }, [notification, isOpen, deals, userRole, userId])
 
   if (!notification) return null
 

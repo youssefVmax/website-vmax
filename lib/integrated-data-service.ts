@@ -1,6 +1,6 @@
 import { callbacksService, Callback } from './mysql-callbacks-service';
 import { dealsService } from './mysql-deals-service';
-import { callbackAnalyticsService } from './callback-analytics-service';
+import { mysqlAnalyticsService } from './mysql-analytics-service';
 
 export interface IntegratedDataService {
   // Callback operations
@@ -79,7 +79,7 @@ class IntegratedDataServiceImpl implements IntegratedDataService {
   
   async getCallbackAnalytics(filters?: any): Promise<any> {
     try {
-      return await callbackAnalyticsService.getCallbackKPIs(filters);
+      return await mysqlAnalyticsService.getCallbackKPIs(filters);
     } catch (error) {
       console.error('Error fetching callback analytics:', error);
       throw error;
@@ -88,7 +88,7 @@ class IntegratedDataServiceImpl implements IntegratedDataService {
   
   async getLiveMetrics(): Promise<any> {
     try {
-      return await callbackAnalyticsService.getLiveCallbackMetrics();
+      return await mysqlAnalyticsService.getLiveCallbackMetrics();
     } catch (error) {
       console.error('Error fetching live metrics:', error);
       throw error;

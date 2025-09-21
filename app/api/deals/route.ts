@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://vmaxcom.org';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost';
 
 async function callMySQLAPI(endpoint: string, options: RequestInit = {}) {
-  const url = `${API_BASE_URL}/api/notifications-api.php${endpoint}`;
+  const url = `${API_BASE_URL}/api/deals-api.php${endpoint}`;
   
   const response = await fetch(url, {
     ...options,
@@ -29,9 +29,9 @@ export async function GET(request: NextRequest) {
     const data = await callMySQLAPI(endpoint);
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching notifications:', error);
+    console.error('Error fetching deals:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch notifications' },
+      { success: false, error: 'Failed to fetch deals' },
       { status: 500 }
     );
   }
@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json(data, { status: data.success ? 201 : 400 });
   } catch (error) {
-    console.error('Error creating notification:', error);
+    console.error('Error creating deal:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create notification' },
+      { success: false, error: 'Failed to create deal' },
       { status: 500 }
     );
   }
@@ -67,9 +67,28 @@ export async function PUT(request: NextRequest) {
     
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error updating notification:', error);
+    console.error('Error updating deal:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to update notification' },
+      { success: false, error: 'Failed to update deal' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    
+    const data = await callMySQLAPI('', {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+    });
+    
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Error deleting deal:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete deal' },
       { status: 500 }
     );
   }

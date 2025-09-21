@@ -75,25 +75,25 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
     let revenueToday = 0, dealsToday = 0
     let revenueThisWeek = 0, dealsThisWeek = 0
-    for (const s of finalFilteredSales) {
-      const ds = new Date(s.date)
-      if (format(ds, 'yyyy-MM-dd') === todayStr) {
-        revenueToday += s.amount || 0
+    for (const deal of finalFilteredDeals) {
+      const dealDate = new Date(deal.signupDate || deal.createdAt || new Date())
+      if (format(dealDate, 'yyyy-MM-dd') === todayStr) {
+        revenueToday += deal.amountPaid || 0
         dealsToday += 1
       }
-      if (ds >= startOfWeek && ds <= dateRange.to) {
-        revenueThisWeek += s.amount || 0
+      if (dealDate >= startOfWeek && dealDate <= dateRange.to) {
+        revenueThisWeek += deal.amountPaid || 0
         dealsThisWeek += 1
       }
     }
 
     // Daily trend
-    const dailyData = finalFilteredSales.reduce((acc, sale) => {
-      const date = (sale as any).date || (sale as any).signup_date || format(new Date(), 'yyyy-MM-dd')
+    const dailyData = finalFilteredDeals.reduce((acc, deal) => {
+      const date = format(new Date(deal.signupDate || deal.createdAt || new Date()), 'yyyy-MM-dd')
       if (!acc[date]) {
         acc[date] = { date, revenue: 0, deals: 0 }
       }
-      acc[date].revenue += ((sale as any).amount_paid || (sale as any).amount || 0)
+      acc[date].revenue += deal.amountPaid || 0
       acc[date].deals += 1
       return acc
     }, {} as Record<string, { date: string; revenue: number; deals: number }>)
@@ -102,39 +102,39 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       new Date(a.date).getTime() - new Date(b.date).getTime()
     )
 
-    // Sales by agent
-    const revenueByAgent = finalFilteredSales.reduce((acc, sale) => {
-      const agent = (sale as any).sales_agent || (sale as any).sales_agent_norm || 'Unknown'
-      acc[agent] = (acc[agent] || 0) + ((sale as any).amount_paid || (sale as any).amount || 0)
+    // Revenue by agent
+    const revenueByAgent = finalFilteredDeals.reduce((acc, deal) => {
+      const agent = deal.salesAgentName || 'Unknown'
+      acc[agent] = (acc[agent] || 0) + (deal.amountPaid || 0)
       return acc
     }, {} as Record<string, number>)
 
-    // Sales by team
-    const teamData = finalFilteredSales.reduce((acc, sale) => {
-      const team = sale.team || 'Unknown'
+    // Revenue by team
+    const teamData = finalFilteredDeals.reduce((acc, deal) => {
+      const team = deal.salesTeam || 'Unknown'
       if (!acc[team]) {
         acc[team] = { team, revenue: 0, deals: 0 }
       }
-      acc[team].revenue += sale.amount || 0
+      acc[team].revenue += deal.amountPaid || 0
       acc[team].deals += 1
       return acc
     }, {} as Record<string, { team: string; revenue: number; deals: number }>)
 
     const teamPerformance = Object.values(teamData).sort((a, b) => b.revenue - a.revenue)
 
-    // Sales by service
-    const revenueByService = finalFilteredSales.reduce((acc, sale) => {
-      const service = (sale as any).type_service || (sale as any).product_type || 'Other'
-      acc[service] = (acc[service] || 0) + ((sale as any).amount_paid || (sale as any).amount || 0)
+    // Revenue by service
+    const revenueByService = finalFilteredDeals.reduce((acc, deal) => {
+      const service = deal.serviceTier || 'Other'
+      acc[service] = (acc[service] || 0) + (deal.amountPaid || 0)
       return acc
     }, {} as Record<string, number>)
 
-    const serviceData = finalFilteredSales.reduce((acc, sale) => {
-      const service = (sale as any).type_service || (sale as any).product_type || 'Other'
+    const serviceData = finalFilteredDeals.reduce((acc, deal) => {
+      const service = deal.serviceTier || 'Other'
       if (!acc[service]) {
         acc[service] = { service, revenue: 0, deals: 0 }
       }
-      acc[service].revenue += ((sale as any).amount_paid || (sale as any).amount || 0)
+      acc[service].revenue += deal.amountPaid || 0
       acc[service].deals += 1
       return acc
     }, {} as Record<string, { service: string; revenue: number; deals: number }>)
@@ -146,11 +146,11 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       .map(([agent, revenue]) => ({
         agent,
         revenue,
-        deals: finalFilteredSales.filter(s => 
-          ((s as any).sales_agent || (s as any).sales_agent_norm) === agent
+        deals: finalFilteredDeals.filter(deal => 
+          deal.salesAgentName === agent
         ).length,
-        avgDealSize: revenue / Math.max(1, finalFilteredSales.filter(s => 
-          ((s as any).sales_agent || (s as any).sales_agent_norm) === agent
+        avgDealSize: revenue / Math.max(1, finalFilteredDeals.filter(deal => 
+          deal.salesAgentName === agent
         ).length)
       }))
       .sort((a, b) => b.revenue - a.revenue)
@@ -173,32 +173,32 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       teamPerformance,
       servicePerformance,
       performanceCorrelation,
-      filteredSales: finalFilteredSales,
+      filteredDeals: finalFilteredDeals,
       revenueToday,
       dealsToday,
       revenueThisWeek,
       dealsThisWeek,
     }
-  }, [sales, dateRange, selectedTeam, selectedService])
+  }, [deals, dateRange, selectedTeam, selectedService])
 
   // Export filtered detailed rows as CSV (Excel-compatible)
   const handleExport = () => {
     if (!analytics) return
-    const rows = analytics.filteredSales
+    const rows = analytics.filteredDeals
     const headers = [
-      'date','customer_name','amount','sales_agent','closing_agent','team','type_service','DealID'
+      'signupDate','customerName','amountPaid','salesAgentName','closingAgentName','salesTeam','serviceTier','dealId'
     ]
     const csv = [headers.join(',')]
-    for (const r of rows) {
+    for (const deal of rows) {
       const line = [
-        r.date,
-        r.customer_name?.replaceAll('"', '""') ?? '',
-        String(r.amount ?? ''),
-        r.sales_agent ?? '',
-        r.closing_agent ?? '',
-        r.team ?? '',
-        r.type_service ?? '',
-        r.DealID ?? ''
+        deal.signupDate || deal.createdAt || '',
+        deal.customerName?.replaceAll('"', '""') ?? '',
+        String(deal.amountPaid ?? ''),
+        deal.salesAgentName ?? '',
+        deal.closingAgentName ?? '',
+        deal.salesTeam ?? '',
+        deal.serviceTier ?? '',
+        deal.dealId ?? ''
       ].map(v => /[",\n]/.test(String(v)) ? `"${String(v)}"` : String(v)).join(',')
       csv.push(line)
     }
@@ -292,8 +292,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Teams</SelectItem>
-                      {Array.from(new Set(sales.map(s => s.team).filter(Boolean))).map(team => (
-                        <SelectItem key={team} value={team}>{team}</SelectItem>
+                      {Array.from(new Set(deals.map(d => d.salesTeam).filter(Boolean))).map(team => (
+                        <SelectItem key={team} value={team!}>{team}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -307,7 +307,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Services</SelectItem>
-                      {Array.from(new Set(sales.map(s => s.type_service).filter(Boolean))).map(svc => (
+                      {Array.from(new Set(deals.map(d => d.serviceTier).filter(Boolean))).map(svc => (
                         <SelectItem key={svc} value={svc}>{svc}</SelectItem>
                       ))}
                     </SelectContent>

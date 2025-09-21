@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { apiService } from "@/lib/api-service"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,24 @@ interface ServiceData {
 
 export default function CompetitionPage() {
   const { user } = useAuth()
-  const { sales: deals, loading, error } = useFirebaseSalesData(user?.role || 'manager', user?.id, user?.name)
+  const [deals, setDeals] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  useEffect(() => {
+    const loadDeals = async () => {
+      try {
+        setLoading(true)
+        const dealsData = await apiService.getDeals()
+        setDeals(dealsData)
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Failed to load data'))
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadDeals()
+  }, [])
   const [celebrating, setCelebrating] = useState(false)
   const [showWinnerCards, setShowWinnerCards] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())

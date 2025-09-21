@@ -9,12 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { dealsService } from "@/lib/firebase-deals-service";
+import { apiService } from "@/lib/api-service";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { userService } from "@/lib/firebase-user-service";
 import { Badge } from "@/components/ui/badge";
-import { callbacksService } from "@/lib/firebase-callbacks-service";
 
 export function SimpleAddDeal() {
   const { toast } = useToast();
@@ -60,8 +58,8 @@ export function SimpleAddDeal() {
   useEffect(() => {
     const loadSalesmen = async () => {
       try {
-        const users = await userService.getUsersByRole('salesman');
-        setSalesmenUsers(users.map(u => ({ id: u.id, name: u.name, username: u.username })));
+        const users = await apiService.getUsers({ role: 'salesman' });
+        setSalesmenUsers(users.map((u: any) => ({ id: u.id, name: u.name, username: u.username })));
       } catch (error) {
         console.error('Error loading salesmen:', error);
       }
@@ -147,23 +145,25 @@ export function SimpleAddDeal() {
 
         // Create callback
         const callbackData = {
-          customer_name: formData.customer_name,
-          phone_number: formData.phone_number,
+          customerName: formData.customer_name,
+          phoneNumber: formData.phone_number,
           email: formData.email,
-          sales_agent: user?.name || 'Unknown',
-          sales_team: user?.team || 'Unknown',
-          first_call_date: formData.first_call_date,
-          first_call_time: formData.first_call_time,
-          callback_reason: formData.callback_reason,
-          callback_notes: formData.callback_notes,
+          salesAgentId: user?.id || '',
+          salesAgentName: user?.name || 'Unknown',
+          salesTeam: user?.team || 'Unknown',
+          firstCallDate: formData.first_call_date,
+          firstCallTime: formData.first_call_time,
+          callbackReason: formData.callback_reason,
+          callbackNotes: formData.callback_notes,
           status: 'pending' as const,
-          created_by: user?.name || 'Unknown',
-          created_by_id: user?.id || '',
-          SalesAgentID: user?.id || ''
+          priority: 'medium' as const,
+          createdBy: user?.name || 'Unknown',
+          createdById: user?.id || '',
+          followUpRequired: false
         };
 
         console.log('Creating callback with Firebase service:', callbackData);
-        const callbackId = await callbacksService.addCallback(callbackData);
+        const callbackId = await apiService.createCallback(callbackData);
         console.log('Callback created successfully with ID:', callbackId);
 
         toast({
@@ -182,19 +182,33 @@ export function SimpleAddDeal() {
           return;
         }
 
-        // Use Firebase deals service for proper integration
+        // Create deal with proper field mapping
         const dealData = {
-          ...formData,
-          device_key: formData.device_key,
-          SalesAgentID: user?.id || '',
-          ClosingAgentID: user?.id || '',
-          created_by: user?.name || 'Unknown',
-          created_by_id: user?.id || ''
+          customerName: formData.customer_name,
+          email: formData.email,
+          phoneNumber: formData.phone_number,
+          country: formData.country,
+          amountPaid: formData.amount_paid,
+          serviceTier: 'Silver' as const,
+          salesAgentId: user?.id || '',
+          salesAgentName: user?.name || 'Unknown',
+          closingAgentId: formData.closing_agent_id,
+          closingAgentName: formData.closing_agent,
+          salesTeam: formData.sales_team,
+          stage: formData.stage,
+          status: formData.status,
+          priority: formData.priority,
+          signupDate: formData.signup_date,
+          durationYears: formData.duration_years,
+          durationMonths: formData.duration_months,
+          numberOfUsers: formData.number_of_users,
+          notes: formData.notes,
+          createdBy: user?.name || 'Unknown'
         };
 
         console.log('Creating deal with Firebase service:', dealData);
-        const dealId = await dealsService.createDeal(dealData, user);
-        console.log('Deal created successfully with ID:', dealId);
+        const result = await apiService.createDeal(dealData);
+        console.log('Deal created successfully with ID:', result);
 
         toast({
           title: "Deal added successfully!",

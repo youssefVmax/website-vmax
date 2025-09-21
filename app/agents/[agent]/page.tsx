@@ -4,15 +4,32 @@ import { useMemo } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useFirebaseSalesData } from "@/hooks/useFirebaseSalesData"
+import { apiService } from "@/lib/api-service"
+import { useState, useEffect } from "react"
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts"
 import { DollarSign, TrendingUp, Users } from "lucide-react"
 
 export default function AgentDrilldownPage() {
   const params = useParams<{ agent: string }>()
   const agentParam = decodeURIComponent(params.agent)
-  // Use manager scope to get full data; we filter locally for the selected agent
-  const { sales, loading, error } = useFirebaseSalesData('manager')
+  const [sales, setSales] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  useEffect(() => {
+    const loadSalesData = async () => {
+      try {
+        setLoading(true)
+        const deals = await apiService.getDeals()
+        setSales(deals)
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Failed to load data'))
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadSalesData()
+  }, [])
 
   const data = useMemo(() => {
     const norm = agentParam.toLowerCase().trim()

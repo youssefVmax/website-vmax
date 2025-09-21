@@ -15,6 +15,7 @@ export function MainNav() {
   const navItems = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/deals", label: "Deals" },
+    { href: "/callbacks", label: "Callbacks" },
     { href: "/reports", label: "Reports" },
     { href: "/settings", label: "Settings" },
   ]
@@ -36,16 +37,38 @@ export function MainNav() {
             </Link>
           ))}
           {user?.role === 'manager' && (
-            <Link
-              href="/admin/backup"
-              className={cn(
-                "text-sm font-semibold transition-colors hover:text-primary",
-                pathname.startsWith("/admin") ? "text-primary" : "text-muted-foreground"
-              )}
-              title="Manage (Backup, Data Export, Deals & Callbacks Tables)"
-            >
-              Manage
-            </Link>
+            <>
+              <Link
+                href="/manager/deals"
+                className={cn(
+                  "text-sm font-semibold transition-colors hover:text-primary",
+                  pathname.startsWith("/manager/deals") ? "text-primary" : "text-muted-foreground"
+                )}
+                title="Manager Deals Table"
+              >
+                Deals Table
+              </Link>
+              <Link
+                href="/manager/callbacks"
+                className={cn(
+                  "text-sm font-semibold transition-colors hover:text-primary",
+                  pathname.startsWith("/manager/callbacks") ? "text-primary" : "text-muted-foreground"
+                )}
+                title="Manager Callbacks Table"
+              >
+                Callbacks Table
+              </Link>
+              <Link
+                href="/admin/backup"
+                className={cn(
+                  "text-sm font-semibold transition-colors hover:text-primary",
+                  pathname.startsWith("/admin") ? "text-primary" : "text-muted-foreground"
+                )}
+                title="Manage (Backup, Data Export)"
+              >
+                Admin
+              </Link>
+            </>
           )}
           {user?.role === 'team-leader' && (
             <Link
