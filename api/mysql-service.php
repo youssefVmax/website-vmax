@@ -1,5 +1,9 @@
 <?php
-include 'config.php';
+/**
+ * VMAX Sales System - MySQL Service API
+ * Updated to use centralized database connection
+ */
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -9,19 +13,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-require_once 'config.php';
+require_once 'db.php';
 
 class MySQLService {
+    private $db;
     private $conn;
     
     public function __construct() {
-        $this->conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
-        
-        if ($this->conn->connect_error) {
-            throw new Exception("Connection failed: " . $this->conn->connect_error);
+        try {
+            $this->db = getDB();
+            $this->conn = $this->db->getConnection();
+        } catch (Exception $e) {
+            throw new Exception("Database connection failed: " . $e->getMessage());
         }
-        
-        $this->conn->set_charset("utf8");
     }
     
     // Users Management
