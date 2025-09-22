@@ -4,7 +4,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter, ZAxis } from 'recharts';
 import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3, Phone, Clock } from 'lucide-react';
 import { useMySQLSalesData } from "@/hooks/useMySQLSalesData";
+import { useEnhancedAnalytics } from "@/hooks/useEnhancedAnalytics";
 import { mysqlAnalyticsService } from '@/lib/mysql-analytics-service';
+import { analyticsApiService } from '@/lib/analytics-api-service';
+import { unifiedAnalyticsService, type UserContext } from '@/lib/unified-analytics-service';
 import CallbackKPIDashboard from './callback-kpi-dashboard';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
@@ -46,7 +49,24 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   const [activeTab, setActiveTab] = useState('sales');
   const [callbackMetrics, setCallbackMetrics] = useState<any>(null);
 
-  // Use live data with real-time updates via SSE
+  // Use enhanced analytics hook for better data fetching
+  const { 
+    analytics: enhancedAnalytics, 
+    loading: analyticsLoading, 
+    error: analyticsError, 
+    refreshAnalytics,
+    lastUpdated 
+  } = useEnhancedAnalytics({
+    userRole,
+    userId: user?.id,
+    userName: user?.name,
+    username: user?.username,
+    managedTeam: user?.managedTeam,
+    autoRefresh: true,
+    refreshInterval: 60000 // 1 minute
+  });
+
+  // Fallback to original hook for compatibility
   const { deals, callbacks, targets, loading, error, refreshData, analytics: hookAnalytics } = useMySQLSalesData({ 
     userRole: userRole, 
     userId: user?.id, 
@@ -77,6 +97,8 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
 
     return () => clearInterval(interval);
   }, [user, userRole]);
+
+  // Enhanced analytics is now handled by the useEnhancedAnalytics hook above
 
   // Normalize to DealData for charts/KPIs
   const salesData: DealData[] = (deals || []).map((row: any) => {
@@ -110,7 +132,28 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
 
   // Calculate metrics based on role
   const computedAnalytics = useMemo<AnalyticsData | null>(() => {
-    if (!salesData.length) return null;
+    // Always return analytics object, even with empty data
+    if (!salesData.length) {
+      return {
+        totalSales: 0,
+        totalDeals: 0,
+        averageDealSize: 0,
+        salesByAgent: [],
+        salesByService: [],
+        salesByTeam: [],
+        salesByProgram: [],
+        dailyTrend: [],
+        topAgents: [],
+        recentDeals: [],
+        filteredData: [],
+        userAnalysisData: [
+          { name: 'Deals Closed', value: 0 },
+          { name: 'Total Sales', value: 0 },
+          { name: 'Avg. Deal Size', value: 0 },
+          { name: 'Top Service', value: 'N/A' },
+        ]
+      };
+    }
 
     let filteredData = salesData;
     
@@ -142,9 +185,15 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
     const dailyTrend: { [key: string]: { date: string; sales: number } } = {};
 
     // Process data for aggregations
-    filteredData.forEach(deal => {
+    filteredData.forEach((deal, dealIndex) => {
       // Sales by agent - use closing agent for salesman role, sales agent for others
-      const agentName = userRole === 'salesman' ? (deal.closingAgent || 'Unknown') : (deal.salesAgent || 'Unknown');
+      let agentName = userRole === 'salesman' ? (deal.closingAgent || '') : (deal.salesAgent || '');
+      
+      // Ensure unique agent names by adding index if empty or duplicate
+      if (!agentName || agentName.trim() === '' || agentName.toLowerCase() === 'unknown') {
+        agentName = `Agent ${Object.keys(salesByAgent).length + 1}`;
+      }
+      
       if (!salesByAgent[agentName]) {
         salesByAgent[agentName] = { agent: agentName, sales: 0, deals: 0 };
       }
@@ -196,11 +245,12 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
     const sortedDailyTrend = Object.values(dailyTrend)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Get top 10 agents for the table
-    const topAgents = sortedAgents.slice(0, 10).map(agent => ({
-      agent: agent.agent,
+    // Get top 10 agents for the table with unique names
+    const topAgents = sortedAgents.slice(0, 10).map((agent, index) => ({
+      agent: agent.agent || `Agent ${index + 1}`,
       sales: agent.sales,
-      deals: agent.deals
+      deals: agent.deals,
+      key: `agent-${index}-${agent.agent || 'unknown'}`
     }));
     
     // Get recent deals (last 10)
@@ -304,7 +354,94 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
         </div>
       </div>
 
-      {/* Key Metrics - Removed as requested */}
+      {/* Enhanced Analytics KPI Cards */}
+      {enhancedAnalytics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-600">Total Deals</p>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {analyticsLoading ? '...' : enhancedAnalytics.overview.totalDeals.toLocaleString()}
+                  </p>
+                  {lastUpdated && (
+                    <p className="text-xs text-blue-500 mt-1">
+                      Updated {lastUpdated.toLocaleTimeString()}
+                    </p>
+                  )}
+                </div>
+                <div className="p-3 bg-blue-500 rounded-full">
+                  <Target className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-600">Total Revenue</p>
+                  <p className="text-2xl font-bold text-green-900">
+                    {analyticsLoading ? '...' : `$${enhancedAnalytics.overview.totalRevenue.toLocaleString()}`}
+                  </p>
+                  {lastUpdated && (
+                    <p className="text-xs text-green-500 mt-1">
+                      Updated {lastUpdated.toLocaleTimeString()}
+                    </p>
+                  )}
+                </div>
+                <div className="p-3 bg-green-500 rounded-full">
+                  <DollarSign className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-purple-600">Avg Deal Size</p>
+                  <p className="text-2xl font-bold text-purple-900">
+                    {analyticsLoading ? '...' : `$${Math.round(enhancedAnalytics.overview.averageDealSize).toLocaleString()}`}
+                  </p>
+                  {lastUpdated && (
+                    <p className="text-xs text-purple-500 mt-1">
+                      Updated {lastUpdated.toLocaleTimeString()}
+                    </p>
+                  )}
+                </div>
+                <div className="p-3 bg-purple-500 rounded-full">
+                  <TrendingUp className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-orange-600">Conversion Rate</p>
+                  <p className="text-2xl font-bold text-orange-900">
+                    {analyticsLoading ? '...' : `${enhancedAnalytics.overview.conversionRate.toFixed(1)}%`}
+                  </p>
+                  {lastUpdated && (
+                    <p className="text-xs text-orange-500 mt-1">
+                      Updated {lastUpdated.toLocaleTimeString()}
+                    </p>
+                  )}
+                </div>
+                <div className="p-3 bg-orange-500 rounded-full">
+                  <Award className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -316,7 +453,11 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={computedAnalytics.dailyTrend}>
+                <LineChart data={(enhancedAnalytics?.charts?.dailyTrend || computedAnalytics.dailyTrend).map((day: any, index: number) => ({
+                  ...day,
+                  key: `day-${index}-${day.date}`,
+                  date: day.date || `Day ${index + 1}`
+                }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                   <YAxis />
@@ -337,7 +478,11 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={computedAnalytics.topAgents.slice(0, 8)} layout="horizontal">
+                <BarChart data={(enhancedAnalytics?.charts?.topAgents || computedAnalytics.topAgents).slice(0, 8).map((agent: any, index: number) => ({
+                  ...agent,
+                  key: `agent-${index}-${agent.agent}`,
+                  agent: agent.agent || `Agent ${index + 1}`
+                }))} layout="horizontal">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
@@ -363,7 +508,11 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={computedAnalytics.salesByService}
+                    data={computedAnalytics.salesByService.map((service, index) => ({
+                      ...service,
+                      key: `service-${index}-${service.service}`,
+                      service: service.service || `Service ${index + 1}`
+                    }))}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -392,7 +541,11 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={computedAnalytics.salesByTeam}>
+                <BarChart data={computedAnalytics.salesByTeam.map((team, index) => ({
+                  ...team,
+                  key: `team-${index}-${team.team}`,
+                  team: team.team || `Team ${index + 1}`
+                }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="team" tick={{ fontSize: 12 }} />
                   <YAxis />
@@ -420,7 +573,11 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={computedAnalytics.userAnalysisData}>
+                <BarChart data={computedAnalytics.userAnalysisData.map((item, index) => ({
+                  ...item,
+                  key: `analysis-${index}-${item.name}`,
+                  name: item.name || `Item ${index + 1}`
+                }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -467,7 +624,11 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80 mb-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={computedAnalytics.salesByAgent.slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                <BarChart data={computedAnalytics.salesByAgent.slice(0, 10).map((agent, index) => ({
+                  ...agent,
+                  key: `revenue-agent-${index}-${agent.agent}`,
+                  agent: agent.agent || `Agent ${index + 1}`
+                }))} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis 
                     dataKey="agent" 
@@ -558,7 +719,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
               </thead>
               <tbody>
                 {computedAnalytics.recentDeals.map((deal, index) => (
-                  <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
+                  <tr key={`deal-${index}-${deal.customer_name}-${deal.date?.getTime()}`} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                     <td className="py-2">{deal.date.toLocaleDateString()}</td>
                     <td className="py-2">{deal.customer_name}</td>
                     <td className="py-2 font-semibold">${deal.amount}</td>

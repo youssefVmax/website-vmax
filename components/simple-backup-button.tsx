@@ -4,8 +4,7 @@ import React, { useState } from 'react'
 import { Button } from './ui/button'
 import { Download, RefreshCw, Database } from 'lucide-react'
 import { useToast } from './ui/use-toast'
-import { db } from '@/lib/firebase'
-import { collection, getDocs } from 'firebase/firestore'
+import { directMySQLService } from '@/lib/direct-mysql-service'
 
 // Collections to backup
 const COLLECTIONS = [
@@ -86,20 +85,36 @@ export default function SimpleBackupButton({
   // Backup a single collection
   const backupCollection = async (collectionName: string) => {
     try {
-      const snapshot = await getDocs(collection(db, collectionName))
-      const documents: any[] = []
+      let response: any;
       
-      snapshot.forEach(doc => {
-        const data = processDocumentData(doc.data())
-        documents.push({
-          id: doc.id,
-          ...data,
-          _backup_timestamp: new Date().toISOString(),
-          _document_path: `${collectionName}/${doc.id}`
-        })
-      })
+      // Get data based on collection type
+      switch (collectionName) {
+        case 'deals':
+          response = await directMySQLService.getDeals({});
+          break;
+        case 'callbacks':
+          response = await directMySQLService.getCallbacks({});
+          break;
+        case 'users':
+          response = await directMySQLService.getUsers({});
+          break;
+        case 'notifications':
+          response = await directMySQLService.getNotifications({});
+          break;
+        case 'targets':
+          response = await directMySQLService.getTargets({});
+          break;
+        default:
+          response = await directMySQLService.makeDirectRequest(`${collectionName}-api.php`);
+      }
       
-      return documents
+      const documents = Array.isArray(response) ? response : (response[collectionName] || []);
+      
+      return documents.map((doc: any) => ({
+        ...processDocumentData(doc),
+        _backup_timestamp: new Date().toISOString(),
+        _document_path: `${collectionName}/${doc.id || doc._id || 'unknown'}`
+      }));
       
     } catch (error) {
       console.error(`❌ Failed to backup ${collectionName}:`, error)
@@ -139,7 +154,7 @@ export default function SimpleBackupButton({
       const backupInfo = {
         timestamp,
         backup_date: new Date().toISOString(),
-        firebase_project: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'fawry-sales',
+        mysql_database: process.env.DB_NAME || 'vmax',
         collections: backupStats,
         total_documents: totalDocuments,
         duration_seconds: parseFloat(duration),
@@ -160,7 +175,7 @@ export default function SimpleBackupButton({
       // Create download link
       const a = document.createElement('a')
       a.href = url
-      a.download = `firebase-complete-backup-${timestamp}.json`
+      a.download = `mysql-complete-backup-${timestamp}.json`
       a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
@@ -202,7 +217,7 @@ export default function SimpleBackupButton({
       ) : (
         <>
           <Download className="mr-2 h-4 w-4" />
-          {children || "Backup Firebase"}
+          {children || "Backup MySQL"}
         </>
       )}
     </Button>

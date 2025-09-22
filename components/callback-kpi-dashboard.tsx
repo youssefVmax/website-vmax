@@ -17,6 +17,7 @@ import { mysqlAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/mysq
 import { callbacksService } from '@/lib/mysql-callbacks-service';
 import { dealsService } from '@/lib/mysql-deals-service';
 import { targetsService } from '@/lib/mysql-targets-service';
+import { unifiedDataService } from '@/lib/unified-data-service';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -73,14 +74,112 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
     setLoading(true);
     try {
       const userTeam = getUserTeam();
-      console.log('Loading KPIs with user info:', { 
+      console.log('🔄 CallbackKPIDashboard: Loading KPIs with user info:', { 
         id: user.id, 
         name: user.name, 
         role: userRole,
         team: userTeam
       });
       
-      // Set up filters based on user role
+      // Try unified data service first for better performance
+      try {
+        const dashboardData = await unifiedDataService.getDashboardData(
+          userRole,
+          user.id,
+          user.name,
+          user.managedTeam || user.team
+        );
+        
+        if (dashboardData.success && dashboardData.data.callbacks) {
+          console.log('✅ CallbackKPIDashboard: Data loaded from unified service');
+          
+          const callbacks = dashboardData.data.callbacks;
+          const deals = dashboardData.data.deals || [];
+          
+          // Calculate KPIs from the data
+          const totalCallbacks = callbacks.length;
+          const pendingCallbacks = callbacks.filter(cb => cb.status === 'pending').length;
+          const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length;
+          const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
+          
+          // Calculate response times (mock data for now)
+          const avgResponseTime = 2.5; // hours
+          
+          // Group callbacks by status
+          const statusDistribution = [
+            { name: 'Pending', value: pendingCallbacks, color: '#FF8042' },
+            { name: 'Contacted', value: callbacks.filter(cb => cb.status === 'contacted').length, color: '#FFBB28' },
+            { name: 'Completed', value: completedCallbacks, color: '#00C49F' }
+          ];
+          
+          // Daily trend (last 30 days)
+          const dailyTrend = Array.from({ length: 30 }, (_, i) => {
+            const date = new Date();
+            date.setDate(date.getDate() - (29 - i));
+            const dateStr = date.toISOString().split('T')[0];
+            const dayCallbacks = callbacks.filter(cb => 
+              cb.created_at && cb.created_at.startsWith(dateStr)
+            ).length;
+            return {
+              date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              callbacks: dayCallbacks
+            };
+          });
+          
+          // Agent performance
+          const agentPerformance = callbacks.reduce((acc, cb) => {
+            const agent = cb.sales_agent || cb.SalesAgentID || 'Unknown';
+            if (!acc[agent]) {
+              acc[agent] = { agent, callbacks: 0, completed: 0 };
+            }
+            acc[agent].callbacks++;
+            if (cb.status === 'completed') {
+              acc[agent].completed++;
+            }
+            return acc;
+          }, {} as Record<string, { agent: string; callbacks: number; completed: number }>);
+          
+          const topAgents = Object.values(agentPerformance)
+            .map((agentData) => {
+              const data = agentData as { agent: string; callbacks: number; completed: number };
+              return {
+                agent: data.agent,
+                callbacks: data.callbacks,
+                completed: data.completed,
+                conversionRate: data.callbacks > 0 ? (data.completed / data.callbacks) * 100 : 0
+              };
+            })
+            .sort((a, b) => b.conversionRate - a.conversionRate)
+            .slice(0, 10);
+          
+          const calculatedKPIs: any = {
+            totalCallbacks,
+            pendingCallbacks,
+            completedCallbacks,
+            conversionRate,
+            averageResponseTime: avgResponseTime,
+            statusDistribution,
+            dailyTrend,
+            monthlyTrend: [], // Will be calculated if needed
+            topAgents,
+            recentCallbacks: callbacks.slice(0, 10),
+            responseTimeAnalysis: {
+              average: avgResponseTime,
+              median: avgResponseTime,
+              fastest: 0.5,
+              slowest: 8.0
+            }
+          };
+          
+          setKpis(calculatedKPIs);
+          setError(null);
+          return;
+        }
+      } catch (unifiedError) {
+        console.warn('⚠️ CallbackKPIDashboard: Unified service failed, falling back to analytics service:', unifiedError);
+      }
+      
+      // Fallback to original analytics service
       const filters: CallbackFilters = {};
       
       if (userRole === 'manager') {
@@ -94,13 +193,15 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
         filters.userName = user.name;
       }
       
-      console.log('Using filters for KPIs:', filters);
+      console.log('🔄 CallbackKPIDashboard: Using fallback analytics service with filters:', filters);
       
       const data = await mysqlAnalyticsService.getCallbackKPIs(filters);
-      console.log('KPIs loaded:', data);
+      console.log('✅ CallbackKPIDashboard: KPIs loaded from analytics service:', data);
       setKpis(data);
+      setError(null);
     } catch (error) {
-      console.error('Error loading callback KPIs:', error);
+      console.error('❌ CallbackKPIDashboard: Error loading callback KPIs:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load callback data');
     } finally {
       setLoading(false);
     }

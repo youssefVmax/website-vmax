@@ -1,17 +1,9 @@
-import type { Metadata, Viewport } from 'next'
+'use client'
+
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Home, ArrowLeft } from 'lucide-react'
-
-export const metadata: Metadata = {
-  title: '404 - Page Not Found | VMAX Sales',
-  description: 'The page you are looking for could not be found.',
-}
-
-export const viewport: Viewport = {
-  themeColor: '#1e40af',
-}
 
 export default function NotFound() {
   return (

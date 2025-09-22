@@ -18,10 +18,17 @@ export interface User {
 class MySQLUserService {
   async getUsers(): Promise<User[]> {
     try {
-      const response = await apiService.makeRequest('/api/mysql-service.php?path=users');
-      return response.users || [];
+      console.log('🔄 MySQLUserService: Fetching users via unified API');
+      const response = await fetch('/api/unified-data?userRole=manager&dataTypes=users&limit=1000');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return result.success ? (result.data.users || []) : [];
     } catch (error) {
-      console.error('Error fetching users from MySQL:', error);
+      console.error('❌ MySQLUserService: Error fetching users:', error);
       return [];
     }
   }

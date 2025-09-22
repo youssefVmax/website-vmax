@@ -59,7 +59,7 @@ export default function TestBackupPage() {
     try {
       const stats = await firebaseBackupService.getBackupStatistics()
       addLog(`✅ Stats loaded: ${stats.collections.length} collections, ${stats.totalDocuments} documents`)
-      addLog(`📋 Collections found: ${stats.collections.map(c => c.name).join(', ')}`)
+      addLog(`📋 Collections found: ${stats.collections.map((c: any) => c.name).join(', ')}`)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       addLog(`❌ Stats test failed: ${errorMsg}`)
@@ -73,7 +73,7 @@ export default function TestBackupPage() {
     setLoading(true)
     
     try {
-      addLog("📥 Exporting data from Firebase...")
+      addLog("📥 Exporting data from MySQL...")
       const backupData = await firebaseBackupService.exportAllData()
       
       addLog(`✅ Export completed: ${backupData.metadata.totalDocuments} documents`)
@@ -100,7 +100,7 @@ export default function TestBackupPage() {
       <div className="container mx-auto px-4 max-w-4xl">
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>🧪 Firebase Backup Test Page</CardTitle>
+            <CardTitle>🧪 MySQL Backup Test Page</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">

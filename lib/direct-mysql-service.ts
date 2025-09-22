@@ -60,30 +60,120 @@ class DirectMySQLService {
     }
   }
 
-  // Direct MySQL API calls
+  // Updated to use unified API to prevent connection issues
   async getDeals(filters: Record<string, string> = {}): Promise<any> {
-    const queryParams = new URLSearchParams(filters);
-    return this.makeDirectRequest(`mysql-service.php?path=deals&${queryParams.toString()}`);
+    try {
+      console.log('🔄 DirectMySQLService: Fetching deals via unified API');
+      const params = new URLSearchParams({
+        userRole: 'manager', // Default to manager for direct service
+        dataTypes: 'deals',
+        limit: '1000',
+        ...filters
+      });
+      
+      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return result.success ? (result.data.deals || []) : [];
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error fetching deals:', error);
+      return [];
+    }
   }
 
   async getCallbacks(filters: Record<string, string> = {}): Promise<any> {
-    const queryParams = new URLSearchParams(filters);
-    return this.makeDirectRequest(`mysql-service.php?path=callbacks&${queryParams.toString()}`);
+    try {
+      console.log('🔄 DirectMySQLService: Fetching callbacks via unified API');
+      const params = new URLSearchParams({
+        userRole: 'manager',
+        dataTypes: 'callbacks',
+        limit: '1000',
+        ...filters
+      });
+      
+      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return result.success ? (result.data.callbacks || []) : [];
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error fetching callbacks:', error);
+      return [];
+    }
   }
 
   async getTargets(filters: Record<string, string> = {}): Promise<any> {
-    const queryParams = new URLSearchParams(filters);
-    return this.makeDirectRequest(`mysql-service.php?path=targets&${queryParams.toString()}`);
+    try {
+      console.log('🔄 DirectMySQLService: Fetching targets via unified API');
+      const params = new URLSearchParams({
+        userRole: 'manager',
+        dataTypes: 'targets',
+        limit: '1000',
+        ...filters
+      });
+      
+      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return result.success ? (result.data.targets || []) : [];
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error fetching targets:', error);
+      return [];
+    }
   }
 
   async getNotifications(filters: Record<string, string> = {}): Promise<any> {
-    const queryParams = new URLSearchParams(filters);
-    return this.makeDirectRequest(`mysql-service.php?path=notifications&${queryParams.toString()}`);
+    try {
+      console.log('🔄 DirectMySQLService: Fetching notifications via unified API');
+      const params = new URLSearchParams({
+        userRole: 'manager',
+        dataTypes: 'notifications',
+        limit: '1000',
+        ...filters
+      });
+      
+      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return result.success ? (result.data.notifications || []) : [];
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error fetching notifications:', error);
+      return [];
+    }
   }
 
   async getUsers(filters: Record<string, string> = {}): Promise<any> {
-    const queryParams = new URLSearchParams(filters);
-    return this.makeDirectRequest(`mysql-service.php?path=users&${queryParams.toString()}`);
+    try {
+      console.log('🔄 DirectMySQLService: Fetching users via unified API');
+      const params = new URLSearchParams({
+        userRole: 'manager',
+        dataTypes: 'users',
+        limit: '1000',
+        ...filters
+      });
+      
+      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      return result.success ? (result.data.users || []) : [];
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error fetching users:', error);
+      return [];
+    }
   }
 
   // Analytics endpoints

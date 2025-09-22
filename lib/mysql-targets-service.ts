@@ -8,6 +8,7 @@ export interface TargetsService {
   getTargets: (filters?: any) => Promise<SalesTarget[]>;
   getTargetById: (id: string) => Promise<SalesTarget | null>;
   getTargetProgress: (targetId: string) => Promise<any>;
+  getTeamTargets: (managerId: string, period?: string) => Promise<SalesTarget[]>;
   onTargetsChange: (callback: (targets: SalesTarget[]) => void, filters?: any) => () => void;
 }
 
@@ -61,22 +62,35 @@ class MySQLTargetsService implements TargetsService {
     }
   }
 
-  async getTargets(filters?: any): Promise<SalesTarget[]> {
+  async getTargets(filtersOrUserId?: any, userRole?: string): Promise<SalesTarget[]> {
     try {
       const queryFilters: Record<string, string> = {};
       
-      // Support both legacy and new filter keys
-      if (filters?.agentId || filters?.salesAgentId) {
-        queryFilters.agentId = (filters.agentId || filters.salesAgentId) as string;
+      // Handle legacy calling pattern: getTargets(userId, userRole)
+      if (typeof filtersOrUserId === 'string' && userRole) {
+        queryFilters.agentId = filtersOrUserId;
+        console.log('🎯 MySQLTargetsService: Using legacy pattern - userId:', filtersOrUserId, 'role:', userRole);
+      } else if (filtersOrUserId && typeof filtersOrUserId === 'object') {
+        // Handle new calling pattern: getTargets(filters)
+        if (filtersOrUserId.agentId || filtersOrUserId.salesAgentId) {
+          queryFilters.agentId = (filtersOrUserId.agentId || filtersOrUserId.salesAgentId) as string;
+        }
+        
+        if (filtersOrUserId.period || filtersOrUserId.month) {
+          queryFilters.period = (filtersOrUserId.period || filtersOrUserId.month) as string;
+        }
+        
+        if (filtersOrUserId.managerId) {
+          queryFilters.managerId = filtersOrUserId.managerId as string;
+        }
+        
+        console.log('🎯 MySQLTargetsService: Using filters pattern:', filtersOrUserId);
       }
       
-      if (filters?.period || filters?.month) {
-        // Backend expects 'period' (e.g., YYYY-MM)
-        queryFilters.period = (filters.period || filters.month) as string;
-      }
-      
+      console.log('🎯 MySQLTargetsService: Query filters:', queryFilters);
       const response = await directMySQLService.getTargets(queryFilters);
       const targets = Array.isArray(response) ? response : (response.targets || []);
+      console.log('🎯 MySQLTargetsService: Found targets:', targets.length);
       return targets;
     } catch (error) {
       console.error('Error fetching targets:', error);
@@ -94,18 +108,51 @@ class MySQLTargetsService implements TargetsService {
     }
   }
 
-  async getTargetProgress(targetId: string): Promise<any> {
+  async getTargetProgress(targetIdOrUserId: string, period?: string): Promise<any> {
     try {
-      const target = await this.getTargetById(targetId);
+      let target: SalesTarget | null = null;
+      
+      // Handle different calling patterns
+      if (period) {
+        // Called with userId and period: getTargetProgress(userId, period)
+        console.log('🎯 MySQLTargetsService: Getting target progress for userId:', targetIdOrUserId, 'period:', period);
+        const targets = await this.getTargets({ agentId: targetIdOrUserId, period });
+        target = targets.length > 0 ? targets[0] : null;
+      } else {
+        // Called with targetId: getTargetProgress(targetId)
+        console.log('🎯 MySQLTargetsService: Getting target progress for targetId:', targetIdOrUserId);
+        target = await this.getTargetById(targetIdOrUserId);
+      }
+      
       if (!target) {
-        throw new Error('Target not found');
+        console.log('🎯 MySQLTargetsService: Target not found');
+        // Return default progress structure
+        return {
+          targetId: targetIdOrUserId,
+          agentId: targetIdOrUserId,
+          agentName: 'Unknown',
+          period: period || '',
+          monthlyTarget: 0,
+          dealsTarget: 0,
+          currentRevenue: 0,
+          currentDeals: 0,
+          currentSales: 0, // Add for compatibility
+          revenueProgress: 0,
+          dealsProgress: 0,
+          remainingRevenue: 0,
+          remainingDeals: 0,
+          isRevenueTargetMet: false,
+          isDealsTargetMet: false,
+          deals: [],
+          lastUpdated: new Date().toISOString()
+        };
       }
 
       // Normalize target fields (support both legacy and new schema)
       const agentId = (target as any).agentId || (target as any).salesAgentId;
       const targetRevenue = (target as any).monthlyTarget ?? (target as any).targetAmount ?? 0;
       const targetDeals = (target as any).dealsTarget ?? (target as any).targetDeals ?? 0;
-      const period = (target as any).period || (target as any).month || '';
+      const targetPeriod = (target as any).period || (target as any).month || period || '';
 
       // Get deals for this agent, optionally period filter can be added at API later
       const deals = await directMySQLService.getDeals({
@@ -129,11 +176,12 @@ class MySQLTargetsService implements TargetsService {
         targetId: (target as any).id,
         agentId,
         agentName: (target as any).agentName || (target as any).salesAgentName,
-        period,
+        period: targetPeriod,
         monthlyTarget: targetRevenue,
         dealsTarget: targetDeals,
         currentRevenue,
         currentDeals,
+        currentSales: currentRevenue, // Add for compatibility
         revenueProgress,
         dealsProgress,
         remainingRevenue,
@@ -192,6 +240,23 @@ class MySQLTargetsService implements TargetsService {
       } catch (error) {
         console.error('Error notifying listener:', error);
       }
+    }
+  }
+
+  // Get team targets for a manager
+  async getTeamTargets(managerId: string, period?: string): Promise<SalesTarget[]> {
+    try {
+      const filters: any = { managerId };
+      if (period) filters.period = period;
+      
+      console.log('🎯 MySQLTargetsService: Getting team targets for manager:', managerId, 'period:', period);
+      const targets = await this.getTargets(filters);
+      console.log('🎯 MySQLTargetsService: Found team targets:', targets.length);
+      
+      return targets;
+    } catch (error) {
+      console.error('Error fetching team targets:', error);
+      return [];
     }
   }
 

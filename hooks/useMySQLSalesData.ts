@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { dealsService } from '@/lib/mysql-deals-service';
 import { callbacksService } from '@/lib/mysql-callbacks-service';
 import { targetsService } from '@/lib/mysql-targets-service';
+import { unifiedDataService } from '@/lib/unified-data-service';
 import { Deal, Callback, SalesTarget } from '@/lib/api-service';
 
 export interface SalesDataHookReturn {
@@ -56,17 +57,22 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
   });
 
   const calculateAnalytics = useCallback((deals: Deal[], callbacks: Callback[], targets: SalesTarget[]) => {
-    const totalDeals = deals.length;
-    const totalRevenue = deals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0);
-    const pendingCallbacks = callbacks.filter(cb => cb.status === 'pending').length;
-    const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length;
+    // Ensure arrays are defined and fallback to empty arrays
+    const safeDeals = deals || [];
+    const safeCallbacks = callbacks || [];
+    const safeTargets = targets || [];
+    
+    const totalDeals = safeDeals.length;
+    const totalRevenue = safeDeals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0);
+    const pendingCallbacks = safeCallbacks.filter(cb => cb.status === 'pending').length;
+    const completedCallbacks = safeCallbacks.filter(cb => cb.status === 'completed').length;
     
     // Calculate target achievement
     let targetAchievement = 0;
-    if (targets.length > 0 && filters?.userId) {
-      const userTarget = targets.find(t => t.agentId === filters.userId);
-      if (userTarget && userTarget.monthlyTarget > 0) {
-        targetAchievement = (totalRevenue / userTarget.monthlyTarget) * 100;
+    if (safeTargets.length > 0 && filters?.userId) {
+      const userTarget = safeTargets.find(t => t.salesAgentId === filters.userId);
+      if (userTarget && userTarget.targetAmount > 0) {
+        targetAchievement = (totalRevenue / userTarget.targetAmount) * 100;
       }
     }
 
@@ -83,7 +89,44 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     try {
       setData(prev => ({ ...prev, loading: true, error: null }));
 
-      // Prepare filters for each service
+      console.log('🔄 useMySQLSalesData: Loading data via unified service');
+
+      // Try unified data service first for better performance
+      try {
+        const unifiedResult = await unifiedDataService.getDashboardData(
+          filters?.userRole || 'manager',
+          filters?.userId,
+          filters?.userName,
+          filters?.managedTeam
+        );
+
+        if (unifiedResult.success) {
+          console.log('✅ useMySQLSalesData: Data loaded from unified service');
+          
+          // Ensure we have arrays (fallback to empty arrays if undefined)
+          const deals = Array.isArray(unifiedResult.data.deals) ? unifiedResult.data.deals : [];
+          const callbacks = Array.isArray(unifiedResult.data.callbacks) ? unifiedResult.data.callbacks : [];
+          const targets = Array.isArray(unifiedResult.data.targets) ? unifiedResult.data.targets : [];
+
+          // Calculate analytics
+          const analyticsData = calculateAnalytics(deals, callbacks, targets);
+
+          setData({
+            deals,
+            callbacks,
+            targets,
+            loading: false,
+            error: null
+          });
+
+          setAnalytics(analyticsData);
+          return; // Success, exit early
+        }
+      } catch (unifiedError) {
+        console.warn('⚠️ useMySQLSalesData: Unified service failed, falling back to individual services:', unifiedError);
+      }
+
+      // Fallback to individual services if unified service fails
       const dealFilters = {
         userRole: filters?.userRole,
         userId: filters?.userId,
@@ -103,12 +146,17 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
         managedTeam: filters?.managedTeam
       };
 
-      // Fetch data in parallel
-      const [deals, callbacks, targets] = await Promise.all([
+      // Fetch data in parallel using individual services
+      const [dealsResponse, callbacksResponse, targetsResponse] = await Promise.all([
         dealsService.getDeals(dealFilters.userRole, dealFilters.userId, dealFilters.managedTeam),
         callbacksService.getCallbacks(callbackFilters.userRole, callbackFilters.userId, callbackFilters.userName, callbackFilters.managedTeam),
         targetsService.getTargets(targetFilters)
       ]);
+
+      // Ensure we have arrays (fallback to empty arrays if undefined)
+      const deals = Array.isArray(dealsResponse) ? dealsResponse : [];
+      const callbacks = Array.isArray(callbacksResponse) ? callbacksResponse : [];
+      const targets = Array.isArray(targetsResponse) ? targetsResponse : [];
 
       // Calculate analytics
       const analyticsData = calculateAnalytics(deals, callbacks, targets);

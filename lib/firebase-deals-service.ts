@@ -1,107 +1,60 @@
-// MySQL Deals Service - replaces Firebase with MySQL database calls
-import { apiService } from './api-service';
+// MySQL-based replacement for Firebase deals service
+import { dealsService, DealsService } from './mysql-deals-service';
+import { Deal as ApiDeal } from './api-service';
 
-export interface Deal {
-  id: string;
-  customer_name: string;
-  customer_email?: string;
-  customer_phone?: string;
-  amount: number;
-  status: 'active' | 'closed' | 'cancelled';
-  sales_agent: string;
-  service?: string;
-  program?: string;
-  created_at: string;
-  updated_at: string;
-  country?: string;
-  invoice_link?: string;
+// Export Deal interface for compatibility
+export interface Deal extends ApiDeal {
+  // Additional fields for backward compatibility
+  DealID?: string;
+  phone_number?: string;
+  sales_agent?: string;
+  closing_agent?: string;
+  sales_team?: string;
 }
 
-class MySQLDealsService {
-  async getDeals(): Promise<Deal[]> {
-    try {
-      const response = await apiService.makeRequest('/api/mysql-service.php?path=deals');
-      return response.deals || [];
-    } catch (error) {
-      console.error('Error fetching deals from MySQL:', error);
-      return [];
-    }
+class FirebaseDealsService {
+  // Firebase-compatible method names
+  async getAllDeals(): Promise<Deal[]> {
+    return dealsService.getDeals('manager');
+  }
+
+  async getDealsForUser(userId: string, userRole: string = 'salesman'): Promise<Deal[]> {
+    return dealsService.getDeals(userRole, userId);
+  }
+
+  // Firebase-style listener with different signature
+  onDealsUpdate(callback: (deals: Deal[]) => void, userRole: string = 'manager', userId?: string): () => void {
+    return dealsService.onDealsChange(callback, userRole, userId);
   }
 
   async getDealById(id: string): Promise<Deal | null> {
-    try {
-      const deals = await this.getDeals();
-      return deals.find(d => d.id === id) || null;
-    } catch (error) {
-      console.error('Error fetching deal by ID from MySQL:', error);
-      return null;
-    }
+    return dealsService.getDealById(id);
   }
 
-  async createDeal(dealData: Omit<Deal, 'id' | 'created_at' | 'updated_at'>): Promise<Deal> {
-    try {
-      const response = await apiService.makeRequest('/api/mysql-service.php?path=deals', {
-        method: 'POST',
-        body: JSON.stringify(dealData)
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error creating deal in MySQL:', error);
-      throw error;
-    }
+  // Delegate other methods to MySQL service
+  async createDeal(dealData: any, user: any): Promise<string> {
+    return dealsService.createDeal(dealData, user);
   }
 
-  async updateDeal(id: string, updates: Partial<Deal>): Promise<Deal | null> {
-    try {
-      const response = await apiService.makeRequest(`/api/mysql-service.php?path=deals&id=${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(updates)
-      });
-      return response.data || null;
-    } catch (error) {
-      console.error('Error updating deal in MySQL:', error);
-      return null;
-    }
+  async updateDeal(id: string, updates: Partial<Deal>): Promise<void> {
+    return dealsService.updateDeal(id, updates);
   }
 
-  async deleteDeal(id: string): Promise<boolean> {
-    try {
-      await apiService.makeRequest(`/api/mysql-service.php?path=deals&id=${id}`, {
-        method: 'DELETE'
-      });
-      return true;
-    } catch (error) {
-      console.error('Error deleting deal from MySQL:', error);
-      return false;
-    }
+  async deleteDeal(id: string): Promise<void> {
+    return dealsService.deleteDeal(id);
   }
 
-  // Polling-based change detection (replaces Firebase real-time listeners)
-  onDealsChange(callback: (deals: Deal[]) => void): () => void {
-    let intervalId: NodeJS.Timeout;
-    
-    // Initial load
-    this.getDeals().then(callback);
-    
-    // Poll for changes every 30 seconds
-    intervalId = setInterval(async () => {
-      try {
-        const deals = await this.getDeals();
-        callback(deals);
-      } catch (error) {
-        console.error('Error polling deals changes:', error);
-      }
-    }, 30000);
-    
-    // Return unsubscribe function
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
+  async getDealsByAgent(agentId: string): Promise<Deal[]> {
+    return dealsService.getDealsByAgent(agentId);
+  }
+
+  async getDealsByTeam(team: string): Promise<Deal[]> {
+    return dealsService.getDealsByTeam(team);
   }
 }
 
-// Export singleton instance
-export const mysqlDealsService = new MySQLDealsService();
-export default mysqlDealsService;
+// Export the MySQL service with Firebase-compatible interface
+export { dealsService };
+
+// Export default instance
+export default new FirebaseDealsService();

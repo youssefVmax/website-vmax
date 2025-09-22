@@ -6,6 +6,7 @@ import Providers from '@/components/providers'
 import { Toaster } from '@/components/ui/toaster'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'),
   title: 'VMAX Sales Analytics',
   description: 'Advanced sales analytics and management platform',
   icons: {
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'VMAX Sales Analytics',
     description: 'Advanced sales analytics and management platform',
-    url: 'https://vmax-sales.vercel.app',
+    url: 'https://vmaxcom.org',
     siteName: 'VMAX Sales',
     images: [
       {

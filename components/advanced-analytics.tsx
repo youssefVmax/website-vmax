@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts'
 import { TrendingUp, DollarSign, Users, Target, Calendar, Download, Filter, BarChart3, PieChart as PieChartIcon, Activity, Award } from "lucide-react"
 import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
+import { useEnhancedAnalytics } from "@/hooks/useEnhancedAnalytics"
 import { Deal } from "@/lib/api-service"
 import { addDays, format } from "date-fns"
 import { Label } from "@/components/ui/label"
@@ -26,6 +27,23 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     userName: user.name,
     managedTeam: user.managedTeam
   })
+
+  // Enhanced analytics for better data
+  const { 
+    analytics: enhancedAnalytics, 
+    loading: analyticsLoading, 
+    error: analyticsError,
+    lastUpdated: analyticsLastUpdated 
+  } = useEnhancedAnalytics({
+    userRole,
+    userId: user.id,
+    userName: user.name,
+    username: user.username,
+    managedTeam: user.managedTeam,
+    autoRefresh: true,
+    refreshInterval: 60000
+  })
+
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [dateRange, setDateRange] = useState({
     from: addDays(new Date(), -30),
@@ -42,8 +60,58 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     }
   }, [deals])
 
+  // Use enhanced analytics timestamp if available
+  useEffect(() => {
+    if (analyticsLastUpdated) {
+      setLastUpdated(analyticsLastUpdated)
+    }
+  }, [analyticsLastUpdated])
+
   const analytics = useMemo(() => {
-    if (!deals || deals.length === 0) return null
+    // Use enhanced analytics if available, otherwise fall back to local calculation
+    if (enhancedAnalytics && enhancedAnalytics.overview) {
+      console.log('🚀 AdvancedAnalytics: Using enhanced analytics data:', enhancedAnalytics);
+      
+      // Transform enhanced analytics to match expected format
+      return {
+        totalRevenue: enhancedAnalytics.overview.totalRevenue,
+        totalDeals: enhancedAnalytics.overview.totalDeals,
+        averageDealSize: enhancedAnalytics.overview.averageDealSize,
+        topAgents: enhancedAnalytics.charts.topAgents.map(agent => ({
+          agent: agent.agent,
+          revenue: agent.sales,
+          deals: agent.deals
+        })),
+        teamData: enhancedAnalytics.charts.teamDistribution,
+        teamPerformance: enhancedAnalytics.charts.teamDistribution,
+        dailyTrend: enhancedAnalytics.charts.dailyTrend,
+        serviceData: enhancedAnalytics.charts.serviceDistribution.map(service => ({
+          service: service.service,
+          revenue: service.sales,
+          deals: 1 // Default value since we don't have deals count per service
+        })),
+        servicePerformance: enhancedAnalytics.charts.serviceDistribution.map(service => ({
+          service: service.service,
+          revenue: service.sales,
+          deals: 1 // Default value since we don't have deals count per service
+        })),
+        performanceCorrelation: enhancedAnalytics.charts.topAgents.map(agent => ({
+          agent: agent.agent,
+          deals: agent.deals,
+          avgDealSize: agent.deals > 0 ? agent.sales / agent.deals : 0
+        })),
+        filteredDeals: enhancedAnalytics.tables.recentDeals,
+        revenueToday: 0, // Will be calculated from daily trend
+        dealsToday: 0,
+        revenueThisWeek: 0,
+        dealsThisWeek: 0,
+      };
+    }
+
+    if (!deals || deals.length === 0) {
+      console.log('🚀 AdvancedAnalytics: No deals data available');
+      return null;
+    }
 
     // Filter by date range
     const filteredDeals = deals.filter(deal => {
@@ -179,7 +247,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       revenueThisWeek,
       dealsThisWeek,
     }
-  }, [deals, dateRange, selectedTeam, selectedService])
+  }, [deals, dateRange, selectedTeam, selectedService, enhancedAnalytics])
 
   // Export filtered detailed rows as CSV (Excel-compatible)
   const handleExport = () => {
@@ -211,19 +279,34 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     URL.revokeObjectURL(url)
   }
 
-  if (loading) {
+  if (loading || analyticsLoading) {
     return (
       <div className="flex items-center justify-center p-6">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+        <span className="ml-3 text-muted-foreground">
+          {analyticsLoading ? 'Loading enhanced analytics...' : 'Loading data...'}
+        </span>
       </div>
     )
   }
 
-  if (error) {
+  if (error || analyticsError) {
     return (
       <Card className="border-destructive">
         <CardContent className="p-6 text-destructive">
-          Error loading analytics: {error.message}
+          Error loading analytics: {error?.message || analyticsError || 'Unknown error'}
+          <div className="mt-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                refreshData();
+                window.location.reload();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
         </CardContent>
       </Card>
     )

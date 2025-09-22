@@ -133,13 +133,13 @@ export class MySQLAnalyticsService {
       });
 
       return {
-        totalCallbacks: data.totals.total_callbacks || 0,
-        pendingCallbacks: data.totals.pending_callbacks || 0,
-        contactedCallbacks: data.totals.contacted_callbacks || 0,
-        completedCallbacks: data.totals.completed_callbacks || 0,
-        cancelledCallbacks: data.totals.cancelled_callbacks || 0,
-        conversionRate: parseFloat(data.totals.conversion_rate) || 0,
-        averageResponseTime: parseFloat(data.responseMetrics?.avg_hours) || 0,
+        totalCallbacks: data.total_callbacks || 0,
+        pendingCallbacks: data.pending_callbacks || 0,
+        contactedCallbacks: data.contacted_callbacks || 0,
+        completedCallbacks: data.completed_callbacks || 0,
+        cancelledCallbacks: data.cancelled_callbacks || 0,
+        conversionRate: parseFloat(data.conversion_rate) || 0,
+        averageResponseTime: parseFloat(data.avg_response_hours) || 0,
         callbacksByAgent: data.callbacksByAgent || [],
         callbacksByStatus: data.statusDistribution || [],
         dailyCallbackTrend: data.dailyTrend || [],

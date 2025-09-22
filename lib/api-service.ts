@@ -388,8 +388,18 @@ export class ManagerApiService {
   async getCallbackStats(filters: Record<string, any> = {}): Promise<any> {
     return await this.directApi.getCallbackAnalytics(filters);
   }
+
+  async updateCallbackStatus(callbackId: string, newStatus: string): Promise<any> {
+    return await directMySQLService.makeDirectRequest(`callbacks-api.php?id=${callbackId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: newStatus })
+    });
+  }
 }
 
-// Export the direct API service instance
+// Export service instances
 export const apiService = new DirectApiService();
+export const managerApiService = new ManagerApiService();
+
+// Default export
 export default apiService;

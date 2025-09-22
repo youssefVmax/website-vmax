@@ -35,6 +35,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
+import { dealsService } from "@/lib/mysql-deals-service"
+import { callbacksService } from "@/lib/mysql-callbacks-service"
+import { targetsService } from "@/lib/mysql-targets-service"
 import SalesAnalysisDashboard from '@/components/sales-dashboard'
 import NotificationsPage from "@/components/notifications-page"
 import { AddDealPage } from "@/components/add-deal"
@@ -46,6 +49,7 @@ import { EnhancedTargetDashboard } from "./enhanced-target-dashboard"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import EnhancedAnalytics from "@/components/enhanced-analytics"
+import AnalyticsConnectionTest from "@/components/analytics-connection-test"
 import MyDealsTable from "@/components/my-deals-table"
 import { ImportExportControls } from "@/components/import-export-controls"
 import UserManagement from "@/components/user-management"
@@ -54,7 +58,9 @@ import AccessDenied from "@/components/access-denied"
 import { CallbacksManagement } from "@/components/callbacks-management"
 import ManageCallbacksPage from "@/components/manage-callback"
 import NewCallbackPage from "@/components/new-callback"
-import { apiService, Deal, Callback, User } from '@/lib/api-service'
+import { apiService, Deal } from '@/lib/api-service'
+import { unifiedDataService } from '@/lib/unified-data-service'
+import { useEnhancedAnalytics } from '@/hooks/useEnhancedAnalytics'
 
 interface FullPageDashboardProps {
   user: any;
@@ -550,6 +556,8 @@ function PageContent({
       return <SalesAnalysisDashboard userRole={user.role} user={user} />
     case "analytics":
       return <AdvancedAnalytics userRole={user.role} user={user} />
+    case "analytics-test":
+      return <AnalyticsConnectionTest />
     case "all-deals":
     case "my-deals":
     case "support-deals":
@@ -599,33 +607,73 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
   const [metrics, setMetrics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Use enhanced analytics for better data fetching
+  const { 
+    analytics: enhancedAnalytics, 
+    loading: analyticsLoading, 
+    error: analyticsError 
+  } = useEnhancedAnalytics({
+    userRole: user.role,
+    userId: user.id,
+    userName: user.name,
+    username: user.username,
+    managedTeam: user.managedTeam || user.team,
+    autoRefresh: true,
+    refreshInterval: 60000
+  });
   
-  // Load dashboard data
+  // Load dashboard data using unified data service
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
         setLoading(true)
-        if (user.role === 'manager') {
-          const companyData = await apiService.getCompanyAnalytics()
-          setSales(companyData.deals)
-          setMetrics(companyData)
-        } else if (user.role === 'team-leader' && user.team) {
-          const teamData = await apiService.getTeamAnalytics(user.team)
-          setSales(teamData.deals)
-          setMetrics(teamData)
-        } else if (user.role === 'salesman' && user.id) {
-          const userPerf = await apiService.getUserPerformance(user.id)
-          setSales(userPerf.deals)
-          setMetrics(userPerf)
+        console.log('🔄 DashboardOverview: Loading data for', user.role, user.id);
+        
+        // Use unified data service for better performance
+        const dashboardData = await unifiedDataService.getDashboardData(
+          user.role,
+          user.id,
+          user.name,
+          user.managedTeam || user.team
+        );
+        
+        if (dashboardData.success) {
+          console.log('✅ DashboardOverview: Data loaded successfully', dashboardData.data);
+          
+          const deals = Array.isArray(dashboardData.data.deals) ? dashboardData.data.deals : [];
+          setSales(deals);
+          
+          // Calculate metrics from the data
+          const totalRevenue = deals.reduce((sum, deal) => sum + (parseFloat(deal.amount_paid) || 0), 0);
+          const calculatedMetrics = {
+            totalRevenue,
+            totalSales: totalRevenue, // Alias for compatibility
+            totalDeals: deals.length,
+            averageDealSize: deals.length > 0 ? totalRevenue / deals.length : 0,
+            callbacks: dashboardData.data.callbacks || [],
+            targets: dashboardData.data.targets || [],
+            analytics: dashboardData.data.analytics || enhancedAnalytics
+          };
+          
+          setMetrics(calculatedMetrics);
+          setError(null);
+        } else {
+          throw new Error(dashboardData.error || 'Failed to load dashboard data');
         }
       } catch (err) {
+        console.error('❌ DashboardOverview: Error loading data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load data')
+        // Ensure sales is always an array, even on error
+        setSales([])
+        setMetrics(null)
       } finally {
         setLoading(false)
       }
     }
+    
     loadDashboardData()
-  }, [user.role, user.id, user.team])
+  }, [user.role, user.id, user.team, user.managedTeam])
 
   const [totalAgents, setTotalAgents] = useState(0)
 
@@ -633,10 +681,14 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     const loadAgentCount = async () => {
       if (user.role === 'manager') {
         try {
-          const allUsers = await apiService.getUsers({ role: 'salesman' })
-          setTotalAgents(allUsers.length)
+          console.log('🔄 DashboardOverview: Loading agent count...');
+          const usersData = await unifiedDataService.getUsers();
+          const salesmen = usersData.filter(u => u.role === 'salesman');
+          setTotalAgents(salesmen.length);
+          console.log('✅ DashboardOverview: Found', salesmen.length, 'agents');
         } catch (error) {
-          console.error('Error loading agent count:', error)
+          console.error('❌ DashboardOverview: Error loading agent count:', error)
+          setTotalAgents(0);
         }
       }
     }
@@ -691,7 +743,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
                 <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent">
                   ${metrics?.totalSales?.toFixed(2) || '0.00'}
                 </p>
-                <p className="text-sm text-muted-foreground">{sales.length} Deals</p>
+                <p className="text-sm text-muted-foreground">{sales?.length || 0} Deals</p>
               </div>
             </div>
           </div>
@@ -1185,9 +1237,9 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
         setLoading(true)
         setError(null)
         console.log('Fetching deals...')
-        const allDeals = await dealsService.getAllDeals()
-        console.log('Deals fetched:', allDeals.length)
-        setDeals(allDeals)
+        const deals = await dealsService.getDeals('manager')
+        console.log('Deals fetched:', deals.length)
+        setDeals(deals)
       } catch (error) {
         console.error('Error fetching deals:', error)
         setError(error instanceof Error ? error.message : 'Unknown error')

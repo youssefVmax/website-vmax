@@ -2,11 +2,50 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
 import { salesService, userService, notificationService } from '../lib/firebase-services';
-import { Sale, User, Notification } from '../types/firebase';
 
-// Migration script to move CSV data to Firebase
+// Types for migration data
+interface Sale {
+  date: string;
+  customer_name: string;
+  amount: number;
+  sales_agent: string;
+  closing_agent: string;
+  team: string;
+  type_service: string;
+  sales_agent_norm: string;
+  closing_agent_norm: string;
+  SalesAgentID: string;
+  ClosingAgentID: string;
+  DealID: string;
+  email: string;
+  phone: string;
+  country: string;
+  duration_months: number;
+  type_program: string;
+  invoice: string;
+}
+
+interface User {
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+  SalesAgentID?: string;
+  ClosingAgentID?: string;
+  isActive: boolean;
+}
+
+interface Notification {
+  title: string;
+  message: string;
+  type: string;
+  userRole?: string;
+  isRead: boolean;
+}
+
+// Migration script to move CSV data to MySQL
 export async function migrateDataToFirebase() {
-  console.log('Starting Firebase migration...');
+  console.log('Starting MySQL migration...');
 
   try {
     // Migrate sales data from CSV

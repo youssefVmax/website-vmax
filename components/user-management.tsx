@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { apiService, User as APIUser } from "@/lib/api-service"
-import { User } from "@/lib/auth"
+import { mysqlUserService, User } from "@/lib/firebase-user-service"
 import { showSuccess, showToast } from "@/lib/sweetalert"
 
 const TEAMS = [
@@ -75,7 +75,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
   const loadUsers = async () => {
     try {
       setLoading(true)
-      const fetchedUsers = await userService.getAllUsers()
+      const fetchedUsers = await mysqlUserService.getUsers()
       setUsers(fetchedUsers)
       setError(null)
     } catch (err) {
@@ -103,15 +103,15 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       }
 
       // Check if username already exists
-      const exists = await userService.usernameExists(formData.username)
-      if (exists) {
+      const existingUser = await mysqlUserService.getUserByUsername(formData.username)
+      if (existingUser) {
         setError('Username already exists')
         return
       }
 
       console.log('Creating user with data:', formData)
-      const userId = await userService.createUser(formData)
-      console.log('User created successfully with ID:', userId)
+      const newUser = await mysqlUserService.createUser(formData)
+      console.log('User created successfully:', newUser)
       
       await loadUsers()
       setIsAddDialogOpen(false)
@@ -133,14 +133,14 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
     try {
       // If username changed, check if new username exists
       if (formData.username !== editingUser.username) {
-        const exists = await userService.usernameExists(formData.username)
-        if (exists) {
+        const existingUser = await mysqlUserService.getUserByUsername(formData.username)
+        if (existingUser) {
           setError('Username already exists')
           return
         }
       }
 
-      await userService.updateUser(editingUser.id, formData)
+      await mysqlUserService.updateUser(editingUser.id, formData)
       await loadUsers()
       setIsEditDialogOpen(false)
       setEditingUser(null)
@@ -156,7 +156,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
     if (!confirm('Are you sure you want to delete this user?')) return
 
     try {
-      await userService.deleteUser(userId)
+      await mysqlUserService.deleteUser(userId)
       await loadUsers()
       setError(null)
     } catch (err) {

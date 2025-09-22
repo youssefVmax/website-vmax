@@ -66,7 +66,7 @@ class MySQLNotificationService implements NotificationService {
       const response = await directMySQLService.getNotifications(filters);
       const notifications = Array.isArray(response) ? response : (response.notifications || []);
       
-      return notifications.map(this.mapNotification).filter(notification => {
+      return notifications.map(this.mapNotification).filter((notification: Notification) => {
         // Additional filtering logic
         if (userRole === 'manager') {
           return true; // Managers see all notifications

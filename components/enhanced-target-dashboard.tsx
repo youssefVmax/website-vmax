@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Target, Users, Edit, Trash2, BarChart3, TrendingUp, Filter, Search, Calendar, Award, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiService, SalesTarget, Deal, User } from "@/lib/api-service"
+import { dealsService } from "@/lib/mysql-deals-service"
+import { targetsService } from "@/lib/mysql-targets-service"
 import { DynamicTargetCreator } from "./dynamic-target-creator"
 
 interface EnhancedTargetDashboardProps {
@@ -60,8 +62,17 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
       
       try {
         console.log('🎯 EnhancedTargetDashboard: Loading target progress for user:', user.id, 'role:', userRole);
-        const { dealsService } = await import('@/lib/firebase-deals-service');
-        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
+        // Get targets and deals for progress calculation
+        const targets = await targetsService.getTargets({ agentId: user.id });
+        const deals = await dealsService.getDeals(userRole, user.id);
+        
+        // Calculate progress (simplified)
+        const progress = {
+          targets: targets || [],
+          deals: deals || [],
+          totalRevenue: deals?.reduce((sum: number, deal: any) => sum + (deal.amountPaid || 0), 0) || 0
+        };
+        
         console.log('🎯 EnhancedTargetDashboard: Target progress loaded:', progress);
         setTargetProgress(progress);
       } catch (error) {
@@ -79,8 +90,17 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
       
       try {
         console.log('🔄 EnhancedTargetDashboard: Refreshing target progress...');
-        const { dealsService } = await import('@/lib/firebase-deals-service');
-        const progress = await dealsService.getTargetProgressForUser(user.id, userRole);
+        // Get targets and deals for progress calculation
+        const targets = await targetsService.getTargets({ agentId: user.id });
+        const deals = await dealsService.getDeals(userRole, user.id);
+        
+        // Calculate progress (simplified)
+        const progress = {
+          targets: targets || [],
+          deals: deals || [],
+          totalRevenue: deals?.reduce((sum: number, deal: any) => sum + (deal.amountPaid || 0), 0) || 0
+        };
+        
         console.log('🔄 EnhancedTargetDashboard: Target progress refreshed:', progress);
         setTargetProgress(progress);
       } catch (error) {
