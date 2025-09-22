@@ -1,4 +1,5 @@
-import { apiService, Callback as ApiCallback } from './api-service';
+import { Callback as ApiCallback } from './api-service';
+import { directMySQLService } from './direct-mysql-service';
 import { databaseService } from './mysql-database-service';
 
 export interface Callback extends ApiCallback {
@@ -61,10 +62,10 @@ class MySQLCallbacksService implements CallbacksService {
   async updateCallback(id: string, updates: Partial<Callback>, updatedBy?: any): Promise<void> {
     try {
       // Get old callback for history tracking
-      const oldCallbacks = await apiService.getCallbacks({ id });
+      const oldCallbacks = await directMySQLService.getCallbacks({ id });
       const oldCallback = oldCallbacks.length > 0 ? oldCallbacks[0] : null;
 
-      await apiService.updateCallback(id, updates);
+      await directMySQLService.updateCallback(id, updates);
 
       // Log callback history if significant changes
       if (oldCallback && updatedBy) {
@@ -103,7 +104,7 @@ class MySQLCallbacksService implements CallbacksService {
 
   async deleteCallback(id: string): Promise<void> {
     try {
-      await apiService.deleteCallback(id);
+      await directMySQLService.deleteCallback(id);
       
       // Trigger listeners
       this.notifyListeners();
@@ -115,7 +116,7 @@ class MySQLCallbacksService implements CallbacksService {
 
   async getCallbacksByTeam(team: string): Promise<Callback[]> {
     try {
-      const callbacks = await apiService.getCallbacks({ salesTeam: team });
+      const callbacks = await directMySQLService.getCallbacks({ salesTeam: team });
       return callbacks;
     } catch (error) {
       console.error('Error fetching callbacks by team:', error);
@@ -174,7 +175,8 @@ class MySQLCallbacksService implements CallbacksService {
       }
       // Managers can see all callbacks (no filters)
       
-      const callbacks = await apiService.getCallbacks(filters);
+      const response = await directMySQLService.getCallbacks(filters);
+      const callbacks = Array.isArray(response) ? response : (response.callbacks || []);
       return callbacks;
     } catch (error) {
       console.error('Error fetching callbacks:', error);
@@ -184,7 +186,7 @@ class MySQLCallbacksService implements CallbacksService {
 
   async getCallbackById(id: string): Promise<Callback | null> {
     try {
-      const callbacks = await apiService.getCallbacks({ id });
+      const callbacks = await directMySQLService.getCallbacks({ id });
       return callbacks.length > 0 ? callbacks[0] : null;
     } catch (error) {
       console.error('Error fetching callback by ID:', error);

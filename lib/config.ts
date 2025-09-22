@@ -1,7 +1,7 @@
 // API Configuration
 export const API_CONFIG = {
-  // Base URL for all API requests
-  BASE_URL: 'http://vmaxcom.org',
+  // Base URL for all API requests - use localhost for development
+  BASE_URL: process.env.NODE_ENV === 'production' ? 'http://vmaxcom.org' : 'http://localhost:3000',
   
   // API endpoints
   ENDPOINTS: {

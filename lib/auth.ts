@@ -59,6 +59,11 @@ export class AuthService {
 
   // Load user and token from localStorage
   private loadUserFromStorage(): void {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
+    
     try {
       const storedUser = localStorage.getItem('vmax_user');
       const storedToken = localStorage.getItem('vmax_token');
@@ -75,6 +80,13 @@ export class AuthService {
 
   // Save user and token to localStorage
   private saveUserToStorage(user: User, token: string): void {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      this.currentUser = user;
+      this.token = token;
+      return;
+    }
+    
     try {
       localStorage.setItem('vmax_user', JSON.stringify(user));
       localStorage.setItem('vmax_token', token);
@@ -87,8 +99,11 @@ export class AuthService {
 
   // Clear user data from storage
   private clearStorage(): void {
-    localStorage.removeItem('vmax_user');
-    localStorage.removeItem('vmax_token');
+    // Check if we're in a browser environment
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      localStorage.removeItem('vmax_user');
+      localStorage.removeItem('vmax_token');
+    }
     this.currentUser = null;
     this.token = null;
   }

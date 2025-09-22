@@ -79,18 +79,34 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   }, [user, userRole]);
 
   // Normalize to DealData for charts/KPIs
-  const salesData: DealData[] = (deals || []).map((row: any) => ({
-    ...row,
-    date: new Date(row.signupDate || row.createdAt),
-    amount: typeof row.amountPaid === 'number' ? row.amountPaid : parseFloat(String(row.amountPaid)) || 0,
-    salesAgent: row.salesAgentName?.toLowerCase?.() || '',
-    closingAgent: row.closingAgentName?.toLowerCase?.() || '',
-    service: row.serviceTier || 'Unknown',
-    program: row.serviceTier || 'Unknown',
-    team: row.salesTeam || 'Unknown',
-    duration: `${row.durationMonths || ''}`,
-    customer_name: row.customerName || 'Unknown',
-  }));
+  const salesData: DealData[] = (deals || []).map((row: any) => {
+    // Safe date parsing
+    const dateValue = row.signupDate || row.createdAt || row.created_at || new Date().toISOString();
+    let parsedDate: Date;
+    
+    try {
+      parsedDate = new Date(dateValue);
+      // Check if date is valid
+      if (isNaN(parsedDate.getTime())) {
+        parsedDate = new Date(); // Fallback to current date
+      }
+    } catch (error) {
+      parsedDate = new Date(); // Fallback to current date
+    }
+
+    return {
+      ...row,
+      date: parsedDate,
+      amount: typeof row.amountPaid === 'number' ? row.amountPaid : (typeof row.amount === 'number' ? row.amount : parseFloat(String(row.amountPaid || row.amount)) || 0),
+      salesAgent: row.salesAgentName?.toLowerCase?.() || row.sales_agent?.toLowerCase?.() || '',
+      closingAgent: row.closingAgentName?.toLowerCase?.() || row.closing_agent?.toLowerCase?.() || '',
+      service: row.serviceTier || row.service || 'Unknown',
+      program: row.serviceTier || row.program || 'Unknown',
+      team: row.salesTeam || row.team || 'Unknown',
+      duration: `${row.durationMonths || row.duration || ''}`,
+      customer_name: row.customerName || row.customer_name || 'Unknown',
+    };
+  });
 
   // Calculate metrics based on role
   const computedAnalytics = useMemo<AnalyticsData | null>(() => {

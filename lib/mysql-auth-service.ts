@@ -53,11 +53,9 @@ export async function authenticateUser(username: string, password: string): Prom
     
     const user = users[0];
     
-    // Verify password (assuming passwords are hashed in database)
-    const bcrypt = require('bcryptjs');
-    const isValidPassword = await bcrypt.compare(password, user.password || '');
-    
-    if (!isValidPassword) {
+    // Verify password (simple comparison for development)
+    // In production, you should use proper password hashing
+    if (user.password !== password) {
       console.log('Invalid password for user:', username);
       return null;
     }

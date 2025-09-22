@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import './globals.css'
@@ -19,7 +19,6 @@ export const metadata: Metadata = {
       { url: '/logo-512.png', sizes: '512x512', type: 'image/png' },
     ],
   },
-  themeColor: '#1e40af',
   manifest: '/site.webmanifest',
   appleWebApp: {
     capable: true,
@@ -47,6 +46,10 @@ export const metadata: Metadata = {
     description: 'Advanced sales analytics and management platform',
     images: ['/og-image.png'],
   },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#1e40af',
 }
 
 export default function RootLayout({

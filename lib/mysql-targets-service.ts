@@ -1,4 +1,5 @@
-import { apiService, SalesTarget } from './api-service';
+import { directMySQLService } from './direct-mysql-service';
+import { SalesTarget } from './api-service';
 
 export interface TargetsService {
   createTarget: (targetData: Omit<SalesTarget, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
@@ -16,7 +17,10 @@ class MySQLTargetsService implements TargetsService {
 
   async createTarget(targetData: Omit<SalesTarget, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
-      const result = await apiService.createSalesTarget(targetData);
+      const result = await directMySQLService.makeDirectRequest('targets', {
+        method: 'POST',
+        body: JSON.stringify(targetData)
+      });
       
       // Trigger listeners
       this.notifyListeners();
@@ -30,7 +34,10 @@ class MySQLTargetsService implements TargetsService {
 
   async updateTarget(id: string, updates: Partial<SalesTarget>): Promise<void> {
     try {
-      await apiService.updateSalesTarget(id, updates);
+      await directMySQLService.makeDirectRequest(`targets?id=${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates)
+      });
       
       // Trigger listeners
       this.notifyListeners();
@@ -42,7 +49,9 @@ class MySQLTargetsService implements TargetsService {
 
   async deleteTarget(id: string): Promise<void> {
     try {
-      await apiService.deleteSalesTarget(id);
+      await directMySQLService.makeDirectRequest(`targets?id=${id}`, {
+        method: 'DELETE'
+      });
       
       // Trigger listeners
       this.notifyListeners();
@@ -64,11 +73,8 @@ class MySQLTargetsService implements TargetsService {
         queryFilters.period = filters.period;
       }
       
-      if (filters?.managerId) {
-        queryFilters.managerId = filters.managerId;
-      }
-      
-      const targets = await apiService.getSalesTargets(queryFilters);
+      const response = await directMySQLService.getTargets(filters);
+      const targets = Array.isArray(response) ? response : (response.targets || []);
       return targets;
     } catch (error) {
       console.error('Error fetching targets:', error);
@@ -78,7 +84,7 @@ class MySQLTargetsService implements TargetsService {
 
   async getTargetById(id: string): Promise<SalesTarget | null> {
     try {
-      const targets = await apiService.getSalesTargets({ id });
+      const targets = await directMySQLService.getTargets({ id });
       return targets.length > 0 ? targets[0] : null;
     } catch (error) {
       console.error('Error fetching target by ID:', error);
@@ -94,7 +100,7 @@ class MySQLTargetsService implements TargetsService {
       }
 
       // Get deals for this agent in the target period
-      const deals = await apiService.getDeals({
+      const deals = await directMySQLService.getDeals({
         salesAgentId: target.agentId,
         // Note: You might want to add period filtering in the API
       });

@@ -1,4 +1,4 @@
-import { apiService } from './api-service';
+import { directMySQLService } from './direct-mysql-service';
 
 export interface Notification {
   id: string;
@@ -63,7 +63,8 @@ class MySQLNotificationService implements NotificationService {
         filters.to = userId; // This will use JSON_CONTAINS in the API
       }
       
-      const notifications = await apiService.getNotifications(filters);
+      const response = await directMySQLService.getNotifications(filters);
+      const notifications = Array.isArray(response) ? response : (response.notifications || []);
       
       return notifications.map(this.mapNotification).filter(notification => {
         // Additional filtering logic
@@ -111,7 +112,7 @@ class MySQLNotificationService implements NotificationService {
         userRole: notification.userRole
       };
 
-      const result = await apiService.createNotification(notificationData);
+      const result = await directMySQLService.createNotification(notificationData);
       
       // Trigger listeners
       this.notifyListeners();
@@ -125,7 +126,10 @@ class MySQLNotificationService implements NotificationService {
 
   async markAsRead(id: string): Promise<void> {
     try {
-      await apiService.updateNotification(id, { isRead: true });
+      await directMySQLService.makeDirectRequest(`notifications-api.php?id=${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isRead: true })
+      });
       
       // Trigger listeners
       this.notifyListeners();
@@ -144,7 +148,10 @@ class MySQLNotificationService implements NotificationService {
       // Mark each as read
       await Promise.all(
         unreadNotifications.map(notification => 
-          apiService.updateNotification(notification.id, { isRead: true })
+          directMySQLService.makeDirectRequest(`notifications-api.php?id=${notification.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ isRead: true })
+          })
         )
       );
       

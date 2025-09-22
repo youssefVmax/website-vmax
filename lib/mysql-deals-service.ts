@@ -1,4 +1,4 @@
-import { apiService, Deal } from './api-service';
+import { directMySQLService } from './direct-mysql-service';
 import { databaseService } from './mysql-database-service';
 
 export interface DealsService {
@@ -60,10 +60,10 @@ class MySQLDealsService implements DealsService {
   async updateDeal(id: string, updates: Partial<Deal>, updatedBy?: any): Promise<void> {
     try {
       // Get old deal for history tracking
-      const oldDeals = await apiService.getDeals({ id });
+      const oldDeals = await directMySQLService.getDeals({ id });
       const oldDeal = oldDeals.length > 0 ? oldDeals[0] : null;
 
-      await apiService.updateDeal(id, updates);
+      await directMySQLService.updateDeal(id, updates);
 
       // Log deal history if significant changes
       if (oldDeal && updatedBy) {
@@ -102,7 +102,7 @@ class MySQLDealsService implements DealsService {
 
   async deleteDeal(id: string): Promise<void> {
     try {
-      await apiService.deleteDeal(id);
+      await directMySQLService.deleteDeal(id);
       
       // Trigger listeners
       this.notifyListeners();
@@ -114,7 +114,7 @@ class MySQLDealsService implements DealsService {
 
   async getDealsByAgent(agentId: string): Promise<Deal[]> {
     try {
-      const deals = await apiService.getDeals({ salesAgentId: agentId });
+      const deals = await directMySQLService.getDeals({ salesAgentId: agentId });
       return deals;
     } catch (error) {
       console.error('Error fetching deals by agent:', error);
@@ -124,7 +124,7 @@ class MySQLDealsService implements DealsService {
 
   async getDealsByTeam(team: string): Promise<Deal[]> {
     try {
-      const deals = await apiService.getDeals({ salesTeam: team });
+      const deals = await directMySQLService.getDeals({ salesTeam: team });
       return deals;
     } catch (error) {
       console.error('Error fetching deals by team:', error);
@@ -175,7 +175,8 @@ class MySQLDealsService implements DealsService {
       }
       // Managers can see all deals (no filters)
       
-      const deals = await apiService.getDeals(filters);
+      const response = await directMySQLService.getDeals(filters);
+      const deals = Array.isArray(response) ? response : (response.deals || []);
       return deals;
     } catch (error) {
       console.error('Error fetching deals:', error);
@@ -185,7 +186,7 @@ class MySQLDealsService implements DealsService {
 
   async getDealById(id: string): Promise<Deal | null> {
     try {
-      const deals = await apiService.getDeals({ id });
+      const deals = await directMySQLService.getDeals({ id });
       return deals.length > 0 ? deals[0] : null;
     } catch (error) {
       console.error('Error fetching deal by ID:', error);

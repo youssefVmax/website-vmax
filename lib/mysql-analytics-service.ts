@@ -57,22 +57,40 @@ export interface CallbackFilters {
   team?: string;
 }
 
+import { directMySQLService } from './direct-mysql-service';
+
 export class MySQLAnalyticsService {
-  private baseUrl = '/api/analytics-api.php';
-
   private async fetchAnalytics(endpoint: string, params: Record<string, any> = {}): Promise<any> {
-    const queryParams = new URLSearchParams({
-      endpoint,
-      ...Object.fromEntries(
-        Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
-      )
-    });
+    try {
+      const queryParams = new URLSearchParams({
+        endpoint,
+        ...Object.fromEntries(
+          Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
+        )
+      });
 
-    const response = await fetch(`${this.baseUrl}?${queryParams}`);
-    if (!response.ok) {
-      throw new Error(`Analytics API error: ${response.statusText}`);
+      console.log(`🔍 Analytics request: ${endpoint} with params:`, params);
+      
+      if (endpoint === 'dashboard-stats') {
+        return await directMySQLService.getDashboardStats();
+      } else if (endpoint === 'callback-kpis') {
+        const filters: Record<string, string> = {};
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            filters[key] = String(value);
+          }
+        });
+        return await directMySQLService.getAnalytics(filters);
+      }
+      
+      // Fallback to direct MySQL service
+      return await directMySQLService.makeDirectRequest(`analytics-api.php?${queryParams}`, {
+        method: 'GET'
+      });
+    } catch (error) {
+      console.error(`Analytics fetch error for ${endpoint}:`, error);
+      throw error;
     }
-    return response.json();
   }
 
   async getSalesKPIs(filters: CallbackFilters = {}): Promise<SalesKPIs> {
