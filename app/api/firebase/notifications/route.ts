@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://vmaxcom.org';
+const API_BASE_URL = 'http://vmaxcom.org';
 
 async function callMySQLAPI(endpoint: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}/api/notifications-api.php${endpoint}`;
