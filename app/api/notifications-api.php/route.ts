@@ -15,69 +15,33 @@ export async function OPTIONS(request: NextRequest) {
   return addCorsHeaders(response);
 }
 
+const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://vmaxcom.org').replace(/\/$/, '');
+
 // Proxy requests to the PHP notifications API
 export async function GET(request: NextRequest) {
   try {
-    // For development, return mock data
-    if (process.env.NODE_ENV === 'development') {
-      const response = NextResponse.json({
-        notifications: [
-          {
-            id: 1,
-            title: 'New Deal Created',
-            message: 'ABC Corporation deal worth $5,000 has been created',
-            type: 'deal',
-            status: 'unread',
-            created_at: '2024-01-19 14:30:00',
-            user_id: 'manager'
-          },
-          {
-            id: 2,
-            title: 'Callback Completed',
-            message: 'Jane Smith callback has been completed successfully',
-            type: 'callback',
-            status: 'read',
-            created_at: '2024-01-19 09:15:00',
-            user_id: 'sales_agent_1'
-          },
-          {
-            id: 3,
-            title: 'Target Achievement',
-            message: 'You have achieved 65% of your monthly target',
-            type: 'target',
-            status: 'unread',
-            created_at: '2024-01-19 08:00:00',
-            user_id: 'manager'
-          },
-          {
-            id: 4,
-            title: 'New Callback Assigned',
-            message: 'High priority callback from Mike Johnson has been assigned to you',
-            type: 'callback',
-            status: 'unread',
-            created_at: '2024-01-18 15:45:00',
-            user_id: 'manager'
-          }
-        ]
-      });
-      return addCorsHeaders(response);
-    }
-
-    // In production, proxy to the actual PHP API
     const { searchParams } = new URL(request.url);
     const queryString = searchParams.toString();
-    const phpApiUrl = `http://vmaxcom.org/api/notifications-api.php${queryString ? '?' + queryString : ''}`;
-    
-    const fetchResponse = await fetch(phpApiUrl);
-    const data = await fetchResponse.json();
+    const phpApiUrl = `${BASE_URL}/api/notifications-api.php${queryString ? '?' + queryString : ''}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const fetchResponse = await fetch(phpApiUrl, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    clearTimeout(timeout);
 
-    const response = NextResponse.json(data);
+    if (!fetchResponse.ok) {
+      throw new Error(`Notifications API responded with status: ${fetchResponse.status}`);
+    }
+
+    let data: any;
+    try { data = await fetchResponse.json(); } catch { data = { success: true }; }
+
+    const response = NextResponse.json({ ...data, success: data?.success !== false });
     return addCorsHeaders(response);
   } catch (error) {
     console.error('Notifications API error:', error);
     const response = NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { success: false, error: 'Internal server error' },
+      { status: 502 }
     );
     return addCorsHeaders(response);
   }
@@ -86,71 +50,59 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-
-    // For development, return success response
-    if (process.env.NODE_ENV === 'development') {
-      const response = NextResponse.json({
-        success: true,
-        message: 'Notification created successfully',
-        notification: {
-          id: Date.now(),
-          ...body,
-          created_at: new Date().toISOString(),
-          status: 'unread'
-        }
-      });
-      return addCorsHeaders(response);
-    }
-
-    // In production, proxy to the actual PHP API
-    const response = await fetch('http://vmaxcom.org/api/notifications-api.php', {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(`${BASE_URL}/api/notifications-api.php`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`Notifications API responded with status: ${response.status}`);
+    }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    return addCorsHeaders(NextResponse.json({ ...data, success: data?.success !== false }));
   } catch (error) {
     console.error('Notifications API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return addCorsHeaders(NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 502 }
+    ));
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-
-    // For development, return success response
-    if (process.env.NODE_ENV === 'development') {
-      const response = NextResponse.json({
-        success: true,
-        message: 'Notification updated successfully'
-      });
-      return addCorsHeaders(response);
-    }
-
-    // In production, proxy to the actual PHP API
-    const response = await fetch('http://vmaxcom.org/api/notifications-api.php', {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(`${BASE_URL}/api/notifications-api.php`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`Notifications API responded with status: ${response.status}`);
+    }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    return addCorsHeaders(NextResponse.json({ ...data, success: data?.success !== false }));
   } catch (error) {
     console.error('Notifications API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return addCorsHeaders(NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 502 }
+    ));
   }
 }

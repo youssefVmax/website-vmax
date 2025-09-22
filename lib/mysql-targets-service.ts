@@ -65,15 +65,17 @@ class MySQLTargetsService implements TargetsService {
     try {
       const queryFilters: Record<string, string> = {};
       
-      if (filters?.agentId) {
-        queryFilters.agentId = filters.agentId;
+      // Support both legacy and new filter keys
+      if (filters?.agentId || filters?.salesAgentId) {
+        queryFilters.agentId = (filters.agentId || filters.salesAgentId) as string;
       }
       
-      if (filters?.period) {
-        queryFilters.period = filters.period;
+      if (filters?.period || filters?.month) {
+        // Backend expects 'period' (e.g., YYYY-MM)
+        queryFilters.period = (filters.period || filters.month) as string;
       }
       
-      const response = await directMySQLService.getTargets(filters);
+      const response = await directMySQLService.getTargets(queryFilters);
       const targets = Array.isArray(response) ? response : (response.targets || []);
       return targets;
     } catch (error) {
@@ -99,29 +101,37 @@ class MySQLTargetsService implements TargetsService {
         throw new Error('Target not found');
       }
 
-      // Get deals for this agent in the target period
+      // Normalize target fields (support both legacy and new schema)
+      const agentId = (target as any).agentId || (target as any).salesAgentId;
+      const targetRevenue = (target as any).monthlyTarget ?? (target as any).targetAmount ?? 0;
+      const targetDeals = (target as any).dealsTarget ?? (target as any).targetDeals ?? 0;
+      const period = (target as any).period || (target as any).month || '';
+
+      // Get deals for this agent, optionally period filter can be added at API later
       const deals = await directMySQLService.getDeals({
-        salesAgentId: target.agentId,
-        // Note: You might want to add period filtering in the API
+        salesAgentId: agentId,
       });
 
       // Calculate progress
-      const currentRevenue = deals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0);
+      const currentRevenue = deals.reduce(
+        (sum: number, deal: any) => sum + (deal.amountPaid ?? deal.amount ?? 0),
+        0
+      );
       const currentDeals = deals.length;
       
-      const revenueProgress = target.monthlyTarget > 0 ? (currentRevenue / target.monthlyTarget) * 100 : 0;
-      const dealsProgress = target.dealsTarget > 0 ? (currentDeals / target.dealsTarget) * 100 : 0;
+      const revenueProgress = targetRevenue > 0 ? (currentRevenue / targetRevenue) * 100 : 0;
+      const dealsProgress = targetDeals > 0 ? (currentDeals / targetDeals) * 100 : 0;
       
-      const remainingRevenue = Math.max(0, target.monthlyTarget - currentRevenue);
-      const remainingDeals = Math.max(0, target.dealsTarget - currentDeals);
+      const remainingRevenue = Math.max(0, targetRevenue - currentRevenue);
+      const remainingDeals = Math.max(0, targetDeals - currentDeals);
       
       return {
-        targetId: target.id,
-        agentId: target.agentId,
-        agentName: target.agentName,
-        period: target.period,
-        monthlyTarget: target.monthlyTarget,
-        dealsTarget: target.dealsTarget,
+        targetId: (target as any).id,
+        agentId,
+        agentName: (target as any).agentName || (target as any).salesAgentName,
+        period,
+        monthlyTarget: targetRevenue,
+        dealsTarget: targetDeals,
         currentRevenue,
         currentDeals,
         revenueProgress,
@@ -194,11 +204,17 @@ class MySQLTargetsService implements TargetsService {
       const targets = await this.getTargets(filters);
       
       const analytics = await Promise.all(
-        targets.map(target => this.getTargetProgress(target.id))
+        targets.map((target: any) => this.getTargetProgress(target.id))
       );
       
-      const totalTargetRevenue = targets.reduce((sum, target) => sum + target.monthlyTarget, 0);
-      const totalTargetDeals = targets.reduce((sum, target) => sum + target.dealsTarget, 0);
+      const totalTargetRevenue = targets.reduce(
+        (sum: number, target: any) => sum + (target.monthlyTarget ?? target.targetAmount ?? 0),
+        0
+      );
+      const totalTargetDeals = targets.reduce(
+        (sum: number, target: any) => sum + (target.dealsTarget ?? target.targetDeals ?? 0),
+        0
+      );
       const totalCurrentRevenue = analytics.reduce((sum, progress) => sum + progress.currentRevenue, 0);
       const totalCurrentDeals = analytics.reduce((sum, progress) => sum + progress.currentDeals, 0);
       

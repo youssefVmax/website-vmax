@@ -1,28 +1,24 @@
 import { NextRequest } from 'next/server'
-import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { query } from '../../../../lib/server/db'
 
 async function getNotifications(userId: string | null, role: string | null) {
   try {
-    const notificationsRef = collection(db, 'notifications')
+    const where: string[] = [];
+    const params: any[] = [];
     
     // If not manager, only get notifications for this user
     if (role !== 'manager' && userId) {
-      const q = query(notificationsRef, where('userId', '==', userId))
-      const querySnapshot = await getDocs(q)
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      where.push('`salesAgentId` = ?');
+      params.push(userId);
     }
     
-    // For managers or when no userId, get all notifications
-    const querySnapshot = await getDocs(notificationsRef)
-    const notifications = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
-    return notifications
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const [rows] = await query<any>(
+      `SELECT * FROM \`notifications\` ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC LIMIT 50`,
+      params
+    );
+    
+    return rows;
   } catch (error) {
     console.error('Error reading notifications:', error)
     return []

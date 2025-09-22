@@ -3,38 +3,40 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
 require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/mysql-service.php';
+require_once __DIR__ . '/db.php'; // Use DB wrapper that exposes query()
 
 $method = $_SERVER['REQUEST_METHOD'];
 $endpoint = $_GET['endpoint'] ?? '';
 
 try {
-    $mysqlService = new MySQLService();
-    
+    $db = getDB();
     switch ($endpoint) {
         case 'sales-kpis':
-            handleSalesKPIs($mysqlService);
+            handleSalesKPIs($db);
             break;
         case 'callback-kpis':
-            handleCallbackKPIs($mysqlService);
+            handleCallbackKPIs($db);
             break;
         case 'dashboard-stats':
-            handleDashboardStats($mysqlService);
+            handleDashboardStats($db);
             break;
         case 'agent-performance':
-            handleAgentPerformance($mysqlService);
+            handleAgentPerformance($db);
             break;
         case 'revenue-analytics':
-            handleRevenueAnalytics($mysqlService);
+            handleRevenueAnalytics($db);
             break;
         case 'conversion-metrics':
-            handleConversionMetrics($mysqlService);
+            handleConversionMetrics($db);
             break;
         default:
             throw new Exception('Invalid endpoint');
@@ -44,7 +46,7 @@ try {
     echo json_encode(['error' => $e->getMessage()]);
 }
 
-function handleSalesKPIs($mysqlService) {
+function handleSalesKPIs($db) {
     $userRole = $_GET['user_role'] ?? 'salesman';
     $userId = $_GET['user_id'] ?? null;
     $dateRange = $_GET['date_range'] ?? 'month';
@@ -53,82 +55,75 @@ function handleSalesKPIs($mysqlService) {
     $dateCondition = getDateCondition($dateRange);
     $roleCondition = getRoleCondition($userRole, $userId, $team);
     
-    // Total sales and deals
+    // Total sales and deals (align with schema)
     $totalQuery = "SELECT 
         COUNT(*) as total_deals,
-        COALESCE(SUM(amount), 0) as total_revenue,
-        COALESCE(AVG(amount), 0) as avg_deal_size,
-        COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_deals,
+        COALESCE(SUM(amount_paid), 0) as total_revenue,
+        COALESCE(AVG(amount_paid), 0) as avg_deal_size,
+        COUNT(CASE WHEN status = 'closed' OR status = 'closed_won' THEN 1 END) as closed_deals,
         COUNT(CASE WHEN status = 'active' THEN 1 END) as active_deals,
         COUNT(CASE WHEN DATE(created_at) = CURDATE() THEN 1 END) as today_deals,
-        COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN amount ELSE 0 END), 0) as today_revenue
+        COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN amount_paid ELSE 0 END), 0) as today_revenue
         FROM deals 
         WHERE 1=1 $dateCondition $roleCondition";
     
-    $totals = $mysqlService->query($totalQuery)[0];
+    $totals = $db->query($totalQuery)[0];
     
     // Sales by agent
     $agentQuery = "SELECT 
-        sales_agent as agent,
+        COALESCE(u.name, d.SalesAgentID) as agent,
         COUNT(*) as deals,
-        COALESCE(SUM(amount), 0) as revenue,
-        COALESCE(AVG(amount), 0) as avg_deal_size,
-        COUNT(CASE WHEN status = 'closed' THEN 1 END) as conversions
-        FROM deals 
+        COALESCE(SUM(d.amount_paid), 0) as revenue,
+        COALESCE(AVG(d.amount_paid), 0) as avg_deal_size,
+        COUNT(CASE WHEN d.status = 'closed' OR d.status = 'closed_won' THEN 1 END) as conversions
+        FROM deals d
+        LEFT JOIN users u ON d.SalesAgentID = u.id
         WHERE 1=1 $dateCondition $roleCondition
-        GROUP BY sales_agent 
+        GROUP BY COALESCE(u.name, d.SalesAgentID)
         ORDER BY revenue DESC";
     
-    $salesByAgent = $mysqlService->query($agentQuery);
+    $salesByAgent = $db->query($agentQuery);
     
     // Daily trend (last 30 days)
     $trendQuery = "SELECT 
         DATE(created_at) as date,
         COUNT(*) as deals,
-        COALESCE(SUM(amount), 0) as revenue,
-        COUNT(CASE WHEN status = 'closed' THEN 1 END) as conversions
+        COALESCE(SUM(amount_paid), 0) as revenue,
+        COUNT(CASE WHEN status = 'closed' OR status = 'closed_won' THEN 1 END) as conversions
         FROM deals 
         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) $roleCondition
         GROUP BY DATE(created_at) 
         ORDER BY date ASC";
     
-    $dailyTrend = $mysqlService->query($trendQuery);
+    $dailyTrend = $db->query($trendQuery);
     
     // Monthly trend (last 12 months)
     $monthlyQuery = "SELECT 
         DATE_FORMAT(created_at, '%Y-%m') as month,
         COUNT(*) as deals,
-        COALESCE(SUM(amount), 0) as revenue,
-        COUNT(CASE WHEN status = 'closed' THEN 1 END) as conversions
+        COALESCE(SUM(amount_paid), 0) as revenue,
+        COUNT(CASE WHEN status = 'closed' OR status = 'closed_won' THEN 1 END) as conversions
         FROM deals 
         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH) $roleCondition
         GROUP BY DATE_FORMAT(created_at, '%Y-%m') 
         ORDER BY month ASC";
     
-    $monthlyTrend = $mysqlService->query($monthlyQuery);
+    $monthlyTrend = $db->query($monthlyQuery);
     
     // Sales by service/program
     $serviceQuery = "SELECT 
-        service,
+        service_tier as service,
         COUNT(*) as deals,
-        COALESCE(SUM(amount), 0) as revenue
+        COALESCE(SUM(amount_paid), 0) as revenue
         FROM deals 
         WHERE 1=1 $dateCondition $roleCondition
-        GROUP BY service 
+        GROUP BY service_tier 
         ORDER BY revenue DESC";
     
-    $salesByService = $mysqlService->query($serviceQuery);
+    $salesByService = $db->query($serviceQuery);
     
-    $programQuery = "SELECT 
-        program,
-        COUNT(*) as deals,
-        COALESCE(SUM(amount), 0) as revenue
-        FROM deals 
-        WHERE 1=1 $dateCondition $roleCondition
-        GROUP BY program 
-        ORDER BY revenue DESC";
-    
-    $salesByProgram = $mysqlService->query($programQuery);
+    // If there is no 'program' column in deals, return empty array safely
+    $salesByProgram = [];
     
     // Recent deals
     $recentQuery = "SELECT * FROM deals 
@@ -136,7 +131,7 @@ function handleSalesKPIs($mysqlService) {
         ORDER BY created_at DESC 
         LIMIT 10";
     
-    $recentDeals = $mysqlService->query($recentQuery);
+    $recentDeals = $db->query($recentQuery);
     
     echo json_encode([
         'totals' => $totals,
@@ -149,7 +144,7 @@ function handleSalesKPIs($mysqlService) {
     ]);
 }
 
-function handleCallbackKPIs($mysqlService) {
+function handleCallbackKPIs($db) {
     $userRole = $_GET['user_role'] ?? 'salesman';
     $userId = $_GET['user_id'] ?? null;
     $dateRange = $_GET['date_range'] ?? 'month';
@@ -171,7 +166,7 @@ function handleCallbackKPIs($mysqlService) {
         FROM callbacks 
         WHERE 1=1 $dateCondition $roleCondition";
     
-    $totals = $mysqlService->query($totalQuery)[0];
+    $totals = $db->query($totalQuery)[0];
     
     // Calculate conversion rate
     $totals['conversion_rate'] = $totals['total_callbacks'] > 0 
@@ -194,7 +189,7 @@ function handleCallbackKPIs($mysqlService) {
         GROUP BY created_by 
         ORDER BY callbacks DESC";
     
-    $callbacksByAgent = $mysqlService->query($agentQuery);
+    $callbacksByAgent = $db->query($agentQuery);
     
     // Add conversion rates
     foreach ($callbacksByAgent as &$agent) {
@@ -214,7 +209,7 @@ function handleCallbackKPIs($mysqlService) {
         GROUP BY DATE(created_at) 
         ORDER BY date ASC";
     
-    $dailyTrend = $mysqlService->query($trendQuery);
+    $dailyTrend = $db->query($trendQuery);
     
     // Status distribution
     $statusQuery = "SELECT 
@@ -226,7 +221,7 @@ function handleCallbackKPIs($mysqlService) {
         GROUP BY status 
         ORDER BY count DESC";
     
-    $statusDistribution = $mysqlService->query($statusQuery);
+    $statusDistribution = $db->query($statusQuery);
     
     // Priority breakdown
     $priorityQuery = "SELECT 
@@ -243,7 +238,7 @@ function handleCallbackKPIs($mysqlService) {
                 ELSE 4 
             END";
     
-    $priorityBreakdown = $mysqlService->query($priorityQuery);
+    $priorityBreakdown = $db->query($priorityQuery);
     
     // Recent callbacks
     $recentQuery = "SELECT * FROM callbacks 
@@ -251,7 +246,7 @@ function handleCallbackKPIs($mysqlService) {
         ORDER BY created_at DESC 
         LIMIT 10";
     
-    $recentCallbacks = $mysqlService->query($recentQuery);
+    $recentCallbacks = $db->query($recentQuery);
     
     // Response time metrics
     $responseQuery = "SELECT 
@@ -261,7 +256,7 @@ function handleCallbackKPIs($mysqlService) {
         FROM callbacks 
         WHERE status != 'pending' AND updated_at IS NOT NULL $dateCondition $roleCondition";
     
-    $responseMetrics = $mysqlService->query($responseQuery)[0] ?? [
+    $responseMetrics = $db->query($responseQuery)[0] ?? [
         'avg_hours' => 0, 'fastest_hours' => 0, 'slowest_hours' => 0
     ];
     
@@ -276,7 +271,7 @@ function handleCallbackKPIs($mysqlService) {
     ]);
 }
 
-function handleDashboardStats($mysqlService) {
+function handleDashboardStats($db) {
     $userRole = $_GET['user_role'] ?? 'salesman';
     $userId = $_GET['user_id'] ?? null;
     $team = $_GET['team'] ?? null;
@@ -287,19 +282,21 @@ function handleDashboardStats($mysqlService) {
     // Quick stats for dashboard
     $statsQuery = "SELECT 
         (SELECT COUNT(*) FROM deals WHERE 1=1 $roleCondition) as total_deals,
-        (SELECT COALESCE(SUM(amount), 0) FROM deals WHERE 1=1 $roleCondition) as total_revenue,
+        (SELECT COALESCE(SUM(amount_paid), 0) FROM deals WHERE 1=1 $roleCondition) as total_revenue,
         (SELECT COUNT(*) FROM deals WHERE DATE(created_at) = CURDATE() $roleCondition) as today_deals,
-        (SELECT COALESCE(SUM(amount), 0) FROM deals WHERE DATE(created_at) = CURDATE() $roleCondition) as today_revenue,
+        (SELECT COALESCE(SUM(amount_paid), 0) FROM deals WHERE DATE(created_at) = CURDATE() $roleCondition) as today_revenue,
         (SELECT COUNT(*) FROM callbacks WHERE 1=1 $callbackRoleCondition) as total_callbacks,
         (SELECT COUNT(*) FROM callbacks WHERE status = 'pending' $callbackRoleCondition) as pending_callbacks,
+        (SELECT COUNT(*) FROM callbacks WHERE status = 'completed' $callbackRoleCondition) as completed_callbacks,
+        (SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) FROM callbacks WHERE status != 'pending' AND updated_at IS NOT NULL $callbackRoleCondition) as avg_response_time,
         (SELECT COUNT(*) FROM callbacks WHERE DATE(created_at) = CURDATE() $callbackRoleCondition) as today_callbacks";
     
-    $stats = $mysqlService->query($statsQuery)[0];
+    $stats = $db->query($statsQuery)[0];
     
     echo json_encode($stats);
 }
 
-function handleAgentPerformance($mysqlService) {
+function handleAgentPerformance($db) {
     $userRole = $_GET['user_role'] ?? 'manager';
     $dateRange = $_GET['date_range'] ?? 'month';
     $team = $_GET['team'] ?? null;
@@ -309,15 +306,16 @@ function handleAgentPerformance($mysqlService) {
     
     // Agent performance metrics
     $performanceQuery = "SELECT 
-        d.sales_agent as agent,
+        COALESCE(u.name, d.SalesAgentID) as agent,
         COUNT(d.id) as total_deals,
-        COALESCE(SUM(d.amount), 0) as total_revenue,
-        COALESCE(AVG(d.amount), 0) as avg_deal_size,
-        COUNT(CASE WHEN d.status = 'closed' THEN 1 END) as closed_deals,
+        COALESCE(SUM(d.amount_paid), 0) as total_revenue,
+        COALESCE(AVG(d.amount_paid), 0) as avg_deal_size,
+        COUNT(CASE WHEN d.status = 'closed' OR d.status = 'closed_won' THEN 1 END) as closed_deals,
         COALESCE(c.callback_count, 0) as total_callbacks,
         COALESCE(c.completed_callbacks, 0) as completed_callbacks,
         COALESCE(c.avg_response_time, 0) as avg_response_time
         FROM deals d
+        LEFT JOIN users u ON d.SalesAgentID = u.id
         LEFT JOIN (
             SELECT 
                 created_by,
@@ -331,12 +329,12 @@ function handleAgentPerformance($mysqlService) {
             FROM callbacks 
             WHERE 1=1 $dateCondition
             GROUP BY created_by
-        ) c ON d.sales_agent = c.created_by
+        ) c ON COALESCE(u.username, d.SalesAgentID) = c.created_by
         WHERE 1=1 $dateCondition $roleCondition
-        GROUP BY d.sales_agent
+        GROUP BY COALESCE(u.name, d.SalesAgentID)
         ORDER BY total_revenue DESC";
     
-    $performance = $mysqlService->query($performanceQuery);
+    $performance = $db->query($performanceQuery);
     
     // Add calculated metrics
     foreach ($performance as &$agent) {
@@ -351,7 +349,7 @@ function handleAgentPerformance($mysqlService) {
     echo json_encode($performance);
 }
 
-function handleRevenueAnalytics($mysqlService) {
+function handleRevenueAnalytics($db) {
     $userRole = $_GET['user_role'] ?? 'manager';
     $userId = $_GET['user_id'] ?? null;
     $team = $_GET['team'] ?? null;
@@ -361,28 +359,28 @@ function handleRevenueAnalytics($mysqlService) {
     // Revenue by time periods
     $revenueQuery = "SELECT 
         'today' as period,
-        COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN amount ELSE 0 END), 0) as revenue,
+        COALESCE(SUM(CASE WHEN DATE(created_at) = CURDATE() THEN amount_paid ELSE 0 END), 0) as revenue,
         COUNT(CASE WHEN DATE(created_at) = CURDATE() THEN 1 END) as deals
         FROM deals WHERE 1=1 $roleCondition
         UNION ALL
         SELECT 
         'week' as period,
-        COALESCE(SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN amount ELSE 0 END), 0) as revenue,
+        COALESCE(SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN amount_paid ELSE 0 END), 0) as revenue,
         COUNT(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) as deals
         FROM deals WHERE 1=1 $roleCondition
         UNION ALL
         SELECT 
         'month' as period,
-        COALESCE(SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN amount ELSE 0 END), 0) as revenue,
+        COALESCE(SUM(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN amount_paid ELSE 0 END), 0) as revenue,
         COUNT(CASE WHEN created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 END) as deals
         FROM deals WHERE 1=1 $roleCondition";
     
-    $revenueByPeriod = $mysqlService->query($revenueQuery);
+    $revenueByPeriod = $db->query($revenueQuery);
     
     echo json_encode($revenueByPeriod);
 }
 
-function handleConversionMetrics($mysqlService) {
+function handleConversionMetrics($db) {
     $userRole = $_GET['user_role'] ?? 'manager';
     $userId = $_GET['user_id'] ?? null;
     $team = $_GET['team'] ?? null;
@@ -398,7 +396,7 @@ function handleConversionMetrics($mysqlService) {
         (SELECT COUNT(*) FROM callbacks WHERE converted_to_deal = 1 $callbackRoleCondition) as converted_to_deals,
         (SELECT COUNT(*) FROM deals WHERE status = 'closed' $roleCondition) as closed_deals";
     
-    $metrics = $mysqlService->query($conversionQuery)[0];
+    $metrics = $db->query($conversionQuery)[0];
     
     // Calculate conversion rates
     $metrics['contact_rate'] = $metrics['total_callbacks'] > 0 
@@ -438,18 +436,20 @@ function getRoleCondition($userRole, $userId = null, $team = null, $table = 'dea
         // Managers see all data
         return $condition;
     } elseif ($userRole === 'team-leader' && $team) {
-        // Team leaders see their team's data
+        // Team leaders see their team's data by sales_team / team
         if ($table === 'callbacks') {
-            $condition = " AND created_by IN (SELECT username FROM users WHERE team = '$team')";
+            $condition = " AND sales_team = '" . addslashes($team) . "'";
         } else {
-            $condition = " AND sales_agent IN (SELECT username FROM users WHERE team = '$team')";
+            $condition = " AND sales_team = '" . addslashes($team) . "'";
         }
     } elseif ($userId) {
         // Regular users see only their data
         if ($table === 'callbacks') {
-            $condition = " AND created_by = '$userId'";
+            // Support both numeric id and username stored in callbacks
+            $safeUser = addslashes($userId);
+            $condition = " AND (created_by_id = '" . $safeUser . "' OR created_by = '" . $safeUser . "')";
         } else {
-            $condition = " AND sales_agent = '$userId'";
+            $condition = " AND SalesAgentID = '" . addslashes($userId) . "'";
         }
     }
     

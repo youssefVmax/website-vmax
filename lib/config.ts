@@ -1,7 +1,11 @@
 // API Configuration
+// IMPORTANT: Next.js dev server (http://localhost:3000) cannot execute PHP files.
+// Point BASE_URL to a PHP-capable server. Configure via NEXT_PUBLIC_API_BASE_URL.
+// Examples:
+//  - Public staging: http://vmaxcom.org
+//  - Local XAMPP/WAMP: http://localhost/website-vmax (if your PHP server serves the repo path)
 export const API_CONFIG = {
-  // Base URL for all API requests - use localhost for development
-  BASE_URL: process.env.NODE_ENV === 'production' ? 'http://vmaxcom.org' : 'http://localhost:3000',
+  BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://vmaxcom.org',
   
   // API endpoints
   ENDPOINTS: {

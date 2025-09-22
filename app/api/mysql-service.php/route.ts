@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { query } from '../../../lib/server/db';
+
+// Ensure Node.js runtime for mysql2
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // Add CORS headers to response
 function addCorsHeaders(response: NextResponse) {
@@ -19,104 +24,135 @@ export async function OPTIONS(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const path = searchParams.get('path');
-    const queryString = searchParams.toString();
+    const path = searchParams.get('path') || '';
+    const page = parseInt(searchParams.get('page') || '1', 10) || 1;
+    const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 200);
+    const offset = (page - 1) * limit;
 
-    // Always fetch real-time data from MySQL database
-    const phpApiUrl = `http://vmaxcom.org/api/mysql-service.php?${queryString}`;
-    
-    const fetchResponse = await fetch(phpApiUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      signal: AbortSignal.timeout(10000) // 10 second timeout
-    });
+    let payload: any = {};
 
-    if (!fetchResponse.ok) {
-      throw new Error(`MySQL database responded with status: ${fetchResponse.status}`);
+    switch (path) {
+      case 'deals': {
+        const salesAgentId = searchParams.get('salesAgentId');
+        const salesTeam = searchParams.get('salesTeam') || searchParams.get('team');
+        const status = searchParams.get('status');
+        const params: any[] = [];
+        const where: string[] = [];
+        if (salesAgentId) { where.push('`SalesAgentID` = ?'); params.push(salesAgentId); }
+        if (salesTeam) { where.push('`sales_team` = ?'); params.push(salesTeam); }
+        if (status) { where.push('`status` = ?'); params.push(status); }
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const [rows] = await query<any>(
+          `SELECT * FROM \`deals\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset]
+        );
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`deals\` ${whereSql}`, params);
+        payload = { deals: rows, total: totals[0]?.c || 0, page, limit };
+        break;
+      }
+      case 'callbacks': {
+        const salesAgentId = searchParams.get('salesAgentId') || searchParams.get('SalesAgentID');
+        const salesTeam = searchParams.get('salesTeam') || searchParams.get('team');
+        const status = searchParams.get('status');
+        const params: any[] = [];
+        const where: string[] = [];
+        if (salesAgentId) { where.push('`SalesAgentID` = ?'); params.push(salesAgentId); }
+        if (salesTeam) { where.push('`sales_team` = ?'); params.push(salesTeam); }
+        if (status) { where.push('`status` = ?'); params.push(status); }
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const [rows] = await query<any>(
+          `SELECT * FROM \`callbacks\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset]
+        );
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`callbacks\` ${whereSql}`, params);
+        payload = { callbacks: rows, total: totals[0]?.c || 0, page, limit };
+        break;
+      }
+      case 'targets': {
+        const agentId = searchParams.get('agentId');
+        const params: any[] = [];
+        const where: string[] = [];
+        if (agentId) { where.push('`agentId` = ?'); params.push(agentId); }
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const [rows] = await query<any>(
+          `SELECT * FROM \`targets\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset]
+        );
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`targets\` ${whereSql}`, params);
+        payload = { targets: rows, total: totals[0]?.c || 0, page, limit };
+        break;
+      }
+      case 'notifications': {
+        // Basic list, optionally filter by salesAgentId or userRole
+        const salesAgentId = searchParams.get('salesAgentId');
+        const userRole = searchParams.get('userRole');
+        const params: any[] = [];
+        const where: string[] = [];
+        if (salesAgentId) { where.push('`salesAgentId` = ?'); params.push(salesAgentId); }
+        if (userRole) { where.push('`userRole` = ?'); params.push(userRole); }
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const [rows] = await query<any>(
+          `SELECT * FROM \`notifications\` ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset]
+        );
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`notifications\` ${whereSql}`, params);
+        payload = { notifications: rows, total: totals[0]?.c || 0, page, limit };
+        break;
+      }
+      case 'users': {
+        const role = searchParams.get('role');
+        const team = searchParams.get('team');
+        const id = searchParams.get('id');
+        const params: any[] = [];
+        const where: string[] = [];
+        if (id) { where.push('`id` = ?'); params.push(id); }
+        if (role) { where.push('`role` = ?'); params.push(role); }
+        if (team) { where.push('`team` = ?'); params.push(team); }
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const [rows] = await query<any>(
+          `SELECT * FROM \`users\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          [...params, limit, offset]
+        );
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`users\` ${whereSql}`, params);
+        payload = { users: rows, total: totals[0]?.c || 0, page, limit };
+        break;
+      }
+      default: {
+        payload = { message: 'Specify a valid path parameter', validPaths: ['deals','callbacks','targets','notifications','users'] };
+      }
     }
 
-    const data = await fetchResponse.json();
-    
-    // Add real-time metadata
     const response = NextResponse.json({
-      ...data,
+      ...payload,
+      success: true,
       timestamp: new Date().toISOString(),
-      source: 'mysql_realtime',
-      path: path
+      source: 'next_mysql',
+      path
     });
-    
     return addCorsHeaders(response);
   } catch (error) {
-    console.error('Real-time MySQL Service error:', error);
-    
-    // Return empty data structure instead of placeholder data
-    const response = NextResponse.json({
-      error: 'Failed to fetch real-time data from MySQL',
-      message: error instanceof Error ? error.message : 'Database connection failed',
-      timestamp: new Date().toISOString(),
-      source: 'mysql_error',
-      // Return empty structures based on path
-      deals: [],
-      callbacks: [],
-      targets: [],
-      notifications: [],
-      users: [],
-      total: 0
-    }, { status: 500 });
-    
+    console.error('Next MySQL Service error:', error);
+    const response = NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to fetch data from MySQL',
+        message: error instanceof Error ? error.message : 'Database error',
+        timestamp: new Date().toISOString(),
+        source: 'next_mysql_error',
+        deals: [], callbacks: [], targets: [], notifications: [], users: [], total: 0,
+      },
+      { status: 502 }
+    );
     return addCorsHeaders(response);
   }
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { searchParams } = new URL(request.url);
-    const queryString = searchParams.toString();
-
-    // Always create real data in MySQL database
-    const fetchResponse = await fetch(`http://vmaxcom.org/api/mysql-service.php?${queryString}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      body: JSON.stringify({
-        ...body,
-        timestamp: new Date().toISOString()
-      }),
-      signal: AbortSignal.timeout(15000) // 15 second timeout for creation
-    });
-
-    if (!fetchResponse.ok) {
-      throw new Error(`MySQL database responded with status: ${fetchResponse.status}`);
-    }
-
-    const data = await fetchResponse.json();
-    
-    const response = NextResponse.json({
-      ...data,
-      timestamp: new Date().toISOString(),
-      source: 'mysql_realtime'
-    });
-    
-    return addCorsHeaders(response);
-  } catch (error) {
-    console.error('Real-time MySQL creation error:', error);
-    const response = NextResponse.json(
-      { 
-        error: 'Failed to create data in MySQL',
-        message: error instanceof Error ? error.message : 'Database operation failed',
-        timestamp: new Date().toISOString(),
-        source: 'mysql_error'
-      },
-      { status: 500 }
-    );
-    return addCorsHeaders(response);
-  }
+  // For full Next-only migration, we will implement CREATE/UPDATE/DELETE here.
+  // To avoid partial writes during transition, return 501 for now.
+  const res = NextResponse.json(
+    { success: false, error: 'Not implemented in Next yet. Use specific endpoints or request migration for writes.' },
+    { status: 501 }
+  );
+  return addCorsHeaders(res);
 }

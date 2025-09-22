@@ -1,10 +1,36 @@
-// Direct MySQL Connection Service - Bypasses Next.js API routes
+// Client-side service that calls Next.js API routes (not PHP directly)
+import { API_CONFIG } from './config'
+
 class DirectMySQLService {
-  private baseUrl = 'http://vmaxcom.org/api';
+  // Force all requests through Next.js API on same origin so they show in Network tab
+  // and avoid direct calls to external PHP host.
+  private baseUrl = `/api`;
+
+  // Create a timeout signal that works across browsers
+  private createTimeoutSignal(ms: number): AbortSignal | undefined {
+    try {
+      // AbortSignal.timeout is available in modern browsers/node, but guard just in case
+      // @ts-ignore
+      if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+        // @ts-ignore
+        return AbortSignal.timeout(ms)
+      }
+    } catch {}
+    // Fallback: manual AbortController
+    try {
+      const controller = new AbortController()
+      const id = setTimeout(() => controller.abort(), ms)
+      // Best-effort cleanup when aborted
+      controller.signal.addEventListener('abort', () => clearTimeout(id), { once: true })
+      return controller.signal
+    } catch {
+      return undefined
+    }
+  }
 
   async makeDirectRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
     const url = `${this.baseUrl}/${endpoint}`;
-    
+
     try {
       const response = await fetch(url, {
         headers: {
@@ -14,7 +40,7 @@ class DirectMySQLService {
           ...options.headers,
         },
         ...options,
-        signal: AbortSignal.timeout(10000) // 10 second timeout
+        signal: this.createTimeoutSignal(API_CONFIG.TIMEOUT || 10000),
       });
 
       if (!response.ok) {
@@ -22,11 +48,14 @@ class DirectMySQLService {
       }
 
       const data = await response.json();
-      console.log(`Direct MySQL ${endpoint} response:`, data);
-      
+      // Reduce noisy logs in production; keep in dev for visibility
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Direct MySQL ${endpoint} response:`, data);
+      }
       return data;
     } catch (error) {
-      console.error(`Direct MySQL ${endpoint} error:`, error);
+      // Avoid error overlay spam; warn instead, and include endpoint for context
+      console.warn(`Direct MySQL ${endpoint} error:`, error);
       throw error;
     }
   }

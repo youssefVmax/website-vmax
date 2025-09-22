@@ -8,6 +8,10 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
@@ -25,6 +29,43 @@ class MySQLService {
             $this->conn = $this->db->getConnection();
         } catch (Exception $e) {
             throw new Exception("Database connection failed: " . $e->getMessage());
+        }
+    }
+
+    // Generic query helper used by endpoint wrappers (SELECT with optional bound params)
+    public function query($sql, $params = []) {
+        try {
+            $stmt = $this->conn->prepare($sql);
+            if ($stmt === false) {
+                throw new Exception("Prepare failed: " . $this->conn->error);
+            }
+
+            if (!empty($params)) {
+                $types = '';
+                $bind = [];
+                foreach ($params as $p) {
+                    if (is_int($p)) { $types .= 'i'; }
+                    elseif (is_float($p) || is_double($p)) { $types .= 'd'; }
+                    elseif (is_null($p)) { $types .= 's'; $p = null; }
+                    else { $types .= 's'; }
+                    $bind[] = $p;
+                }
+                $stmt->bind_param($types, ...$bind);
+            }
+
+            if (!$stmt->execute()) {
+                throw new Exception("Execute failed: " . $stmt->error);
+            }
+
+            $result = $stmt->get_result();
+            if ($result) {
+                return $result->fetch_all(MYSQLI_ASSOC);
+            }
+
+            // Non-SELECT statements
+            return [ 'affected_rows' => $stmt->affected_rows ];
+        } catch (Exception $e) {
+            throw new Exception("Query error: " . $e->getMessage());
         }
     }
     
@@ -215,6 +256,20 @@ class MySQLService {
             throw new Exception("Error updating deal: " . $stmt->error);
         }
     }
+
+    public function deleteDeal($id) {
+        $sql = "DELETE FROM deals WHERE id = ?";
+        $stmt = $this->conn->prepare($sql);
+        if ($stmt === false) {
+            throw new Exception("Prepare failed: " . $this->conn->error);
+        }
+        $stmt->bind_param("s", $id);
+        if ($stmt->execute()) {
+            return ['success' => true, 'deleted' => $stmt->affected_rows];
+        } else {
+            throw new Exception("Error deleting deal: " . $stmt->error);
+        }
+    }
     
     // Callbacks Management
     public function getCallbacks($filters = []) {
@@ -373,6 +428,20 @@ class MySQLService {
             return ['success' => true];
         } else {
             throw new Exception("Error updating callback: " . $stmt->error);
+        }
+    }
+
+    public function deleteCallback($id) {
+        $sql = "DELETE FROM callbacks WHERE id = ?";
+        $stmt = $this->conn->prepare($sql);
+        if ($stmt === false) {
+            throw new Exception("Prepare failed: " . $this->conn->error);
+        }
+        $stmt->bind_param("s", $id);
+        if ($stmt->execute()) {
+            return ['success' => true, 'deleted' => $stmt->affected_rows];
+        } else {
+            throw new Exception("Error deleting callback: " . $stmt->error);
         }
     }
     

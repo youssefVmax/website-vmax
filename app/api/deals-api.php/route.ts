@@ -16,29 +16,38 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 // Real-time MySQL deals API - no placeholders
+const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://vmaxcom.org').replace(/\/$/, '');
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const queryString = searchParams.toString();
     
-    // Always fetch from real MySQL database
-    const phpApiUrl = `http://vmaxcom.org/api/deals-api.php${queryString ? '?' + queryString : ''}`;
+    // Fetch from configured PHP host
+    const phpApiUrl = `${BASE_URL}/api/deals-api.php${queryString ? '?' + queryString : ''}`;
     
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const fetchResponse = await fetch(phpApiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      // Add timeout for real-time responsiveness
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      signal: controller.signal
     });
+    clearTimeout(timeout);
 
     if (!fetchResponse.ok) {
       throw new Error(`MySQL API responded with status: ${fetchResponse.status}`);
     }
 
-    const data = await fetchResponse.json();
+    let data: any;
+    try {
+      data = await fetchResponse.json();
+    } catch {
+      data = { success: true };
+    }
     
     // Ensure we return real-time data structure
     const response = NextResponse.json({
@@ -46,6 +55,7 @@ export async function GET(request: NextRequest) {
       total: data.total || 0,
       page: data.page || 1,
       limit: data.limit || 25,
+      success: data?.success !== false,
       timestamp: new Date().toISOString()
     });
     
@@ -56,13 +66,14 @@ export async function GET(request: NextRequest) {
     // Return error with timestamp for debugging
     const response = NextResponse.json(
       { 
+        success: false,
         error: 'Failed to fetch real-time deals data',
         message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
         deals: [], // Empty array instead of placeholder data
         total: 0
       },
-      { status: 500 }
+      { status: 502 }
     );
     return addCorsHeaders(response);
   }
@@ -72,8 +83,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Always create real deal in MySQL database
-    const fetchResponse = await fetch('http://vmaxcom.org/api/deals-api.php', {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const fetchResponse = await fetch(`${BASE_URL}/api/deals-api.php`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -83,8 +95,9 @@ export async function POST(request: NextRequest) {
         ...body,
         timestamp: new Date().toISOString()
       }),
-      signal: AbortSignal.timeout(15000) // 15 second timeout for creation
+      signal: controller.signal
     });
+    clearTimeout(timeout);
 
     if (!fetchResponse.ok) {
       throw new Error(`MySQL API responded with status: ${fetchResponse.status}`);
@@ -94,6 +107,7 @@ export async function POST(request: NextRequest) {
     
     const response = NextResponse.json({
       ...data,
+      success: data?.success !== false,
       timestamp: new Date().toISOString()
     });
     
@@ -102,11 +116,12 @@ export async function POST(request: NextRequest) {
     console.error('Real-time Deal creation error:', error);
     const response = NextResponse.json(
       { 
+        success: false,
         error: 'Failed to create deal in real-time',
         message: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
       },
-      { status: 500 }
+      { status: 502 }
     );
     return addCorsHeaders(response);
   }

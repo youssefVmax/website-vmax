@@ -15,56 +15,33 @@ export async function OPTIONS(request: NextRequest) {
   return addCorsHeaders(response);
 }
 
+const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://vmaxcom.org').replace(/\/$/, '');
+
 // Proxy requests to the PHP callbacks API
 export async function GET(request: NextRequest) {
   try {
-    // For development, return mock data
-    if (process.env.NODE_ENV === 'development') {
-      const response = NextResponse.json({
-        callbacks: [
-          {
-            id: 1,
-            customer_name: 'John Doe',
-            phone: '+1234567890',
-            email: 'john@example.com',
-            status: 'pending',
-            priority: 'high',
-            notes: 'Interested in premium package',
-            created_at: '2024-01-19 10:30:00',
-            created_by: 'manager'
-          },
-          {
-            id: 2,
-            customer_name: 'Jane Smith',
-            phone: '+1234567891',
-            email: 'jane@example.com',
-            status: 'completed',
-            priority: 'medium',
-            notes: 'Called back, deal closed',
-            created_at: '2024-01-19 09:15:00',
-            created_by: 'sales_agent_1',
-            converted_to_deal: true
-          }
-        ]
-      });
-      return addCorsHeaders(response);
-    }
-
-    // In production, proxy to the actual PHP API
     const { searchParams } = new URL(request.url);
     const queryString = searchParams.toString();
-    const phpApiUrl = `http://vmaxcom.org/api/callbacks-api.php${queryString ? '?' + queryString : ''}`;
-    
-    const fetchResponse = await fetch(phpApiUrl);
-    const data = await fetchResponse.json();
+    const phpApiUrl = `${BASE_URL}/api/callbacks-api.php${queryString ? '?' + queryString : ''}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const fetchResponse = await fetch(phpApiUrl, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    clearTimeout(timeout);
 
-    const response = NextResponse.json(data);
+    if (!fetchResponse.ok) {
+      throw new Error(`Callbacks API responded with status: ${fetchResponse.status}`);
+    }
+
+    let data: any;
+    try { data = await fetchResponse.json(); } catch { data = { success: true }; }
+
+    const response = NextResponse.json({ ...data, success: data?.success !== false });
     return addCorsHeaders(response);
   } catch (error) {
     console.error('Callbacks API error:', error);
     const response = NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { success: false, error: 'Internal server error' },
+      { status: 502 }
     );
     return addCorsHeaders(response);
   }
@@ -73,39 +50,30 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-
-    // For development, return success response
-    if (process.env.NODE_ENV === 'development') {
-      const response = NextResponse.json({
-        success: true,
-        message: 'Callback created successfully',
-        callback: {
-          id: Date.now(),
-          ...body,
-          created_at: new Date().toISOString(),
-          status: 'pending'
-        }
-      });
-      return addCorsHeaders(response);
-    }
-
-    // In production, proxy to the actual PHP API
-    const response = await fetch('http://vmaxcom.org/api/callbacks-api.php', {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(`${BASE_URL}/api/callbacks-api.php`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`Callbacks API responded with status: ${response.status}`);
+    }
 
     const data = await response.json();
-    const jsonResponse = NextResponse.json(data);
+    const jsonResponse = NextResponse.json({ ...data, success: data?.success !== false });
     return addCorsHeaders(jsonResponse);
   } catch (error) {
     console.error('Callbacks API error:', error);
     const response = NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { success: false, error: 'Internal server error' },
+      { status: 502 }
     );
     return addCorsHeaders(response);
   }

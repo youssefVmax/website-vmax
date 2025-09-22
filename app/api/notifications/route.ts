@@ -1,82 +1,127 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { query } from '../../../lib/server/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// MySQL API endpoint for notifications
-const MYSQL_API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-
-async function callMySQLAPI(endpoint: string, method: string = 'GET', data?: any) {
-  const url = `${MYSQL_API_BASE}/api/notifications-api.php${endpoint}`;
-  const options: RequestInit = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  };
-  
-  if (data && method !== 'GET') {
-    options.body = JSON.stringify(data);
-  }
-  
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    throw new Error(`MySQL API error: ${response.statusText}`);
-  }
-  
-  return response.json();
+function addCorsHeaders(res: NextResponse) {
+  res.headers.set('Access-Control-Allow-Origin', '*');
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  return res;
 }
 
+export async function OPTIONS() {
+  return addCorsHeaders(new NextResponse(null, { status: 200 }));
+}
 
 export async function GET(req: NextRequest) {
   try {
-    const search = req.nextUrl.searchParams;
-    const userId = search.get('userId');
-    const role = search.get('role');
+    const { searchParams } = new URL(req.url);
+    const salesAgentId = searchParams.get('salesAgentId');
+    const userRole = searchParams.get('userRole');
+    const isRead = searchParams.get('isRead');
+    const page = parseInt(searchParams.get('page') || '1', 10) || 1;
+    const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 200);
+    const offset = (page - 1) * limit;
 
-    // Build query parameters for MySQL API
-    const queryParams = new URLSearchParams();
-    if (userId) queryParams.set('userId', userId);
-    if (role) queryParams.set('role', role);
+    const where: string[] = [];
+    const params: any[] = [];
+    if (salesAgentId) { where.push('`salesAgentId` = ?'); params.push(salesAgentId); }
+    if (userRole) { where.push('`userRole` = ?'); params.push(userRole); }
+    if (isRead !== null) { where.push('`isRead` = ?'); params.push(isRead === 'true' ? 1 : 0); }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const notifications = await callMySQLAPI(`?${queryParams.toString()}`);
-    return NextResponse.json(notifications, { status: 200 });
+    const [rows] = await query<any>(
+      `SELECT * FROM \`notifications\` ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+    const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`notifications\` ${whereSql}`, params);
+
+    return addCorsHeaders(NextResponse.json({
+      notifications: rows,
+      total: totals[0]?.c || 0,
+      page,
+      limit,
+      success: true
+    }));
   } catch (error) {
     console.error('Error reading notifications:', error);
-    return NextResponse.json({ message: 'Error reading notifications', details: String((error as any)?.message || error) }, { status: 500 });
+    return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to fetch notifications' }, { status: 502 }));
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    if (!body || typeof body !== 'object') {
-      return NextResponse.json({ message: 'Invalid JSON body' }, { status: 400 });
-    }
-    if (!Array.isArray(body.to) || body.to.length === 0) {
-      return NextResponse.json({ message: 'Notifications require a non-empty "to" array' }, { status: 400 });
-    }
+    
+    // Generate unique ID
+    const id = `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-    // Create notification via MySQL API
-    const result = await callMySQLAPI('', 'POST', body);
-    return NextResponse.json(result, { status: 201 });
+    const [result] = await query<any>(
+      `INSERT INTO \`notifications\` (
+        id, title, message, type, \`to\`, \`from\`, salesAgentId, salesAgent,
+        customerName, customerPhone, customerEmail, actionRequired, isRead,
+        priority, callbackId, callbackStatus, callbackReason, targetId,
+        userRole, teamName, isManagerMessage, timestamp, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, body.title, body.message, body.type || 'info',
+        JSON.stringify(body.to || []), body.from, body.salesAgentId, body.salesAgent,
+        body.customerName, body.customerPhone, body.customerEmail,
+        body.actionRequired || false, body.isRead || false, body.priority || 'medium',
+        body.callbackId, body.callbackStatus, body.callbackReason, body.targetId,
+        body.userRole, body.teamName, body.isManagerMessage || false, now, now
+      ]
+    );
+
+    return addCorsHeaders(NextResponse.json({ success: true, id }, { status: 201 }));
   } catch (error) {
     console.error('Error creating notification:', error);
-    return NextResponse.json({ message: 'Error creating notification', details: String((error as any)?.message || error) }, { status: 500 });
+    return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to create notification' }, { status: 502 }));
   }
 }
 
-// PUT supports marking a notification as read or mark-all for a user
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    
-    // Update notification via MySQL API
-    const result = await callMySQLAPI('', 'PUT', body);
-    return NextResponse.json(result, { status: 200 });
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return addCorsHeaders(NextResponse.json({ success: false, error: 'Notification ID is required' }, { status: 400 }));
+    }
+
+    const setClauses: string[] = [];
+    const params: any[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (key === 'id') return;
+      if (key === 'to' && Array.isArray(value)) {
+        setClauses.push('`to` = ?');
+        params.push(JSON.stringify(value));
+      } else {
+        setClauses.push(`\`${key}\` = ?`);
+        params.push(value);
+      }
+    });
+
+    if (setClauses.length === 0) {
+      return addCorsHeaders(NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 }));
+    }
+
+    params.push(id);
+
+    const [result] = await query<any>(
+      `UPDATE \`notifications\` SET ${setClauses.join(', ')} WHERE \`id\` = ?`,
+      params
+    );
+
+    return addCorsHeaders(NextResponse.json({ success: true, affected: (result as any).affectedRows }));
   } catch (error) {
     console.error('Error updating notification:', error);
-    return NextResponse.json({ message: 'Error updating notification', details: String((error as any)?.message || error) }, { status: 500 });
+    return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to update notification' }, { status: 502 }));
   }
 }
 

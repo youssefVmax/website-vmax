@@ -40,7 +40,8 @@ class MySQLAnalyticsServiceEnhanced {
   // Get comprehensive dashboard statistics
   async getDashboardStats(userRole: string, userId?: string): Promise<DashboardStats> {
     try {
-      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=dashboard-stats&user_role=${userRole}&user_id=${userId || ''}`);
+      const useReal = process.env.NODE_ENV === 'development' ? '&useReal=1' : '';
+      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=dashboard-stats&user_role=${userRole}&user_id=${userId || ''}${useReal}`);
       
       return {
         totalDeals: response.total_deals || 0,
@@ -62,7 +63,8 @@ class MySQLAnalyticsServiceEnhanced {
   // Get detailed callback metrics
   async getCallbackMetrics(userRole: string, userId?: string, dateRange: string = 'today'): Promise<CallbackMetrics> {
     try {
-      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=callback-kpis&user_role=${userRole}&user_id=${userId || ''}&date_range=${dateRange}`);
+      const useReal = process.env.NODE_ENV === 'development' ? '&useReal=1' : '';
+      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=callback-kpis&user_role=${userRole}&user_id=${userId || ''}&date_range=${dateRange}${useReal}`);
       
       const totals = response.totals || {};
       
@@ -84,7 +86,8 @@ class MySQLAnalyticsServiceEnhanced {
   // Get comprehensive sales analytics
   async getSalesAnalytics(userRole: string, userId?: string, dateRange: string = 'month'): Promise<SalesAnalytics> {
     try {
-      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=sales-kpis&user_role=${userRole}&user_id=${userId || ''}&date_range=${dateRange}`);
+      const useReal = process.env.NODE_ENV === 'development' ? '&useReal=1' : '';
+      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=sales-kpis&user_role=${userRole}&user_id=${userId || ''}&date_range=${dateRange}${useReal}`);
       
       const totals = response.totals || {};
       
@@ -108,7 +111,8 @@ class MySQLAnalyticsServiceEnhanced {
   // Get agent performance data
   async getAgentPerformance(userRole: string, dateRange: string = 'month'): Promise<any[]> {
     try {
-      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=agent-performance&user_role=${userRole}&date_range=${dateRange}`);
+      const useReal = process.env.NODE_ENV === 'development' ? '&useReal=1' : '';
+      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=agent-performance&user_role=${userRole}&date_range=${dateRange}${useReal}`);
       return response || [];
     } catch (error) {
       console.error('Error fetching agent performance:', error);
@@ -119,7 +123,8 @@ class MySQLAnalyticsServiceEnhanced {
   // Get revenue analytics
   async getRevenueAnalytics(userRole: string, userId?: string): Promise<any> {
     try {
-      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=revenue-analytics&user_role=${userRole}&user_id=${userId || ''}`);
+      const useReal = process.env.NODE_ENV === 'development' ? '&useReal=1' : '';
+      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=revenue-analytics&user_role=${userRole}&user_id=${userId || ''}${useReal}`);
       return response || [];
     } catch (error) {
       console.error('Error fetching revenue analytics:', error);
@@ -130,7 +135,8 @@ class MySQLAnalyticsServiceEnhanced {
   // Get conversion metrics
   async getConversionMetrics(userRole: string, userId?: string): Promise<any> {
     try {
-      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=conversion-metrics&user_role=${userRole}&user_id=${userId || ''}`);
+      const useReal = process.env.NODE_ENV === 'development' ? '&useReal=1' : '';
+      const response = await apiService.makeRequest(`/api/analytics-api.php?endpoint=conversion-metrics&user_role=${userRole}&user_id=${userId || ''}${useReal}`);
       return response || {};
     } catch (error) {
       console.error('Error fetching conversion metrics:', error);
