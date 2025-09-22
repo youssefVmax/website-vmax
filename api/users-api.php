@@ -112,6 +112,16 @@ class UsersAPI {
         return $result->fetch_all(MYSQLI_ASSOC);
     }
     
+    public function getUserById($id) {
+        $sql = "SELECT id, username, email, name, phone, role, team, managedTeam, status, last_login, created_at, updated_at FROM users WHERE id = ?";
+        $stmt = $this->conn->prepare($sql);
+        $stmt->bind_param("s", $id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        return $result->fetch_assoc();
+    }
+    
     public function createUser($data) {
         $id = $this->generateId('user_');
         
@@ -278,8 +288,51 @@ try {
                     http_response_code(400);
                     echo json_encode(['error' => 'Username and password required']);
                 }
+            } elseif (isset($_GET['action'])) {
+                // Handle action-based GET requests
+                switch ($_GET['action']) {
+                    case 'getById':
+                        if (!isset($_GET['id'])) {
+                            http_response_code(400);
+                            echo json_encode(['success' => false, 'message' => 'User ID required']);
+                            break;
+                        }
+                        $user = $api->getUserById($_GET['id']);
+                        echo json_encode(['success' => true, 'user' => $user]);
+                        break;
+                        
+                    case 'getByRole':
+                        if (!isset($_GET['role'])) {
+                            http_response_code(400);
+                            echo json_encode(['success' => false, 'message' => 'Role required']);
+                            break;
+                        }
+                        $users = $api->getUsers(['role' => $_GET['role']]);
+                        echo json_encode(['success' => true, 'users' => $users]);
+                        break;
+                        
+                    case 'getByTeam':
+                        if (!isset($_GET['team'])) {
+                            http_response_code(400);
+                            echo json_encode(['success' => false, 'message' => 'Team required']);
+                            break;
+                        }
+                        $users = $api->getUsers(['team' => $_GET['team']]);
+                        echo json_encode(['success' => true, 'users' => $users]);
+                        break;
+                        
+                    case 'getAll':
+                        $users = $api->getUsers([]);
+                        echo json_encode(['success' => true, 'users' => $users]);
+                        break;
+                        
+                    default:
+                        http_response_code(400);
+                        echo json_encode(['success' => false, 'message' => 'Invalid action']);
+                        break;
+                }
             } else {
-                // Get users endpoint
+                // Get users endpoint (legacy)
                 $filters = [];
                 if (isset($_GET['role'])) $filters['role'] = $_GET['role'];
                 if (isset($_GET['team'])) $filters['team'] = $_GET['team'];
@@ -292,9 +345,10 @@ try {
             break;
             
         case 'POST':
+            $input = json_decode(file_get_contents('php://input'), true);
+            
             if (strpos($path, '/auth') !== false) {
                 // Authentication via POST
-                $input = json_decode(file_get_contents('php://input'), true);
                 if (!$input || !isset($input['username']) || !isset($input['password'])) {
                     http_response_code(400);
                     echo json_encode(['error' => 'Username and password required']);
@@ -303,9 +357,31 @@ try {
                 
                 $result = $api->authenticateUser($input['username'], $input['password']);
                 echo json_encode($result);
+            } elseif (isset($input['action'])) {
+                // Handle action-based requests
+                switch ($input['action']) {
+                    case 'authenticate':
+                        if (!isset($input['username']) || !isset($input['password'])) {
+                            http_response_code(400);
+                            echo json_encode(['success' => false, 'message' => 'Username and password required']);
+                            break;
+                        }
+                        $result = $api->authenticateUser($input['username'], $input['password']);
+                        echo json_encode($result);
+                        break;
+                        
+                    case 'create':
+                        $result = $api->createUser($input);
+                        echo json_encode($result);
+                        break;
+                        
+                    default:
+                        http_response_code(400);
+                        echo json_encode(['success' => false, 'message' => 'Invalid action']);
+                        break;
+                }
             } else {
-                // Create user
-                $input = json_decode(file_get_contents('php://input'), true);
+                // Create user (legacy)
                 if (!$input) {
                     http_response_code(400);
                     echo json_encode(['error' => 'Invalid JSON input']);

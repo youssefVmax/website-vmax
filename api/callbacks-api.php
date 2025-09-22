@@ -1,7 +1,7 @@
 <?php
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -160,6 +160,39 @@ class CallbacksAPI {
         }
     }
     
+    public function createCallback($data) {
+        try {
+            return $this->db->createCallback($data);
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+    
+    public function updateCallback($id, $data) {
+        try {
+            return $this->db->updateCallback($id, $data);
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+    
+    public function deleteCallback($id) {
+        try {
+            return $this->db->deleteCallback($id);
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+    
     public function updateCallbackStatus() {
         try {
             $input = json_decode(file_get_contents('php://input'), true);
@@ -187,16 +220,52 @@ class CallbacksAPI {
 }
 
 $api = new CallbacksAPI();
+$method = $_SERVER['REQUEST_METHOD'];
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    if (isset($_GET['action']) && $_GET['action'] === 'stats') {
-        echo json_encode($api->getCallbackStats());
-    } else {
-        echo json_encode($api->getCallbacks());
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    echo json_encode($api->updateCallbackStatus());
-} else {
+switch ($method) {
+    case 'GET':
+        if (isset($_GET['action']) && $_GET['action'] === 'stats') {
+            echo json_encode($api->getCallbackStats());
+        } else {
+            echo json_encode($api->getCallbacks());
+        }
+        break;
+        
+    case 'POST':
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (isset($input['action']) && $input['action'] === 'updateStatus') {
+            echo json_encode($api->updateCallbackStatus());
+        } else {
+            $result = $api->createCallback($input);
+            echo json_encode($result);
+        }
+        break;
+        
+    case 'PUT':
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!$input || !isset($input['id'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Missing callback ID']);
+            break;
+        }
+        
+        $result = $api->updateCallback($input['id'], $input);
+        echo json_encode($result);
+        break;
+        
+    case 'DELETE':
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!$input || !isset($input['id'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Missing callback ID']);
+            break;
+        }
+        
+        $result = $api->deleteCallback($input['id']);
+        echo json_encode($result);
+        break;
+        
+    default:
     echo json_encode(['success' => false, 'error' => 'Method not allowed']);
 }
 ?>

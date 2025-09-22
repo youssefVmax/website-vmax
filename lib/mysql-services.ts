@@ -6,11 +6,9 @@ export {
   getUserById, 
   getUsersByRole, 
   getUsersByTeam,
-  createUser,
-  updateUser,
-  getAllUsers,
-  MANAGER_USER 
-} from './mysql-auth-service';
+  MANAGER_USER,
+  authService
+} from './auth';
 export { dealsService, DealUtils } from './mysql-deals-service';
 export { callbacksService, CallbackUtils } from './mysql-callbacks-service';
 export { targetsService, TargetUtils } from './mysql-targets-service';
@@ -18,50 +16,69 @@ export { notificationService } from './mysql-notifications-service';
 export { integratedDataService, DataUtils, dataEventEmitter, DATA_EVENTS } from './mysql-integrated-data-service';
 
 // Re-export types for compatibility
-export type { User } from './auth';
+export type { User, UserRole, AuthResponse } from './auth';
 export type { Deal, Callback, SalesTarget } from './api-service';
 export type { Notification } from './mysql-notifications-service';
 
-// MySQL-based user service
+// MySQL-based user service using the new auth service
 export const userService = {
   authenticateUser: async (username: string, password: string) => {
-    const { authenticateUser } = await import('./mysql-auth-service');
-    return authenticateUser(username, password);
+    const { authService } = await import('./auth');
+    const result = await authService.authenticateUser(username, password);
+    return result.success ? result.user : null;
   },
   getUserById: async (id: string) => {
-    const { getUserById } = await import('./mysql-auth-service');
-    return getUserById(id);
+    const { authService } = await import('./auth');
+    return await authService.getUserById(id);
   },
   getUsersByRole: async (role: string) => {
-    const { getUsersByRole } = await import('./mysql-auth-service');
+    const { authService } = await import('./auth');
     // Convert role names to match MySQL schema
     const mysqlRole = role === 'admin' ? 'manager' : role;
-    return getUsersByRole(mysqlRole as any);
+    return await authService.getUsersByRole(mysqlRole as any);
   },
   getUsersByTeam: async (team: string) => {
-    const { getUsersByTeam } = await import('./mysql-auth-service');
-    return getUsersByTeam(team);
-  },
-  updateUser: async (id: string, updates: any) => {
-    const { updateUser } = await import('./mysql-auth-service');
-    return updateUser(id, updates);
-  },
-  createUser: async (userData: any) => {
-    const { createUser } = await import('./mysql-auth-service');
-    return createUser(userData);
-  },
-  getUserByUsername: async (username: string) => {
-    const { getAllUsers } = await import('./mysql-auth-service');
-    const users = await getAllUsers();
-    return users.find(user => user.username === username) || null;
+    const { authService } = await import('./auth');
+    return await authService.getUsersByTeam(team);
   },
   getAllUsers: async () => {
-    const { getAllUsers } = await import('./mysql-auth-service');
-    return getAllUsers();
+    const { authService } = await import('./auth');
+    return await authService.getAllUsers();
+  },
+  createUser: async (userData: any) => {
+    // This would need to be implemented via API call
+    const { API_CONFIG } = await import('./config');
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/users-api.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create', ...userData })
+    });
+    return await response.json();
+  },
+  updateUser: async (id: string, updates: any) => {
+    // This would need to be implemented via API call
+    const { API_CONFIG } = await import('./config');
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/users-api.php`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...updates })
+    });
+    return await response.json();
+  },
+  getUserByUsername: async (username: string) => {
+    const { authService } = await import('./auth');
+    const users = await authService.getAllUsers();
+    return users.find(user => user.username === username) || null;
   },
   deleteUser: async (id: string) => {
-    // Note: Delete functionality should be implemented in mysql-auth-service if needed
-    throw new Error('Delete user functionality not implemented for safety');
+    // This would need to be implemented via API call
+    const { API_CONFIG } = await import('./config');
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/users-api.php`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    return await response.json();
   }
 };
 
