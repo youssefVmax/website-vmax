@@ -1,5 +1,5 @@
-import { notificationService } from './firebase-services'
-import { userService } from './firebase-user-service'
+import { notificationService } from './mysql-notifications-service'
+import { userService } from './mysql-services'
 
 export interface TeamNotificationOptions {
   title: string

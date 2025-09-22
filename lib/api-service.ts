@@ -14,7 +14,7 @@ export class ManagerApiService {
       }
     });
 
-    const response = await fetch(`/api/deals-api.php?${queryParams}`);
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/deals-api.php?${queryParams}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -29,7 +29,7 @@ export class ManagerApiService {
       }
     });
 
-    const response = await fetch(`/api/deals-api.php?action=stats&${queryParams}`);
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/deals-api.php?action=stats&${queryParams}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -45,7 +45,7 @@ export class ManagerApiService {
       }
     });
 
-    const response = await fetch(`/api/callbacks-api.php?${queryParams}`);
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/callbacks-api.php?${queryParams}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -60,7 +60,7 @@ export class ManagerApiService {
       }
     });
 
-    const response = await fetch(`/api/callbacks-api.php?action=stats&${queryParams}`);
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/callbacks-api.php?action=stats&${queryParams}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -68,7 +68,7 @@ export class ManagerApiService {
   }
 
   async updateCallbackStatus(callbackId: string, status: string): Promise<any> {
-    const response = await fetch('/api/callbacks-api.php', {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/callbacks-api.php`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
