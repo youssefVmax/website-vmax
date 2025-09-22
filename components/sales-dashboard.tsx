@@ -453,11 +453,14 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={(enhancedAnalytics?.charts?.dailyTrend || computedAnalytics.dailyTrend).map((day: any, index: number) => ({
-                  ...day,
-                  key: `day-${index}-${day.date}`,
-                  date: day.date || `Day ${index + 1}`
-                }))}>
+                <LineChart data={(enhancedAnalytics?.charts?.dailyTrend || computedAnalytics.dailyTrend)
+                  .filter((day: any) => day && day.date && day.sales >= 0)
+                  .map((day: any, index: number) => ({
+                    ...day,
+                    uniqueKey: `day-${index}-${day.date}-${day.sales}`,
+                    date: day.date || `Day ${index + 1}`,
+                    sales: Number(day.sales) || 0
+                  }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                   <YAxis />
@@ -478,16 +481,28 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={(enhancedAnalytics?.charts?.topAgents || computedAnalytics.topAgents).slice(0, 8).map((agent: any, index: number) => ({
-                  ...agent,
-                  key: `agent-${index}-${agent.agent}`,
-                  agent: agent.agent || `Agent ${index + 1}`
-                }))} layout="horizontal">
+                <BarChart data={(enhancedAnalytics?.charts?.topAgents || computedAnalytics.topAgents)
+                  .filter((agent: any) => agent && agent.agent && agent.sales > 0)
+                  .reduce((unique: any[], agent: any) => {
+                    // Ensure unique agent names
+                    const existingAgent = unique.find(u => u.agent === agent.agent);
+                    if (!existingAgent) {
+                      unique.push(agent);
+                    }
+                    return unique;
+                  }, [])
+                  .slice(0, 8)
+                  .map((agent: any, index: number) => ({
+                    ...agent,
+                    id: `agent-${index}-${Date.now()}`,
+                    agent: agent.agent || `Agent ${index + 1}`,
+                    sales: Number(agent.sales) || 0
+                  }))} layout="horizontal">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
                   <Tooltip formatter={(value) => [`$${value}`, 'Sales']} />
-                  <Bar dataKey="sales" fill="#82ca9d" />
+                  <Bar dataKey="sales" fill="#82ca9d" key="top-agents-bar" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -508,11 +523,14 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={computedAnalytics.salesByService.map((service, index) => ({
-                      ...service,
-                      key: `service-${index}-${service.service}`,
-                      service: service.service || `Service ${index + 1}`
-                    }))}
+                    data={computedAnalytics.salesByService
+                      .filter((service: any) => service && service.service && service.sales > 0)
+                      .map((service: any, index: number) => ({
+                        ...service,
+                        uniqueKey: `service-${index}-${service.service}-${service.sales}`,
+                        service: service.service || `Service ${index + 1}`,
+                        sales: Number(service.sales) || 0
+                      }))}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -541,16 +559,19 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={computedAnalytics.salesByTeam.map((team, index) => ({
-                  ...team,
-                  key: `team-${index}-${team.team}`,
-                  team: team.team || `Team ${index + 1}`
-                }))}>
+                <BarChart data={computedAnalytics.salesByTeam
+                  .filter((team: any) => team && team.team && team.sales > 0)
+                  .map((team: any, index: number) => ({
+                    ...team,
+                    uniqueKey: `team-${index}-${team.team}-${team.sales}`,
+                    team: team.team || `Team ${index + 1}`,
+                    sales: Number(team.sales) || 0
+                  }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="team" tick={{ fontSize: 12 }} />
                   <YAxis />
                   <Tooltip formatter={(value) => [`$${value}`, 'Sales']} />
-                  <Bar dataKey="sales" fill="#ffc658" />
+                  <Bar dataKey="sales" fill="#ffc658" key="team-sales-bar" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -573,11 +594,14 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={computedAnalytics.userAnalysisData.map((item, index) => ({
-                  ...item,
-                  key: `analysis-${index}-${item.name}`,
-                  name: item.name || `Item ${index + 1}`
-                }))}>
+                <BarChart data={computedAnalytics.userAnalysisData
+                  .filter((item: any) => item && item.name && item.value >= 0)
+                  .map((item: any, index: number) => ({
+                    ...item,
+                    uniqueKey: `analysis-${index}-${item.name}-${item.value}`,
+                    name: item.name || `Item ${index + 1}`,
+                    value: Number(item.value) || 0
+                  }))}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -585,7 +609,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                     if (name === 'value') return [value, 'Count'];
                     return [value, name];
                   }} />
-                  <Bar dataKey="value" fill="#8884d8" />
+                  <Bar dataKey="value" fill="#8884d8" key="user-analysis-bar" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -624,11 +648,16 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
           <CardContent>
             <div className="h-80 mb-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={computedAnalytics.salesByAgent.slice(0, 10).map((agent, index) => ({
-                  ...agent,
-                  key: `revenue-agent-${index}-${agent.agent}`,
-                  agent: agent.agent || `Agent ${index + 1}`
-                }))} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                <BarChart data={computedAnalytics.salesByAgent
+                  .filter((agent: any) => agent && agent.agent && agent.sales > 0)
+                  .slice(0, 10)
+                  .map((agent: any, index: number) => ({
+                    ...agent,
+                    uniqueKey: `revenue-agent-${index}-${agent.agent}-${agent.sales}`,
+                    agent: agent.agent || `Agent ${index + 1}`,
+                    sales: Number(agent.sales) || 0,
+                    deals: Number(agent.deals) || 0
+                  }))} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis 
                     dataKey="agent" 
@@ -664,6 +693,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                     radius={[4, 4, 0, 0]}
                     stroke="#000000"
                     strokeWidth={1}
+                    key="revenue-agent-bar"
                   />
                   <defs>
                     <linearGradient id="blackGradient" x1="0" y1="0" x2="0" y2="1">

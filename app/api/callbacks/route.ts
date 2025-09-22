@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
     const id = `callback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+    // Enhanced field mapping for all callback fields
     const [result] = await query<any>(
       `INSERT INTO \`callbacks\` (
         id, customer_name, phone_number, email, SalesAgentID, sales_agent, sales_team,
@@ -67,20 +68,33 @@ export async function POST(request: NextRequest) {
         first_call_date, first_call_time, follow_up_required, created_by_id, created_by, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, body.customerName || body.customer_name, body.phoneNumber || body.phone_number, body.email,
-        body.salesAgentId || body.SalesAgentID, body.salesAgentName || body.sales_agent, body.salesTeam || body.sales_team,
-        body.status || 'pending', body.priority || 'medium', body.callbackReason || body.callback_reason, body.callbackNotes || body.callback_notes,
-        body.scheduledDate || body.scheduled_date, body.scheduledTime || body.scheduled_time,
-        body.firstCallDate || body.first_call_date, body.firstCallTime || body.first_call_time,
+        id, 
+        body.customerName || body.customer_name, 
+        body.phoneNumber || body.phone_number, 
+        body.email,
+        body.salesAgentId || body.SalesAgentID, 
+        body.salesAgentName || body.sales_agent, 
+        body.salesTeam || body.sales_team,
+        body.status || 'pending', 
+        body.priority || 'medium', 
+        body.callbackReason || body.callback_reason, 
+        body.callbackNotes || body.callback_notes,
+        body.scheduledDate || body.scheduled_date, 
+        body.scheduledTime || body.scheduled_time,
+        body.firstCallDate || body.first_call_date, 
+        body.firstCallTime || body.first_call_time,
         body.followUpRequired || body.follow_up_required || false,
-        body.createdById || body.created_by_id, body.createdBy || body.created_by, now, now
+        body.createdById || body.created_by_id, 
+        body.createdBy || body.created_by, 
+        now, now
       ]
     );
 
+    console.log('✅ Callback created successfully:', { id });
     return addCorsHeaders(NextResponse.json({ success: true, id }, { status: 201 }));
   } catch (error) {
-    console.error('Error creating callback:', error);
-    return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to create callback' }, { status: 502 }));
+    console.error('❌ Error creating callback:', error);
+    return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to create callback', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 502 }));
   }
 }
 
