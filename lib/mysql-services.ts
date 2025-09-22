@@ -34,7 +34,9 @@ export const userService = {
   },
   getUsersByRole: async (role: string) => {
     const { getUsersByRole } = await import('./mysql-auth-service');
-    return getUsersByRole(role as any);
+    // Convert role names to match MySQL schema
+    const mysqlRole = role === 'admin' ? 'manager' : role;
+    return getUsersByRole(mysqlRole as any);
   },
   getUsersByTeam: async (team: string) => {
     const { getUsersByTeam } = await import('./mysql-auth-service');

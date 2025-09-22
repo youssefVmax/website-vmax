@@ -4,7 +4,7 @@ import { db } from './db';
 import { logger } from './logger';
 import { API_CONFIG } from './config';
 
-export type UserRole = 'admin' | 'manager' | 'team_leader' | 'sales_agent';
+export type UserRole =  'manager' | 'team-leader' | 'salesman';
 
 export interface User {
   id: number;

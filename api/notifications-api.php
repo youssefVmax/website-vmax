@@ -4,23 +4,19 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-require_once 'config.php';
+require_once __DIR__ . '/db.php';
 
 class NotificationsAPI {
     private $conn;
     
     public function __construct() {
-        $this->conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
-        
-        if ($this->conn->connect_error) {
-            throw new Exception("Connection failed: " . $this->conn->connect_error);
-        }
-        
-        $this->conn->set_charset("utf8");
+        // Use centralized database connection
+        $db = getDB();
+        $this->conn = $db->getConnection();
         $this->createNotificationsTable();
     }
     
