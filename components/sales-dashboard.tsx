@@ -5,10 +5,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3, Phone, Clock } from 'lucide-react';
 import { useMySQLSalesData } from "@/hooks/useMySQLSalesData";
 import { useEnhancedAnalytics } from "@/hooks/useEnhancedAnalytics";
+import { useComprehensiveAnalytics } from "@/hooks/useComprehensiveAnalytics";
 import { mysqlAnalyticsService } from '@/lib/mysql-analytics-service';
 import { analyticsApiService } from '@/lib/analytics-api-service';
 import { unifiedAnalyticsService, type UserContext } from '@/lib/unified-analytics-service';
 import CallbackKPIDashboard from './callback-kpi-dashboard';
+import ComprehensiveAnalyticsDashboard from './comprehensive-analytics-dashboard';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
 
@@ -316,9 +318,10 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="sales">Sales Analytics</TabsTrigger>
           <TabsTrigger value="callbacks">Callback Analytics</TabsTrigger>
+          <TabsTrigger value="comprehensive">Comprehensive Analytics</TabsTrigger>
         </TabsList>
         
         <TabsContent value="sales" className="space-y-6">
@@ -821,6 +824,16 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
         
         <TabsContent value="callbacks" className="space-y-6">
           <CallbackKPIDashboard userRole={userRole} user={user} />
+        </TabsContent>
+
+        <TabsContent value="comprehensive" className="space-y-6">
+          <ComprehensiveAnalyticsDashboard 
+            userRole={userRole}
+            userId={user?.id}
+            userName={user?.name}
+            userTeam={user?.managedTeam}
+            managedTeam={user?.managedTeam}
+          />
         </TabsContent>
       </Tabs>
     </div>

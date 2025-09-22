@@ -1,7 +1,7 @@
 // Client-side service that calls Next.js API routes (not PHP directly)
 import { API_CONFIG } from './config'
 
-class DirectMySQLService {
+export class DirectMySQLService {
   // Force all requests through Next.js API on same origin so they show in Network tab
   // and avoid direct calls to external PHP host.
   private baseUrl = `/api`;
