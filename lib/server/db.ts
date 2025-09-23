@@ -23,15 +23,15 @@ export function getPool(): mysql.Pool {
       password: DB_PASSWORD,
       database: DB_NAME,
       
-      // Connection Pool Settings
-      connectionLimit: Math.max(parseInt(CONNECTION_LIMIT, 10), 50), // Minimum 50 connections
+      // Connection Pool Settings - Reduced to prevent "Too many connections"
+      connectionLimit: Math.min(parseInt(CONNECTION_LIMIT, 10), 10), // Maximum 10 connections
       
       // Character Set and Timezone
       charset: 'utf8mb4_general_ci',
       timezone: 'Z',
       
       // Queue Management
-      queueLimit: 0, // No limit on queued connections
+      queueLimit: 50, // Limit queued connections to prevent overload
       
       // Additional Pool Options
       supportBigNumbers: true,

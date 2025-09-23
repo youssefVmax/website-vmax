@@ -46,47 +46,4 @@ export function ImportExportControls({ userRole }: ImportExportControlsProps) {
     return null
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5" />
-          Firebase Data Management
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Refresh Data */}
-        <div className="space-y-2">
-          <Button 
-            onClick={handleRefreshData}
-            disabled={isRefreshing}
-            className="w-full"
-            variant="outline"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? 'Refreshing...' : 'Refresh Firebase Data'}
-          </Button>
-        </div>
-
-        {/* Data Maintenance */}
-        <div className="space-y-2">
-          <Button 
-            onClick={handleDataMaintenance}
-            className="w-full"
-            variant="outline"
-          >
-            <Shield className="h-4 w-4 mr-2" />
-            Optimize Database
-          </Button>
-        </div>
-
-        {/* Instructions */}
-        <div className="text-sm text-muted-foreground space-y-1">
-          <p><strong>Refresh:</strong> Reload all data from Firebase Firestore</p>
-          <p><strong>Optimize:</strong> Clean up indexes and improve performance</p>
-          <p><strong>Note:</strong> All data is now stored securely in Firebase Cloud</p>
-        </div>
-      </CardContent>
-    </Card>
-  )
 }

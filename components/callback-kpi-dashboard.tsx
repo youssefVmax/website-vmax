@@ -13,11 +13,13 @@ import {
   XCircle, AlertCircle, Calendar, Target, Award, Activity,
   RefreshCw, Filter, User
 } from 'lucide-react';
-import { mysqlAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/mysql-analytics-service';
-import { callbacksService } from '@/lib/mysql-callbacks-service';
-import { dealsService } from '@/lib/mysql-deals-service';
-import { targetsService } from '@/lib/mysql-targets-service';
-import { unifiedDataService } from '@/lib/unified-data-service';
+import { useToast } from "@/hooks/use-toast"
+import { unifiedDataService } from '@/lib/unified-data-service'
+import { mysqlAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/mysql-analytics-service'
+import { nextjsAnalyticsService } from '@/lib/nextjs-analytics-service'
+import { callbacksService } from '@/lib/mysql-callbacks-service'
+import { dealsService } from '@/lib/mysql-deals-service'
+import { targetsService } from '@/lib/mysql-targets-service'
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -33,6 +35,7 @@ interface CallbackKPIDashboardProps {
 }
 
 export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDashboardProps) {
+  const { toast } = useToast();
   const [kpis, setKpis] = useState<CallbackKPIs | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +73,32 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
     return user.team || '';
   }, [user, userRole]);
 
+  // Test function to use Next.js analytics instead of PHP
+  const testNextJSAnalytics = async () => {
+    try {
+      console.log('🔄 CallbackKPIDashboard: Testing Next.js analytics...');
+      const analytics = await nextjsAnalyticsService.getDashboardStats(userRole, user.id, 'today');
+      console.log('✅ CallbackKPIDashboard: Next.js analytics result:', analytics);
+      
+      // Also test the test-analytics endpoint
+      const testResponse = await fetch('/api/test-analytics?userRole=manager&dateRange=today');
+      const testData = await testResponse.json();
+      console.log('✅ CallbackKPIDashboard: Test analytics result:', testData);
+      
+      toast({
+        title: "Analytics Test Complete",
+        description: `Next.js Analytics: ${analytics.total_deals} deals, ${analytics.total_callbacks} callbacks. Check console for details.`,
+      });
+    } catch (error) {
+      console.error('❌ CallbackKPIDashboard: Test failed:', error);
+      toast({
+        title: "Analytics Test Failed",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive"
+      });
+    }
+  };
+
   const loadKPIs = useCallback(async () => {
     setLoading(true);
     try {
@@ -102,8 +131,19 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length;
           const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
           
-          // Calculate response times (mock data for now)
-          const avgResponseTime = 2.5; // hours
+          // Calculate response times from actual data
+          const responseTimes = callbacks
+            .filter(cb => cb.firstCallDate && cb.created_at)
+            .map(cb => {
+              const created = new Date(cb.created_at);
+              const firstCall = new Date(cb.firstCallDate);
+              return Math.abs(firstCall.getTime() - created.getTime()) / (1000 * 60 * 60); // hours
+            })
+            .filter(time => !isNaN(time) && time >= 0);
+          
+          const avgResponseTime = responseTimes.length > 0 
+            ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length 
+            : 0;
           
           // Group callbacks by status
           const statusDistribution = [
@@ -128,7 +168,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           
           // Agent performance
           const agentPerformance = callbacks.reduce((acc, cb) => {
-            const agent = cb.sales_agent || cb.SalesAgentID || 'Unknown';
+            const agent = cb.salesAgentName || cb.salesAgentId || cb.SalesAgentID || 'Unknown';
             if (!acc[agent]) {
               acc[agent] = { agent, callbacks: 0, completed: 0 };
             }
@@ -470,16 +510,18 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <Button 
+            onClick={testNextJSAnalytics}
+            variant="outline"
+            size="sm"
+          >
+            Test Next.js Analytics
+          </Button>
           <div className="flex items-center gap-2 text-sm text-green-600">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             Live Data
           </div>
-          <Button 
-            onClick={refreshData} 
-            disabled={refreshing}
-            variant="outline"
-            size="sm"
-          >
+          <Button onClick={refreshData} disabled={refreshing}>
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
