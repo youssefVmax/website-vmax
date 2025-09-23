@@ -15,6 +15,7 @@ import {
   Activity
 } from "lucide-react"
 import EditableDataTable from "./editable-data-table"
+import EnhancedTeamLeaderDashboard from "./enhanced-team-leader-dashboard"
 import { User } from "@/lib/auth"
 import { API_CONFIG } from "@/lib/config"
 
@@ -321,92 +322,7 @@ export default function RoleBasedDashboard({ user }: RoleBasedDashboardProps) {
 
   // Team Leader Dashboard - Personal + Team data
   if (user.role === 'team-leader') {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Team Leader Dashboard</h1>
-            <p className="text-gray-600">
-              Personal performance and team management for {user.team_name}
-            </p>
-          </div>
-          <Badge variant="outline" className="bg-blue-50 text-blue-700">
-            Team Leader
-          </Badge>
-        </div>
-
-        {renderAnalyticsCards()}
-
-        <Tabs defaultValue="my-deals" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="my-deals">My Deals</TabsTrigger>
-            <TabsTrigger value="my-callbacks">My Callbacks</TabsTrigger>
-            <TabsTrigger value="team-deals">Team Deals</TabsTrigger>
-            <TabsTrigger value="team-callbacks">Team Callbacks</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="my-deals">
-            <EditableDataTable
-              title="My Deals"
-              description="Your personal deals - fully editable"
-              endpoint="deals-api.php"
-              columns={dealsColumns}
-              filters={dealsFilters}
-              canEdit={true}
-              canDelete={true}
-              canCreate={true}
-              userRole={user.role}
-              userId={user.id.toString()}
-            />
-          </TabsContent>
-
-          <TabsContent value="my-callbacks">
-            <EditableDataTable
-              title="My Callbacks"
-              description="Your personal callbacks - fully editable"
-              endpoint="callbacks-api.php"
-              columns={callbacksColumns}
-              filters={callbacksFilters}
-              canEdit={true}
-              canDelete={true}
-              canCreate={true}
-              userRole={user.role}
-              userId={user.id.toString()}
-            />
-          </TabsContent>
-
-          <TabsContent value="team-deals">
-            <EditableDataTable
-              title="Team Deals"
-              description={`All deals for ${user.team_name} team - view only`}
-              endpoint="deals-api.php"
-              columns={dealsColumns}
-              filters={dealsFilters}
-              canEdit={false}
-              canDelete={false}
-              canCreate={false}
-              userRole={user.role}
-              teamFilter={user.team_name}
-            />
-          </TabsContent>
-
-          <TabsContent value="team-callbacks">
-            <EditableDataTable
-              title="Team Callbacks"
-              description={`All callbacks for ${user.team_name} team - view only`}
-              endpoint="callbacks-api.php"
-              columns={callbacksColumns}
-              filters={callbacksFilters}
-              canEdit={false}
-              canDelete={false}
-              canCreate={false}
-              userRole={user.role}
-              teamFilter={user.team_name}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
-    )
+    return <EnhancedTeamLeaderDashboard user={user} userRole={user.role} />
   }
 
   // Salesman Dashboard - Personal data only

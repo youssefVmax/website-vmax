@@ -10,7 +10,9 @@ import {
 import { Plus } from 'lucide-react';
 import { Logo } from './Logo';
 
-export function Navbar({ userRole = 'manager' }: { userRole?: 'manager' | 'salesman' | 'customer-service' }) {
+export { EnhancedNavbar as Navbar } from './enhanced-navbar'
+
+export function NavbarOld({ userRole = 'manager' }: { userRole?: 'manager' | 'salesman' | 'customer-service' }) {
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between px-4">

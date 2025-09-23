@@ -1,16 +1,23 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, ScatterChart, Scatter, ZAxis } from 'recharts';
-import { TrendingUp, DollarSign, Users, Target, Calendar, Award, UserCheck, BarChart3, Phone, Clock } from 'lucide-react';
-import { useMySQLSalesData } from "@/hooks/useMySQLSalesData";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { RefreshCw, TrendingUp, DollarSign, Target, Users, Calendar, BarChart3, UserCheck, Award } from "lucide-react"
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend
+} from 'recharts';
+import { useMySQLSalesData } from '@/hooks/useMySQLSalesData'
 import { useEnhancedAnalytics } from "@/hooks/useEnhancedAnalytics";
 import { useComprehensiveAnalytics } from "@/hooks/useComprehensiveAnalytics";
 import { mysqlAnalyticsService } from '@/lib/mysql-analytics-service';
 import { analyticsApiService } from '@/lib/analytics-api-service';
 import { unifiedAnalyticsService, type UserContext } from '@/lib/unified-analytics-service';
-import CallbackKPIDashboard from './callback-kpi-dashboard';
+import CallbackKPIDashboard from './callback-kpi-dashboard'
+import AdvancedAnalytics from './advanced-analytics'
 import ComprehensiveAnalyticsDashboard from './comprehensive-analytics-dashboard';
+import { DashboardCharts } from './dashboard-charts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
 
@@ -24,6 +31,7 @@ interface DealData {
   team: string;
   duration: string;
   customer_name: string;
+  status: string;
   [key: string]: any; // For other CSV fields
 }
 
@@ -51,7 +59,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   const [activeTab, setActiveTab] = useState('sales');
   const [callbackMetrics, setCallbackMetrics] = useState<any>(null);
 
-  // Use enhanced analytics hook for better data fetching
+  // Use enhanced analytics hook for better data fetching (reduced refresh rate)
   const { 
     analytics: enhancedAnalytics, 
     loading: analyticsLoading, 
@@ -64,8 +72,8 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
     userName: user?.name,
     username: user?.username,
     managedTeam: user?.managedTeam,
-    autoRefresh: true,
-    refreshInterval: 60000 // 1 minute
+    autoRefresh: false, // Disable auto-refresh to reduce load
+    refreshInterval: 300000 // 5 minutes instead of 1 minute
   });
 
   // Fallback to original hook for compatibility
@@ -94,8 +102,8 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
     // Initial load
     loadCallbackMetrics();
 
-    // Set up real-time updates every 30 seconds
-    const interval = setInterval(loadCallbackMetrics, 30000);
+    // Set up updates every 2 minutes to reduce load
+    const interval = setInterval(loadCallbackMetrics, 120000);
 
     return () => clearInterval(interval);
   }, [user, userRole]);
@@ -122,13 +130,14 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
       ...row,
       date: parsedDate,
       amount: typeof row.amountPaid === 'number' ? row.amountPaid : (typeof row.amount === 'number' ? row.amount : parseFloat(String(row.amountPaid || row.amount)) || 0),
-      salesAgent: row.salesAgentName?.toLowerCase?.() || row.sales_agent?.toLowerCase?.() || '',
+      salesAgent: row.salesAgentName?.toLowerCase?.() || row.sales_agent?.toLowerCase?.() || row.salesAgent || 'Unknown Agent',
       closingAgent: row.closingAgentName?.toLowerCase?.() || row.closing_agent?.toLowerCase?.() || '',
       service: row.serviceTier || row.service || 'Unknown',
       program: row.serviceTier || row.program || 'Unknown',
-      team: row.salesTeam || row.team || 'Unknown',
+      team: row.salesTeam || row.team || row.sales_team || 'Unknown',
       duration: `${row.durationMonths || row.duration || ''}`,
-      customer_name: row.customerName || row.customer_name || 'Unknown',
+      customer_name: row.customerName || row.customer_name || 'Unknown Customer',
+      status: row.status || row.stage || 'active',
     };
   });
 
@@ -318,8 +327,9 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="sales">Sales Analytics</TabsTrigger>
+          <TabsTrigger value="charts">Interactive Charts</TabsTrigger>
           <TabsTrigger value="callbacks">Callback Analytics</TabsTrigger>
           <TabsTrigger value="comprehensive">Comprehensive Analytics</TabsTrigger>
         </TabsList>
@@ -735,6 +745,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
       <Card>
         <CardHeader>
           <CardTitle>Recent Deals</CardTitle>
+          <CardDescription>Latest deals from all teams</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -751,21 +762,43 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                 </tr>
               </thead>
               <tbody>
-                {computedAnalytics.recentDeals.map((deal, index) => (
-                  <tr key={`deal-${index}-${deal.customer_name}-${deal.date?.getTime()}`} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
-                    <td className="py-2">{deal.date.toLocaleDateString()}</td>
-                    <td className="py-2">{deal.customer_name}</td>
-                    <td className="py-2 font-semibold">${deal.amount}</td>
-                    <td className="py-2">{deal.service}</td>
-                    <td className="py-2 capitalize">{deal.salesAgent}</td>
-                    <td className="py-2">{deal.team || 'Unknown'}</td>
-                    <td className="py-2">
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                        Completed
-                      </span>
+                {computedAnalytics.recentDeals.length > 0 ? (
+                  computedAnalytics.recentDeals.map((deal, index) => (
+                    <tr key={`deal-${index}-${deal.customer_name}-${deal.date?.getTime()}`} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
+                      <td className="py-2">{deal.date ? deal.date.toLocaleDateString() : 'N/A'}</td>
+                      <td className="py-2 font-medium">{deal.customer_name || 'Unknown Customer'}</td>
+                      <td className="py-2 font-semibold text-green-600">
+                        ${(deal.amount || 0).toLocaleString()}
+                      </td>
+                      <td className="py-2">{deal.service || 'Unknown'}</td>
+                      <td className="py-2 capitalize">{deal.salesAgent || 'Unknown Agent'}</td>
+                      <td className="py-2">
+                        <Badge variant="outline" className="text-xs">
+                          {deal.team || 'Unknown'}
+                        </Badge>
+                      </td>
+                      <td className="py-2">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          deal.status === 'completed' || deal.status === 'closed_won' 
+                            ? 'bg-green-100 text-green-800' 
+                            : deal.status === 'pending' || deal.status === 'in_progress'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : deal.status === 'cancelled' || deal.status === 'closed_lost'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {deal.status || 'Active'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-gray-500">
+                      No recent deals found
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -777,6 +810,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
         <Card className="mt-8">
           <CardHeader>
             <CardTitle>Agent Performance Summary</CardTitle>
+            <CardDescription>Top performing sales agents</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -791,27 +825,41 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
                   </tr>
                 </thead>
                 <tbody>
-                  {computedAnalytics.topAgents.map((agent, index) => (
-                    <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
-                      <td className="py-2 capitalize font-medium">{agent.agent}</td>
-                      <td className="py-2 font-semibold">${agent.sales.toLocaleString()}</td>
-                      <td className="py-2">{agent.deals}</td>
-                      <td className="py-2">${(agent.sales / agent.deals).toFixed(0)}</td>
-                      <td className="py-2">
-                        <div className="flex items-center">
-                          <div className="w-20 bg-gray-200 rounded-full h-2 mr-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full" 
-                              style={{ width: `${(agent.sales / computedAnalytics.topAgents[0].sales) * 100}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-xs">
-                            {((agent.sales / computedAnalytics.topAgents[0].sales) * 100).toFixed(0)}%
-                          </span>
-                        </div>
+                  {computedAnalytics.topAgents.length > 0 ? (
+                    computedAnalytics.topAgents.map((agent, index) => {
+                      // Calculate performance percentage relative to top performer
+                      const topPerformerSales = computedAnalytics.topAgents[0]?.sales || 1;
+                      const performancePercentage = topPerformerSales > 0 ? (agent.sales / topPerformerSales) * 100 : 0;
+                      
+                      return (
+                        <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
+                          <td className="py-2 capitalize font-medium">{agent.agent}</td>
+                          <td className="py-2 font-semibold">${agent.sales.toLocaleString()}</td>
+                          <td className="py-2">{agent.deals}</td>
+                          <td className="py-2">${agent.deals > 0 ? (agent.sales / agent.deals).toFixed(0) : '0'}</td>
+                          <td className="py-2">
+                            <div className="flex items-center">
+                              <div className="w-20 bg-gray-200 rounded-full h-2 mr-2">
+                                <div 
+                                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300" 
+                                  style={{ width: `${Math.min(performancePercentage, 100)}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-xs font-medium text-gray-600 min-w-[35px]">
+                                {performancePercentage.toFixed(0)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-gray-500">
+                        No agent performance data available
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -820,6 +868,10 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
       )}
         </>
       )}
+        </TabsContent>
+        
+        <TabsContent value="charts" className="space-y-6">
+          <DashboardCharts userRole={userRole} user={user} />
         </TabsContent>
         
         <TabsContent value="callbacks" className="space-y-6">

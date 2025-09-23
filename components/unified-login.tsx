@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from 'react'
-import { Eye, EyeOff, Shield, Users, Headphones, TrendingUp, DollarSign, Target, BarChart3, Tv, ArrowLeft } from "lucide-react"
+import { Eye, EyeOff, Shield, Users, UserCheck, TrendingUp, DollarSign, Target, BarChart3, Tv, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -118,12 +118,8 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
           setActiveTab('agent')
           setRoleMessage(`Sales agent account detected: ${user.name}`)
         } else if (user.role === 'team-leader') {
-          setActiveTab('agent') // Team leaders use agent tab
+          setActiveTab('team-leader')
           setRoleMessage(`Team leader account detected: ${user.name}`)
-        } else {
-          // Handle other roles like customer-service
-          setActiveTab('support')
-          setRoleMessage(`Account detected: ${user.name} (${user.role})`)
         }
       } else {
         setDetectedRole(null)
@@ -242,12 +238,12 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                   Agent
                 </TabsTrigger>
                 <TabsTrigger 
-                  value="support" 
+                  value="team-leader" 
                   className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300"
-                  disabled={!!detectedRole && detectedRole !== 'customer-service'}
+                  disabled={!!detectedRole && detectedRole !== 'team-leader'}
                 >
-                  <Headphones className="h-4 w-4 mr-2" />
-                  Support
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Team Leader
                 </TabsTrigger>
               </TabsList>
 
@@ -386,37 +382,37 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                 </div>
               </TabsContent>
 
-              <TabsContent value="support">
+              <TabsContent value="team-leader">
                 <div className="space-y-4 mt-4">
-                  <div className="bg-purple-500/20 p-3 rounded-lg border border-purple-400/30 backdrop-blur-sm">
-                    <p className="text-sm text-purple-200 font-medium">Customer Service Access</p>
-                    <p className="text-xs text-purple-300 mt-1">
-                      Customer support tools and order management
+                  <div className="bg-orange-500/20 p-3 rounded-lg border border-orange-400/30 backdrop-blur-sm">
+                    <p className="text-sm text-orange-200 font-medium">Team Leader Access</p>
+                    <p className="text-xs text-orange-300 mt-1">
+                      Dual dashboard: Personal performance + Team management
                     </p>
                   </div>
                   
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="support-username" className="text-slate-200">Username</Label>
+                      <Label htmlFor="team-leader-username" className="text-slate-200">Username</Label>
                       <Input
-                        id="support-username"
+                        id="team-leader-username"
                         type="text"
                         value={username}
                         onChange={(e) => handleUsernameChange(e.target.value)}
-                        className="bg-slate-800/50 border-slate-600/50 text-white placeholder:text-slate-400 focus:border-purple-500/50 focus:ring-purple-500/20"
+                        className="bg-slate-800/50 border-slate-600/50 text-white placeholder:text-slate-400 focus:border-orange-500/50 focus:ring-orange-500/20"
                         placeholder="Enter your username"
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="support-password" className="text-slate-200">Password</Label>
+                      <Label htmlFor="team-leader-password" className="text-slate-200">Password</Label>
                       <div className="relative">
                         <Input
-                          id="support-password"
+                          id="team-leader-password"
                           type={showPassword ? "text" : "password"}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="bg-slate-800/50 border-slate-600/50 text-white placeholder:text-slate-400 pr-10 focus:border-purple-500/50 focus:ring-purple-500/20"
+                          className="bg-slate-800/50 border-slate-600/50 text-white placeholder:text-slate-400 pr-10 focus:border-orange-500/50 focus:ring-orange-500/20"
                           placeholder="Enter your password"
                           required
                         />
@@ -424,7 +420,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-slate-400 hover:text-purple-400"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-slate-400 hover:text-orange-400"
                           onClick={() => setShowPassword(!showPassword)}
                         >
                           {showPassword ? (
@@ -444,7 +440,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
 
                     <Button 
                       type="submit" 
-                      className="w-full bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 text-white"
+                      className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white"
                       disabled={loading}
                     >
                       {loading ? "Signing in..." : "Sign In"}

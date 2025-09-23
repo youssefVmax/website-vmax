@@ -32,8 +32,15 @@ export async function GET(request: NextRequest) {
   try {
     // Test database connection first
     console.log('🔄 Unified Data API: Testing database connection...');
-    await query('SELECT 1 as test');
-    console.log('✅ Unified Data API: Database connection successful');
+    console.log('🔍 Unified Data API: Request params:', { userRole, userId, userName, managedTeam, dataTypes, dateRange, limit, offset });
+    
+    try {
+      await query('SELECT 1 as test');
+      console.log('✅ Unified Data API: Database connection successful');
+    } catch (dbError) {
+      console.error('❌ Unified Data API: Database connection failed:', dbError);
+      throw new Error(`Database connection failed: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`);
+    }
 
     const result: any = {
       success: true,
@@ -50,6 +57,11 @@ export async function GET(request: NextRequest) {
     };
 
     console.log('🔄 Unified Data API: Fetching data types:', dataTypes, 'for role:', userRole);
+    
+    // Initialize all requested data types to empty arrays to prevent undefined errors
+    dataTypes.forEach(type => {
+      result.data[type] = [];
+    });
 
     // Fetch deals if requested
     if (dataTypes.includes('deals')) {
@@ -206,28 +218,48 @@ export async function GET(request: NextRequest) {
       try {
         console.log('🔄 Unified Data API: Starting notifications query...');
         
-        let notificationsQuery = 'SELECT * FROM notifications WHERE 1=1';
-        const notificationsParams: any[] = [];
-
-        // Apply role-based filtering for notifications
-        if (userRole === 'salesman' && userId) {
-          notificationsQuery += ' AND (salesAgentId = ? OR JSON_CONTAINS(`to`, JSON_QUOTE(?)))';
-          notificationsParams.push(userId, userId);
-        } else if (userRole === 'team-leader' && managedTeam) {
-          notificationsQuery += ' AND (teamName = ? OR salesAgentId = ? OR JSON_CONTAINS(`to`, JSON_QUOTE(?)))';
-          notificationsParams.push(managedTeam, userId, userId);
+        // First check if notifications table exists
+        let tableExists = false;
+        try {
+          await query('SELECT 1 FROM notifications LIMIT 1');
+          tableExists = true;
+          console.log('✅ Unified Data API: Notifications table exists');
+        } catch (tableError) {
+          console.warn('⚠️ Unified Data API: Notifications table does not exist, skipping...');
+          result.data.notifications = [];
+          tableExists = false;
         }
+        
+        if (tableExists) {
+          let notificationsQuery = 'SELECT * FROM notifications WHERE 1=1';
+          const notificationsParams: any[] = [];
 
-        notificationsQuery += ` ORDER BY COALESCE(timestamp, created_at) DESC LIMIT ? OFFSET ?`;
-        notificationsParams.push(limit, offset);
+          // Apply role-based filtering for notifications (simplified to avoid JSON_CONTAINS issues)
+          if (userRole === 'salesman' && userId) {
+            notificationsQuery += ' AND salesAgentId = ?';
+            notificationsParams.push(userId);
+          } else if (userRole === 'team-leader' && managedTeam) {
+            notificationsQuery += ' AND (teamName = ? OR salesAgentId = ?)';
+            notificationsParams.push(managedTeam, userId);
+          }
 
-        console.log('🔄 Unified Data API: Final notifications query:', notificationsQuery);
+          // Use safer ordering - check if timestamp column exists, fallback to created_at
+          notificationsQuery += ` ORDER BY COALESCE(timestamp, created_at, NOW()) DESC LIMIT ? OFFSET ?`;
+          notificationsParams.push(limit, offset);
 
-        const [notificationsResult] = await query(notificationsQuery, notificationsParams);
-        result.data.notifications = Array.isArray(notificationsResult) ? notificationsResult : [];
-        console.log('✅ Unified Data API: Fetched', result.data.notifications.length, 'notifications');
+          console.log('🔄 Unified Data API: Final notifications query:', notificationsQuery);
+          console.log('🔄 Unified Data API: Notifications params:', notificationsParams);
+
+          const [notificationsResult] = await query(notificationsQuery, notificationsParams);
+          result.data.notifications = Array.isArray(notificationsResult) ? notificationsResult : [];
+          console.log('✅ Unified Data API: Fetched', result.data.notifications.length, 'notifications');
+        }
       } catch (error) {
         console.error('❌ Error fetching notifications:', error);
+        console.error('❌ Notifications error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
         result.data.notifications = [];
       }
     }

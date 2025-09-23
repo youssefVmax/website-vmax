@@ -367,6 +367,68 @@ class DirectApiService {
   async getCallbackAnalytics(filters: Record<string, string> = {}): Promise<any> {
     return await directMySQLService.getAnalytics(filters);
   }
+
+  async getUserById(userId: string): Promise<any> {
+    try {
+      console.log('🔄 ApiService: Fetching user profile for ID:', userId);
+      
+      const response = await fetch(`/api/user-profile?user_id=${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        throw new Error(`User profile API error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch user profile');
+      }
+
+      console.log('✅ ApiService: User profile fetched successfully');
+      return result.data;
+    } catch (error) {
+      console.error('❌ ApiService: Get user profile error:', error);
+      return null;
+    }
+  }
+
+  async updateUserProfile(userId: string, updates: any): Promise<boolean> {
+    try {
+      console.log('🔄 ApiService: Updating user profile for ID:', userId, updates);
+      
+      const response = await fetch(`/api/user-profile?user_id=${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Update profile API error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update user profile');
+      }
+
+      console.log('✅ ApiService: User profile updated successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ ApiService: Update user profile error:', error);
+      throw error;
+    }
+  }
 }
 
 // Manager API Service for compatibility

@@ -122,24 +122,24 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
         if (dashboardData.success && dashboardData.data.callbacks) {
           console.log('✅ CallbackKPIDashboard: Data loaded from unified service');
           
-          const callbacks = dashboardData.data.callbacks;
+          const callbacks = dashboardData.data.callbacks || [];
           const deals = dashboardData.data.deals || [];
           
-          // Calculate KPIs from the data
-          const totalCallbacks = callbacks.length;
-          const pendingCallbacks = callbacks.filter(cb => cb.status === 'pending').length;
-          const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length;
+          // Calculate KPIs from the data with null checks
+          const totalCallbacks = Array.isArray(callbacks) ? callbacks.length : 0;
+          const pendingCallbacks = Array.isArray(callbacks) ? callbacks.filter(cb => cb.status === 'pending').length : 0;
+          const completedCallbacks = Array.isArray(callbacks) ? callbacks.filter(cb => cb.status === 'completed').length : 0;
           const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
           
           // Calculate response times from actual data
-          const responseTimes = callbacks
+          const responseTimes = Array.isArray(callbacks) ? callbacks
             .filter(cb => cb.firstCallDate && cb.created_at)
             .map(cb => {
               const created = new Date(cb.created_at);
               const firstCall = new Date(cb.firstCallDate);
               return Math.abs(firstCall.getTime() - created.getTime()) / (1000 * 60 * 60); // hours
             })
-            .filter(time => !isNaN(time) && time >= 0);
+            .filter(time => !isNaN(time) && time >= 0) : [];
           
           const avgResponseTime = responseTimes.length > 0 
             ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length 
@@ -148,7 +148,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           // Group callbacks by status
           const statusDistribution = [
             { name: 'Pending', value: pendingCallbacks, color: '#FF8042' },
-            { name: 'Contacted', value: callbacks.filter(cb => cb.status === 'contacted').length, color: '#FFBB28' },
+            { name: 'Contacted', value: Array.isArray(callbacks) ? callbacks.filter(cb => cb.status === 'contacted').length : 0, color: '#FFBB28' },
             { name: 'Completed', value: completedCallbacks, color: '#00C49F' }
           ];
           
@@ -157,9 +157,9 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
             const date = new Date();
             date.setDate(date.getDate() - (29 - i));
             const dateStr = date.toISOString().split('T')[0];
-            const dayCallbacks = callbacks.filter(cb => 
+            const dayCallbacks = Array.isArray(callbacks) ? callbacks.filter(cb => 
               cb.created_at && cb.created_at.startsWith(dateStr)
-            ).length;
+            ).length : 0;
             return {
               date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
               callbacks: dayCallbacks
@@ -167,7 +167,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           });
           
           // Agent performance
-          const agentPerformance = callbacks.reduce((acc, cb) => {
+          const agentPerformance = Array.isArray(callbacks) ? callbacks.reduce((acc, cb) => {
             const agent = cb.salesAgentName || cb.salesAgentId || cb.SalesAgentID || 'Unknown';
             if (!acc[agent]) {
               acc[agent] = { agent, callbacks: 0, completed: 0 };
@@ -177,7 +177,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               acc[agent].completed++;
             }
             return acc;
-          }, {} as Record<string, { agent: string; callbacks: number; completed: number }>);
+          }, {} as Record<string, { agent: string; callbacks: number; completed: number }>) : {};
           
           const topAgents = Object.values(agentPerformance)
             .map((agentData) => {

@@ -24,7 +24,7 @@ export function SalesAnalysisDashboard({
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            IPTV Sales Dashboard
+          Sales Dashboard
           </h1>
           <p className="text-xl text-gray-600">
             Welcome back, {user.name || 'User'}! ({userRole})

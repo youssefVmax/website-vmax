@@ -1,17 +1,44 @@
 "use client"
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Callback } from '@/lib/api-service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Download, Filter, Phone, Calendar, Users, Clock, RefreshCw } from 'lucide-react'
+import { Search, Download, Filter, Phone, Calendar, Users, Clock, RefreshCw, AlertCircle } from 'lucide-react'
 import { format } from 'date-fns'
 
-export default function CallbacksTablePage() {
+interface Callback {
+  id: string
+  customerName?: string
+  customer_name?: string
+  phoneNumber?: string
+  phone_number?: string
+  email?: string
+  salesAgentName?: string
+  sales_agent_name?: string
+  salesTeam?: string
+  sales_team?: string
+  firstCallDate?: string
+  first_call_date?: string
+  firstCallTime?: string
+  first_call_time?: string
+  callbackReason?: string
+  callback_reason?: string
+  callbackNotes?: string
+  callback_notes?: string
+  status?: string
+  createdBy?: string
+  created_by?: string
+  createdAt?: string
+  created_at?: string
+  convertedToDeal?: boolean
+  converted_to_deal?: boolean
+}
+
+export default function AllCallbacksTable() {
   const [callbacks, setCallbacks] = useState<Callback[]>([])
   const [filteredCallbacks, setFilteredCallbacks] = useState<Callback[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,13 +60,13 @@ export default function CallbacksTablePage() {
       customerName: cb.customerName ?? cb.customer_name ?? '',
       phoneNumber: cb.phoneNumber ?? cb.phone_number ?? '',
       email: cb.email ?? '',
-      salesAgentName: cb.salesAgentName ?? cb.sales_agent ?? '',
+      salesAgentName: cb.salesAgentName ?? cb.sales_agent_name ?? cb.sales_agent ?? '',
       salesTeam: cb.salesTeam ?? cb.sales_team ?? '',
       firstCallDate: cb.firstCallDate ?? cb.first_call_date ?? '',
       firstCallTime: cb.firstCallTime ?? cb.first_call_time ?? '',
       callbackReason: cb.callbackReason ?? cb.callback_reason ?? '',
       callbackNotes: cb.callbackNotes ?? cb.callback_notes ?? '',
-      status: cb.status,
+      status: cb.status ?? 'pending',
       createdBy: cb.createdBy ?? cb.created_by ?? '',
       createdAt: cb.createdAt ?? cb.created_at ?? '',
       convertedToDeal: cb.converted_to_deal ?? cb.convertedToDeal ?? false,
@@ -129,13 +156,13 @@ export default function CallbacksTablePage() {
       bValue = b[key]
 
       if (key === 'createdAt' || key === 'firstCallDate') {
-        aValue = new Date(aValue).getTime()
-        bValue = new Date(bValue).getTime()
+        aValue = new Date(aValue || 0).getTime()
+        bValue = new Date(bValue || 0).getTime()
       }
 
       if (typeof aValue === 'string') {
         aValue = aValue.toLowerCase()
-        bValue = bValue.toLowerCase()
+        bValue = (bValue || '').toLowerCase()
       }
       return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1)
     })
@@ -144,6 +171,8 @@ export default function CallbacksTablePage() {
   }
 
   const exportToCSV = () => {
+    if (filteredCallbacks.length === 0) return
+
     const headers = [
       'Customer Name', 'Phone Number', 'Email', 'Sales Agent', 'Sales Team',
       'First Call Date', 'First Call Time', 'Callback Reason', 'Callback Notes',
@@ -174,7 +203,7 @@ export default function CallbacksTablePage() {
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `callbacks_export_${format(new Date(), 'yyyy-MM-dd')}.csv`)
+    link.setAttribute('download', `all_callbacks_export_${format(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
@@ -214,25 +243,26 @@ export default function CallbacksTablePage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading callbacks...</p>
+          <p className="text-muted-foreground">Loading all callbacks...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">All Callbacks</h1>
+          <h1 className="text-3xl font-bold tracking-tight">All Callbacks Table</h1>
           <p className="text-muted-foreground">
-            Comprehensive view of all callbacks from all salesmen
+            Complete view of all callbacks from all salesmen ({normalizedCallbacks.length} total)
           </p>
           {error && (
-            <p className="text-red-500 text-sm mt-1">
-              ⚠️ {error}
-            </p>
+            <div className="flex items-center gap-2 text-red-500 text-sm mt-2">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </div>
           )}
         </div>
         <div className="flex gap-2">
@@ -391,7 +421,7 @@ export default function CallbacksTablePage() {
         <CardHeader>
           <CardTitle>Callbacks ({filteredCallbacks.length})</CardTitle>
           <CardDescription>
-            All callbacks from salesmen with complete information
+            All callbacks from salesmen with complete information and export functionality
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -415,34 +445,34 @@ export default function CallbacksTablePage() {
                 {filteredCallbacks.map((cb) => (
                   <TableRow key={cb.id}>
                     <TableCell>
-                      <div className="font-medium">{cb.customerName}</div>
+                      <div className="font-medium">{cb.customerName || 'N/A'}</div>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs space-y-1">
-                        <div>{cb.email}</div>
-                        <div className="text-muted-foreground">{cb.phoneNumber}</div>
+                        <div>{cb.email || 'N/A'}</div>
+                        <div className="text-muted-foreground">{cb.phoneNumber || 'N/A'}</div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{cb.salesAgentName}</div>
+                      <div className="font-medium">{cb.salesAgentName || 'N/A'}</div>
                       <div className="text-xs text-muted-foreground">
-                        by {cb.createdBy}
+                        by {cb.createdBy || 'Unknown'}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{cb.salesTeam}</Badge>
+                      <Badge variant="outline">{cb.salesTeam || 'N/A'}</Badge>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs">
                         <div className="font-medium">
                           {cb.firstCallDate ? format(new Date(cb.firstCallDate), 'MMM dd, yyyy') : 'N/A'}
                         </div>
-                        <div className="text-muted-foreground">{cb.firstCallTime}</div>
+                        <div className="text-muted-foreground">{cb.firstCallTime || 'N/A'}</div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs max-w-[150px] truncate" title={cb.callbackReason}>
-                        {cb.callbackReason}
+                        {cb.callbackReason || 'N/A'}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -475,9 +505,11 @@ export default function CallbacksTablePage() {
               </TableBody>
             </Table>
           </div>
-          {filteredCallbacks.length === 0 && (
+          {filteredCallbacks.length === 0 && !loading && (
             <div className="text-center py-8">
-              <p className="text-muted-foreground">No callbacks found matching your criteria.</p>
+              <p className="text-muted-foreground">
+                {error ? 'Failed to load callbacks. Please try refreshing.' : 'No callbacks found matching your criteria.'}
+              </p>
             </div>
           )}
         </CardContent>

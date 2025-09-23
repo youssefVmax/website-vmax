@@ -8,7 +8,9 @@ import { PlusCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
 
-export function MainNav() {
+export { EnhancedNavbar as MainNav } from './enhanced-navbar'
+
+export function MainNavOld() {
   const pathname = usePathname()
   const { user } = useAuth()
 

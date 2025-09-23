@@ -1,1 +1,1 @@
-export { default } from './team-leader-paginated-dashboard'
+export { default } from './enhanced-team-leader-dashboard'

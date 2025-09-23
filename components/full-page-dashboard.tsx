@@ -62,17 +62,14 @@ import { apiService, Deal } from '@/lib/api-service'
 import { unifiedApiService } from '@/lib/unified-api-service'
 import { useUnifiedData } from '@/hooks/useUnifiedData'
 
-interface FullPageDashboardProps {
-  user: any;
-  onLogout: () => void;
-}
-
-export default function FullPageDashboard({ user, onLogout }: FullPageDashboardProps) {
-  console.log('FullPageDashboard: Component initializing...')
-  
-  const [isDark, setIsDark] = useState(true)
+export default function FullPageDashboard() {
+  const { user, logout } = useAuth()
   const [activeTab, setActiveTab] = useState("dashboard")
+  const [isDark, setIsDark] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Debug user object
+  console.log('🔍 FullPageDashboard: User object:', user)
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -191,7 +188,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
     )
   }
 
-  console.log('FullPageDashboard: User loaded:', user.name, user.role)
+  console.log('FullPageDashboard: User loaded:', user.full_name || user.username, user.role)
 
   const getNavItems = () => {
     const baseItems = [
@@ -207,8 +204,6 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
         { id: "team-targets", icon: Target, label: "Team Targets" } as const,
         { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
         { id: "datacenter", icon: Database, label: "Data Center" } as const,
-        { id: "admin-backup", icon: Download, label: "Database Backup" } as const,
-        { id: "admin-data-export", icon: FileSpreadsheet, label: "Data Export" } as const,
         { id: "admin-deals-table", icon: Users, label: "All Deals Table" } as const,
         { id: "admin-callbacks-table", icon: Phone, label: "All Callbacks Table" } as const,
         { id: "settings", icon: Settings, label: "Settings" } as const,
@@ -335,14 +330,14 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
                   <div className={`text-sm transition-colors duration-300 ${
                     isDark ? 'text-slate-300' : 'text-slate-700'
                   }`}>
-                    <div className="font-medium">{user.name}</div>
+                    <div className="font-medium">{user.full_name || user.username}</div>
                     <div className={`text-xs capitalize transition-colors duration-300 ${
                       isDark ? 'text-slate-500' : 'text-slate-500'
                     }`}>{user.role}</div>
-                    {user.team && (
+                    {user.team_name && (
                       <div className={`text-xs transition-colors duration-300 ${
                         isDark ? 'text-slate-600' : 'text-slate-400'
-                      }`}>{user.team}</div>
+                      }`}>{user.team_name}</div>
                     )}
                   </div>
                 )}
@@ -360,7 +355,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={onLogout}
+                    onClick={logout}
                     className={`transition-colors duration-300 ${
                       isDark ? 'text-slate-400 hover:text-red-400' : 'text-slate-600 hover:text-red-600'
                     }`}
@@ -389,7 +384,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
                 <p className={`text-sm transition-colors duration-300 ${
                   isDark ? 'text-slate-400' : 'text-slate-600'
                 }`}>
-                  Welcome back, {user.name}
+                  Welcome back, {user.full_name || user.username || 'User'}! ({user.role})
                 </p>
               </div>
 
@@ -411,7 +406,7 @@ export default function FullPageDashboard({ user, onLogout }: FullPageDashboardP
                 <Badge variant="outline" className={`transition-colors duration-300 ${
                   isDark ? 'border-slate-600 text-slate-300' : 'border-blue-300 text-blue-700'
                 }`}>
-                  {user.team || user.role}
+                  {user.team_name || user.role}
                 </Badge>
               </div>
             </div>
@@ -521,10 +516,6 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "Manage Callbacks"
     case "callbacks-new":
       return "New Callback"
-    case "admin-backup":
-      return "Database Backup"
-    case "admin-data-export":
-      return "Data Export"
     case "admin-deals-table":
       return "All Deals Table"
     case "admin-callbacks-table":
@@ -586,10 +577,6 @@ function PageContent({
       return <ManageCallbacksPage />
     case "callbacks-new":
       return <NewCallbackPage />
-    case "admin-backup":
-      return <AdminBackupPage user={user} setActiveTab={setActiveTab} />
-    case "admin-data-export":
-      return <AdminDataExportPage user={user} setActiveTab={setActiveTab} />
     case "admin-deals-table":
       return <AdminDealsTablePage user={user} setActiveTab={setActiveTab} />
     case "admin-callbacks-table":
@@ -611,8 +598,8 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
   } = useUnifiedData({
     userRole: user.role,
     userId: user.id,
-    userName: user.name,
-    managedTeam: user.managedTeam || user.team,
+    userName: user.full_name,
+    managedTeam: user.team_name,
     autoLoad: true
   });
 
@@ -652,10 +639,15 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           console.log('🔄 DashboardOverview: Loading agent count...');
           const usersResponse = await fetch('/api/mysql-service.php?path=users&limit=1000');
           const usersData = await usersResponse.json();
-          if (usersData.success) {
+          console.log('📊 DashboardOverview: Users API response:', usersData);
+          
+          if (usersData.success && usersData.data && Array.isArray(usersData.data)) {
             const salesmen = usersData.data.filter((u: any) => u.role === 'salesman');
             setTotalAgents(salesmen.length);
             console.log('✅ DashboardOverview: Found', salesmen.length, 'agents');
+          } else {
+            console.warn('⚠️ DashboardOverview: Invalid users data structure:', usersData);
+            setTotalAgents(0);
           }
         } catch (error) {
           console.error('❌ DashboardOverview: Error loading agent count:', error)
@@ -715,7 +707,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-cyan-400 dark:to-blue-400 bg-clip-text text-transparent">
-                    Welcome back, {user.name}!
+                    Welcome back, {user.full_name || user.username || 'User'}!
                   </h3>
                   <p className="text-muted-foreground text-sm">
                     {user.role === 'manager' 
@@ -808,10 +800,6 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
                 <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("admin-callbacks-table")}>
                   <Phone className="h-6 w-6 mb-2" />
                   All Callbacks
-                </Button>
-                <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("admin-backup")}>
-                  <Download className="h-6 w-6 mb-2" />
-                  Backup
                 </Button>
                 <Button variant="outline" className="h-20 flex flex-col" onClick={() => setActiveTab("notifications")}>
                   <Bell className="h-6 w-6 mb-2" />
@@ -1139,81 +1127,6 @@ function CompetitionDashboard() {
 }
 
 // Admin Page Components
-function AdminBackupPage({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Database Backup</h1>
-          <p className="text-muted-foreground">
-            Manage and create backups of your MySQL database
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Shield className="h-4 w-4" />
-          Admin Only
-        </div>
-      </div>
-
-      <Card className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
-            <Download className="h-5 w-5" />
-            Quick Backup Actions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Button className="h-16 flex flex-col gap-2" onClick={() => window.open('/admin/backup', '_blank')}>
-              <Download className="h-6 w-6" />
-              Open Full Backup Page
-            </Button>
-            <Button variant="outline" className="h-16 flex flex-col gap-2" onClick={() => window.open('/admin/data-export', '_blank')}>
-              <FileSpreadsheet className="h-6 w-6" />
-              Open Data Export
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function AdminDataExportPage({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Data Export</h1>
-          <p className="text-muted-foreground">
-            Export and download your data in various formats
-          </p>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5" />
-            Export Options
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            <Button className="h-16 flex flex-col gap-2" onClick={() => window.open('/admin/data-export', '_blank')}>
-              <FileSpreadsheet className="h-6 w-6" />
-              Open Full Export Page
-            </Button>
-            <Button variant="outline" className="h-16 flex flex-col gap-2" onClick={() => setActiveTab("admin-deals-table")}>
-              <Users className="h-6 w-6" />
-              View Deals Table
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
 
 function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
   const [deals, setDeals] = useState<Deal[]>([])
@@ -1299,7 +1212,7 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
       }
     }
     fetchDeals()
-  }, [user.id, user.name, user.managedTeam])
+  }, [user.id, user.full_name, user.team_name])
 
   const exportToCSV = () => {
     if (deals.length === 0) return
@@ -1466,11 +1379,20 @@ function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveT
         setError(null)
         console.log('Fetching callbacks...')
         const allCallbacks = await callbacksService.getCallbacks('manager')
-        console.log('Callbacks fetched:', allCallbacks.length)
-        setCallbacks(allCallbacks)
+        console.log('Callbacks fetched:', allCallbacks)
+        
+        // Ensure we have a valid array
+        if (Array.isArray(allCallbacks)) {
+          console.log('Callbacks count:', allCallbacks.length)
+          setCallbacks(allCallbacks)
+        } else {
+          console.warn('Callbacks response is not an array:', allCallbacks)
+          setCallbacks([])
+        }
       } catch (error) {
         console.error('Error fetching callbacks:', error)
         setError(error instanceof Error ? error.message : 'Unknown error')
+        setCallbacks([]) // Ensure callbacks is always an array
       } finally {
         setLoading(false)
       }
@@ -1536,11 +1458,11 @@ function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveT
         <div>
           <h1 className="text-3xl font-bold tracking-tight">All Callbacks Table</h1>
           <p className="text-muted-foreground">
-            {callbacks.length} callbacks from all salesmen
+            {(callbacks || []).length} callbacks from all salesmen
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={exportToCSV} disabled={callbacks.length === 0}>
+          <Button onClick={exportToCSV} disabled={(callbacks || []).length === 0}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
@@ -1553,19 +1475,19 @@ function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveT
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Callbacks ({Math.min(10, callbacks.length)})</CardTitle>
+          <CardTitle>Recent Callbacks ({Math.min(10, (callbacks || []).length)})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {callbacks.slice(0, 10).map((callback, index) => (
-              <div key={callback.id || index} className="flex justify-between items-center p-3 border rounded">
+            {(callbacks || []).slice(0, 10).map((callback, index) => (
+              <div key={callback?.id || index} className="flex justify-between items-center p-3 border rounded">
                 <div>
-                  <div className="font-medium">{callback.customerName}</div>
-                  <div className="text-sm text-muted-foreground">{callback.salesAgentName}</div>
+                  <div className="font-medium">{callback?.customerName || 'N/A'}</div>
+                  <div className="text-sm text-muted-foreground">{callback?.salesAgentName || 'N/A'}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-medium">{callback.status}</div>
-                  <div className="text-sm text-muted-foreground">{callback.firstCallDate}</div>
+                  <div className="font-medium">{callback?.status || 'N/A'}</div>
+                  <div className="text-sm text-muted-foreground">{callback?.firstCallDate || 'N/A'}</div>
                 </div>
               </div>
             ))}

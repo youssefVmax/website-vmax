@@ -162,3 +162,54 @@ CREATE TABLE IF NOT EXISTS `notifications` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Data Center Tables for Feedback System
+CREATE TABLE IF NOT EXISTS `data_center` (
+  `id` VARCHAR(255) NOT NULL,
+  `title` VARCHAR(500) NOT NULL,
+  `description` TEXT NOT NULL,
+  `content` LONGTEXT NULL,
+  `data_type` VARCHAR(100) DEFAULT 'general',
+  `sent_by_id` VARCHAR(255) NOT NULL,
+  `sent_to_id` VARCHAR(255) NULL,
+  `sent_to_team` VARCHAR(255) NULL,
+  `priority` ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium',
+  `status` ENUM('active', 'archived', 'deleted') DEFAULT 'active',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  PRIMARY KEY (`id`),
+  INDEX `idx_sent_by` (`sent_by_id`),
+  INDEX `idx_sent_to` (`sent_to_id`),
+  INDEX `idx_sent_to_team` (`sent_to_team`),
+  INDEX `idx_status` (`status`),
+  INDEX `idx_priority` (`priority`),
+  INDEX `idx_created_at` (`created_at`),
+  INDEX `idx_data_type` (`data_type`),
+  
+  FOREIGN KEY (`sent_by_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`sent_to_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `data_feedback` (
+  `id` VARCHAR(255) NOT NULL,
+  `data_id` VARCHAR(255) NOT NULL,
+  `user_id` VARCHAR(255) NOT NULL,
+  `feedback_text` TEXT NOT NULL,
+  `rating` INT CHECK (`rating` >= 1 AND `rating` <= 5),
+  `feedback_type` VARCHAR(100) DEFAULT 'general',
+  `status` ENUM('active', 'archived', 'deleted') DEFAULT 'active',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  
+  PRIMARY KEY (`id`),
+  INDEX `idx_data_id` (`data_id`),
+  INDEX `idx_user_id` (`user_id`),
+  INDEX `idx_status` (`status`),
+  INDEX `idx_created_at` (`created_at`),
+  INDEX `idx_rating` (`rating`),
+  INDEX `idx_feedback_type` (`feedback_type`),
+  
+  FOREIGN KEY (`data_id`) REFERENCES `data_center`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

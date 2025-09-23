@@ -40,7 +40,7 @@ export class DirectMySQLService {
           ...options.headers,
         },
         ...options,
-        signal: this.createTimeoutSignal(API_CONFIG.TIMEOUT || 10000),
+        signal: this.createTimeoutSignal(API_CONFIG.TIMEOUT || 30000),
       });
 
       if (!response.ok) {
@@ -149,13 +149,47 @@ export class DirectMySQLService {
       
       const response = await fetch(`/api/unified-data?${params.toString()}`);
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Try to get more detailed error information
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.message) {
+            errorMessage += ` - ${errorData.message}`;
+          }
+          console.error('❌ DirectMySQLService: Detailed error:', errorData);
+        } catch (parseError) {
+          console.error('❌ DirectMySQLService: Could not parse error response');
+        }
+        
+        // If unified-data API fails, try fallback approach
+        console.warn('⚠️ DirectMySQLService: Unified API failed, trying fallback...');
+        return await this.getNotificationsFallback(filters);
       }
       
       const result = await response.json();
       return result.success ? (result.data.notifications || []) : [];
     } catch (error) {
       console.error('❌ DirectMySQLService: Error fetching notifications:', error);
+      console.warn('⚠️ DirectMySQLService: Trying fallback approach...');
+      return await this.getNotificationsFallback(filters);
+    }
+  }
+
+  private async getNotificationsFallback(filters: Record<string, string> = {}): Promise<any> {
+    try {
+      console.log('🔄 DirectMySQLService: Using fallback notifications approach');
+      // Try direct notifications API if it exists
+      const response = await fetch('/api/notifications?limit=1000');
+      if (response.ok) {
+        const result = await response.json();
+        return Array.isArray(result) ? result : (result.data || []);
+      }
+      
+      // If all else fails, return empty array
+      console.warn('⚠️ DirectMySQLService: All notification fetching methods failed, returning empty array');
+      return [];
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Fallback also failed:', error);
       return [];
     }
   }

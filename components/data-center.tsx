@@ -6,10 +6,18 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Download, Database, FileText, Users, Trash2, Plus, X } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { 
+  Upload, Download, Database, FileText, Users, Trash2, Plus, X, 
+  Send, MessageCircle, Star, Eye, Edit, Calendar, User, AlertCircle,
+  CheckCircle, Clock, Archive
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiService } from "@/lib/api-service"
+import { dataCenterService, DataCenterEntry, DataFeedback } from "@/lib/data-center-service"
 import { showInfo } from "@/lib/sweetalert"
 import { formatDisplayDate, sanitizeObject } from "@/lib/timestamp-utils"
 
@@ -39,7 +47,9 @@ interface DataCenterProps {
   user: { name: string; username: string; id: string }
 }
 
-export function DataCenter({ userRole, user }: DataCenterProps) {
+export { EnhancedDataCenter as DataCenter } from './enhanced-data-center'
+
+export function DataCenterOld({ userRole, user }: DataCenterProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [users, setUsers] = useState<any[]>([])
