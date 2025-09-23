@@ -511,7 +511,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               <div>
                 <p className="text-sm font-medium text-green-700">Top Customer</p>
                 <p className="text-2xl font-bold text-green-900 truncate max-w-[150px]">
-                  {kpis.callbacksByAgent.length > 0 && kpis.recentCallbacks.length > 0 
+                  {kpis?.callbacksByAgent?.length > 0 && kpis?.recentCallbacks?.length > 0 
                     ? kpis.recentCallbacks[0]?.customer_name || 'No customers'
                     : 'No customers'}
                 </p>
