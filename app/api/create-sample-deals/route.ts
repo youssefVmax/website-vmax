@@ -122,14 +122,14 @@ export async function POST(request: NextRequest) {
         
         await query(
           `INSERT INTO deals (
-            id, DealID, customerName, email, phoneNumber, amountPaid, amount, totalAmount,
-            SalesAgentID, salesAgentName, ClosingAgentID, closingAgentName,
-            serviceTier, salesTeam, status, signupDate, durationMonths,
+            id, DealID, customer_name, email, phone_number, amount_paid, 
+            SalesAgentID, sales_agent, ClosingAgentID, closing_agent,
+            service_tier, sales_team, status, signup_date, duration_months,
             country, invoice_link, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             deal.id, deal.DealID, deal.customerName, deal.email, deal.phoneNumber,
-            deal.amountPaid, deal.amount, deal.totalAmount, deal.SalesAgentID, deal.salesAgentName,
+            deal.amountPaid, deal.SalesAgentID, deal.salesAgentName,
             deal.ClosingAgentID, deal.closingAgentName, deal.serviceTier, deal.salesTeam,
             deal.status, deal.signupDate, deal.durationMonths, deal.country, deal.invoice_link,
             now, now

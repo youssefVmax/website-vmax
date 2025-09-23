@@ -87,7 +87,8 @@ export default function ManageCallbacksPage() {
   // Derived analytics for manager view (read-only insights)
   const phoneStats = useMemo(() => {
     const map = new Map<string, { count: number; lastUpdatedAt?: Date; agents: Set<string>; dates: Date[] }>()
-    callbacks.forEach((c) => {
+    const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
+    safeCallbacks.forEach((c) => {
       const key = c.phone_number || 'unknown'
       if (!map.has(key)) map.set(key, { count: 0, agents: new Set<string>(), dates: [] })
       const rec = map.get(key)!
@@ -104,7 +105,8 @@ export default function ManageCallbacksPage() {
 
   const updatesByAgent = useMemo(() => {
     const map = new Map<string, number>()
-    callbacks.forEach((c) => {
+    const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
+    safeCallbacks.forEach((c) => {
       const updater = (c as any).updated_by || c.sales_agent || 'Unknown'
       map.set(updater, (map.get(updater) || 0) + 1)
     })
@@ -128,7 +130,7 @@ export default function ManageCallbacksPage() {
   }, [user]);
 
   const filtered = useMemo(() => {
-    let list = callbacks;
+    let list = Array.isArray(callbacks) ? callbacks : [];
     if (statusFilter !== "all") list = list.filter((c) => c.status === statusFilter);
     if (search.trim()) {
       const q = search.toLowerCase();

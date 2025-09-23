@@ -59,9 +59,8 @@ import { CallbacksManagement } from "@/components/callbacks-management"
 import ManageCallbacksPage from "@/components/manage-callback"
 import NewCallbackPage from "@/components/new-callback"
 import { apiService, Deal } from '@/lib/api-service'
-
-import { unifiedDataService } from '@/lib/unified-data-service'
-import { useEnhancedAnalytics } from '@/hooks/useEnhancedAnalytics'
+import { unifiedApiService } from '@/lib/unified-api-service'
+import { useUnifiedData } from '@/hooks/useUnifiedData'
 
 interface FullPageDashboardProps {
   user: any;
@@ -597,84 +596,52 @@ function PageContent({
       return <AdminCallbacksTablePage user={user} setActiveTab={setActiveTab} />
     case "settings":
       return <ProfileSettings user={user} />
-    default:
-      return <DashboardOverview user={user} setActiveTab={setActiveTab} />
   }
 }
 
 function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
-  // State for dashboard data
-  const [sales, setSales] = useState<Deal[]>([])
-  const [metrics, setMetrics] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Use enhanced analytics for better data fetching
-  const { 
-    analytics: enhancedAnalytics, 
-    loading: analyticsLoading, 
-    error: analyticsError 
-  } = useEnhancedAnalytics({
+  // Use unified data service for better performance and data consistency
+  const {
+    data,
+    kpis,
+    loading,
+    error,
+    lastUpdated,
+    refresh
+  } = useUnifiedData({
     userRole: user.role,
     userId: user.id,
     userName: user.name,
-    username: user.username,
     managedTeam: user.managedTeam || user.team,
-    autoRefresh: true,
-    refreshInterval: 60000
+    autoLoad: true
   });
-  
-  // Load dashboard data using unified data service
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true)
-        console.log('🔄 DashboardOverview: Loading data for', user.role, user.id);
-        
-        // Use unified data service for better performance
-        const dashboardData = await unifiedDataService.getDashboardData(
-          user.role,
-          user.id,
-          user.name,
-          user.managedTeam || user.team
-        );
-        
-        if (dashboardData.success) {
-          console.log('✅ DashboardOverview: Data loaded successfully', dashboardData.data);
-          
-          const deals = Array.isArray(dashboardData.data.deals) ? dashboardData.data.deals : [];
-          setSales(deals);
-          
-          // Calculate metrics from the data
-          const totalRevenue = deals.reduce((sum, deal) => sum + (parseFloat(deal.amount_paid) || 0), 0);
-          const calculatedMetrics = {
-            totalRevenue,
-            totalSales: totalRevenue, // Alias for compatibility
-            totalDeals: deals.length,
-            averageDealSize: deals.length > 0 ? totalRevenue / deals.length : 0,
-            callbacks: dashboardData.data.callbacks || [],
-            targets: dashboardData.data.targets || [],
-            analytics: dashboardData.data.analytics || enhancedAnalytics
-          };
-          
-          setMetrics(calculatedMetrics);
-          setError(null);
-        } else {
-          throw new Error(dashboardData.error || 'Failed to load dashboard data');
-        }
-      } catch (err) {
-        console.error('❌ DashboardOverview: Error loading data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load data')
-        // Ensure sales is always an array, even on error
-        setSales([])
-        setMetrics(null)
-      } finally {
-        setLoading(false)
-      }
-    }
+
+  // Calculate metrics with safe number conversion
+  const metrics = useMemo(() => {
+    const deals = data.deals || [];
+    const callbacks = data.callbacks || [];
+    const targets = data.targets || [];
     
-    loadDashboardData()
-  }, [user.role, user.id, user.team, user.managedTeam])
+    // Safe numeric conversion to prevent binary string issues
+    const totalRevenue = deals.reduce((sum, deal) => {
+      const amount = typeof deal.amountPaid === 'string' 
+        ? parseFloat(deal.amountPaid) || 0 
+        : Number(deal.amountPaid) || 0;
+      return sum + amount;
+    }, 0);
+    
+    return {
+      totalRevenue,
+      totalSales: totalRevenue, // Alias for compatibility
+      totalDeals: deals.length,
+      averageDealSize: deals.length > 0 ? totalRevenue / deals.length : 0,
+      totalCallbacks: callbacks.length,
+      totalTargets: targets.length,
+      deals,
+      callbacks,
+      targets
+    };
+  }, [data]);
 
   const [totalAgents, setTotalAgents] = useState(0)
 
@@ -683,10 +650,13 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
       if (user.role === 'manager') {
         try {
           console.log('🔄 DashboardOverview: Loading agent count...');
-          const usersData = await unifiedDataService.getUsers();
-          const salesmen = usersData.filter(u => u.role === 'salesman');
-          setTotalAgents(salesmen.length);
-          console.log('✅ DashboardOverview: Found', salesmen.length, 'agents');
+          const usersResponse = await fetch('/api/mysql-service.php?path=users&limit=1000');
+          const usersData = await usersResponse.json();
+          if (usersData.success) {
+            const salesmen = usersData.data.filter((u: any) => u.role === 'salesman');
+            setTotalAgents(salesmen.length);
+            console.log('✅ DashboardOverview: Found', salesmen.length, 'agents');
+          }
         } catch (error) {
           console.error('❌ DashboardOverview: Error loading agent count:', error)
           setTotalAgents(0);
@@ -712,6 +682,24 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     )
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-red-200">
+          <CardContent className="p-6">
+            <div className="text-center text-red-600">
+              <p className="text-lg font-semibold">Error Loading Dashboard</p>
+              <p className="text-sm mt-2">{error}</p>
+              <Button onClick={refresh} className="mt-4">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
@@ -733,8 +721,8 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
                     {user.role === 'manager' 
                       ? 'Here\'s an overview of your team\'s performance today.'
                       : user.role === 'salesman'
-                        ? `You have ${sales.length} deals totaling $${metrics?.totalSales?.toFixed(2) || '0.00'}`
-                        : `Supporting ${sales.length} customer interactions.`}
+                        ? `You have ${metrics?.deals?.length || 0} deals totaling $${metrics?.totalSales?.toFixed(2) || '0.00'}`
+                        : `Supporting ${metrics?.deals?.length || 0} customer interactions.`}
                   </p>
                 </div>
               </div>
@@ -744,7 +732,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
                 <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent">
                   ${metrics?.totalSales?.toFixed(2) || '0.00'}
                 </p>
-                <p className="text-sm text-muted-foreground">{sales?.length || 0} Deals</p>
+                <p className="text-sm text-muted-foreground">{metrics?.deals?.length || 0} Deals</p>
               </div>
             </div>
           </div>
@@ -763,24 +751,24 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
         />
         <AnimatedMetricCard
           title={user.role === 'manager' ? "Total Deals" : "My Deals"}
-          value={sales.length}
-          previousValue={Math.max(0, sales.length - 2)}
+          value={metrics?.deals?.length || 0}
+          previousValue={Math.max(0, (metrics?.deals?.length || 0) - 2)}
           icon={TrendingUp}
           format="number"
           color="blue"
         />
         <AnimatedMetricCard
           title={user.role === 'manager' ? "Active Agents" : "Performance Score"}
-          value={user.role === 'manager' ? totalAgents : Math.min(100, (sales.length * 10))}
-          previousValue={user.role === 'manager' ? Math.max(0, totalAgents - 1) : Math.min(95, (sales.length * 10) - 5)}
+          value={user.role === 'manager' ? totalAgents : Math.min(100, ((metrics?.deals?.length || 0) * 10))}
+          previousValue={user.role === 'manager' ? Math.max(0, totalAgents - 1) : Math.min(95, ((metrics?.deals?.length || 0) * 10) - 5)}
           icon={Users}
           format={user.role === 'manager' ? "number" : "percentage"}
           color="purple"
         />
         <AnimatedMetricCard
           title={user.role === 'manager' ? "Avg Deal Size" : "Weekly Target"}
-          value={user.role === 'manager' ? (metrics?.averageDealSize || 0) : Math.min(100, ((sales.length / 7) * 100))}
-          previousValue={user.role === 'manager' ? (metrics?.averageDealSize || 0) * 0.9 : Math.min(95, ((sales.length / 7) * 100) - 5)}
+          value={user.role === 'manager' ? (metrics?.averageDealSize || 0) : Math.min(100, (((metrics?.deals?.length || 0) / 7) * 100))}
+          previousValue={user.role === 'manager' ? (metrics?.averageDealSize || 0) * 0.9 : Math.min(95, (((metrics?.deals?.length || 0) / 7) * 100) - 5)}
           icon={Target}
           format={user.role === 'manager' ? "currency" : "percentage"}
           color="orange"
@@ -1285,26 +1273,22 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
         console.log('🔍 AdminDealsTablePage: Direct deals API response:', directDealsData);
         
         // Use unified data service to get ALL deals (no user filtering for admin view)
-        const dashboardData = await unifiedDataService.fetchUnifiedData({
-          userRole: 'manager',
-          dataTypes: ['deals'],
-          limit: 1000, // Get more deals for admin view
-          offset: 0
+        const allDeals = await unifiedApiService.getDeals({
+          limit: '1000' // Get more deals for admin view
         });
         
-        console.log('🔍 AdminDealsTablePage: Unified API Response:', dashboardData);
+        console.log('🔍 AdminDealsTablePage: Unified API Response:', allDeals);
         
-        if (dashboardData.success && dashboardData.data && dashboardData.data.deals) {
-          const allDeals = dashboardData.data.deals;
-          console.log('✅ AdminDealsTablePage: Deals fetched:', allDeals.length);
+        if (Array.isArray(allDeals) && allDeals.length > 0) {
+          console.log('✅ AdminDealsTablePage: Deals fetched from unified service:', allDeals.length);
           console.log('🔍 AdminDealsTablePage: Sample deals:', allDeals.slice(0, 3));
           setDeals(allDeals);
-        } else if (directDealsData.success && directDealsData.deals) {
+        } else if (directDealsData.success && Array.isArray(directDealsData.deals)) {
           // Fallback to direct API if unified service fails
           console.log('✅ AdminDealsTablePage: Using direct API fallback, deals:', directDealsData.deals.length);
           setDeals(directDealsData.deals);
         } else {
-          console.error('❌ AdminDealsTablePage: Both APIs failed:', { dashboardData, directDealsData });
+          console.error('❌ AdminDealsTablePage: Both APIs failed:', { allDeals, directDealsData });
           throw new Error('No deals found in database. Both unified and direct APIs returned empty results.');
         }
       } catch (error) {

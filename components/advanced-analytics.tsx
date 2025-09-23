@@ -55,7 +55,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
   // Update last updated timestamp whenever deals stream changes
   useEffect(() => {
-    if (deals && deals.length >= 0) {
+    if (Array.isArray(deals) && deals.length >= 0) {
       setLastUpdated(new Date())
     }
   }, [deals])
@@ -77,30 +77,30 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         totalRevenue: enhancedAnalytics.overview.totalRevenue,
         totalDeals: enhancedAnalytics.overview.totalDeals,
         averageDealSize: enhancedAnalytics.overview.averageDealSize,
-        topAgents: enhancedAnalytics.charts.topAgents.map(agent => ({
+        topAgents: Array.isArray(enhancedAnalytics.charts?.topAgents) ? enhancedAnalytics.charts.topAgents.map(agent => ({
           agent: agent.agent,
           revenue: agent.sales,
           deals: agent.deals
-        })),
-        teamData: enhancedAnalytics.charts.teamDistribution,
-        teamPerformance: enhancedAnalytics.charts.teamDistribution,
-        dailyTrend: enhancedAnalytics.charts.dailyTrend,
-        serviceData: enhancedAnalytics.charts.serviceDistribution.map(service => ({
+        })) : [],
+        teamData: enhancedAnalytics.charts?.teamDistribution || [],
+        teamPerformance: enhancedAnalytics.charts?.teamDistribution || [],
+        dailyTrend: enhancedAnalytics.charts?.dailyTrend || [],
+        serviceData: Array.isArray(enhancedAnalytics.charts?.serviceDistribution) ? enhancedAnalytics.charts.serviceDistribution.map(service => ({
           service: service.service,
           revenue: service.sales,
           deals: 1 // Default value since we don't have deals count per service
-        })),
-        servicePerformance: enhancedAnalytics.charts.serviceDistribution.map(service => ({
+        })) : [],
+        servicePerformance: Array.isArray(enhancedAnalytics.charts?.serviceDistribution) ? enhancedAnalytics.charts.serviceDistribution.map(service => ({
           service: service.service,
           revenue: service.sales,
           deals: 1 // Default value since we don't have deals count per service
-        })),
-        performanceCorrelation: enhancedAnalytics.charts.topAgents.map(agent => ({
+        })) : [],
+        performanceCorrelation: Array.isArray(enhancedAnalytics.charts?.topAgents) ? enhancedAnalytics.charts.topAgents.map(agent => ({
           agent: agent.agent,
           deals: agent.deals,
           avgDealSize: agent.deals > 0 ? agent.sales / agent.deals : 0
-        })),
-        filteredDeals: enhancedAnalytics.tables.recentDeals,
+        })) : [],
+        filteredDeals: Array.isArray(enhancedAnalytics.tables?.recentDeals) ? enhancedAnalytics.tables.recentDeals : [],
         revenueToday: 0, // Will be calculated from daily trend
         dealsToday: 0,
         revenueThisWeek: 0,
@@ -108,7 +108,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       };
     }
 
-    if (!deals || deals.length === 0) {
+    if (!Array.isArray(deals) || deals.length === 0) {
       console.log('🚀 AdvancedAnalytics: No deals data available');
       return null;
     }
