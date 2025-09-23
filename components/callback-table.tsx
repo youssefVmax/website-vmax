@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { apiService, Callback } from '@/lib/api-service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,9 +25,29 @@ export default function CallbacksTablePage() {
     fetchCallbacks()
   }, [])
 
+  // Normalize all callbacks to a consistent camelCase view model
+  const normalizedCallbacks = useMemo(() => {
+    return callbacks.map((cb: any) => ({
+      id: cb.id,
+      customerName: cb.customerName ?? cb.customer_name ?? '',
+      phoneNumber: cb.phoneNumber ?? cb.phone_number ?? '',
+      email: cb.email ?? '',
+      salesAgentName: cb.salesAgentName ?? cb.sales_agent ?? '',
+      salesTeam: cb.salesTeam ?? cb.sales_team ?? '',
+      firstCallDate: cb.firstCallDate ?? cb.first_call_date ?? '',
+      firstCallTime: cb.firstCallTime ?? cb.first_call_time ?? '',
+      callbackReason: cb.callbackReason ?? cb.callback_reason ?? '',
+      callbackNotes: cb.callbackNotes ?? cb.callback_notes ?? '',
+      status: cb.status,
+      createdBy: cb.createdBy ?? cb.created_by ?? '',
+      createdAt: cb.createdAt ?? cb.created_at ?? '',
+      convertedToDeal: cb.converted_to_deal ?? cb.convertedToDeal ?? false,
+    }))
+  }, [callbacks])
+
   useEffect(() => {
     filterAndSortCallbacks()
-  }, [callbacks, searchTerm, statusFilter, teamFilter, sortBy, sortOrder])
+  }, [normalizedCallbacks, searchTerm, statusFilter, teamFilter, sortBy, sortOrder])
 
   const fetchCallbacks = async () => {
     try {
@@ -42,57 +62,60 @@ export default function CallbacksTablePage() {
   }
 
   const filterAndSortCallbacks = () => {
-    let filtered = [...callbacks]
+    let filtered = [...normalizedCallbacks]
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(callback =>
-        callback.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        callback.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        callback.phone_number.includes(searchTerm) ||
-        callback.sales_agent.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        callback.callback_reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        callback.callback_notes.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(cb =>
+        (cb.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (cb.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (cb.phoneNumber || '').includes(searchTerm) ||
+        (cb.salesAgentName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (cb.callbackReason || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (cb.callbackNotes || '').toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
     // Apply status filter
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(callback => callback.status === statusFilter)
+      filtered = filtered.filter(cb => cb.status === statusFilter)
     }
 
     // Apply team filter
     if (teamFilter !== 'all') {
-      filtered = filtered.filter(callback => callback.sales_team === teamFilter)
+      filtered = filtered.filter(cb => cb.salesTeam === teamFilter)
     }
 
     // Apply sorting
-    filtered.sort((a, b) => {
-      let aValue: any = a[sortBy as keyof Callback]
-      let bValue: any = b[sortBy as keyof Callback]
+    filtered.sort((a: any, b: any) => {
+      let aValue: any
+      let bValue: any
 
-      // Handle date sorting
-      if (sortBy === 'created_at' || sortBy === 'first_call_date') {
-        if (sortBy === 'created_at') {
-          aValue = new Date(aValue).getTime()
-          bValue = new Date(bValue).getTime()
-        } else {
-          aValue = new Date(aValue).getTime()
-          bValue = new Date(bValue).getTime()
+      // map sortBy to normalized keys
+      const mapField = (field: string) => {
+        switch (field) {
+          case 'created_at': return 'createdAt'
+          case 'first_call_date': return 'firstCallDate'
+          case 'customer_name': return 'customerName'
+          case 'sales_agent': return 'salesAgentName'
+          default: return field
         }
       }
 
-      // Handle string sorting
+      const key = mapField(sortBy)
+      aValue = a[key]
+      bValue = b[key]
+
+      if (key === 'createdAt' || key === 'firstCallDate') {
+        aValue = new Date(aValue).getTime()
+        bValue = new Date(bValue).getTime()
+      }
+
       if (typeof aValue === 'string') {
         aValue = aValue.toLowerCase()
         bValue = bValue.toLowerCase()
       }
-
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1
-      } else {
-        return aValue < bValue ? 1 : -1
-      }
+      return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1)
     })
 
     setFilteredCallbacks(filtered)
@@ -160,8 +183,8 @@ export default function CallbacksTablePage() {
   const totalCallbacks = filteredCallbacks.length
   const pendingCallbacks = filteredCallbacks.filter(cb => cb.status === 'pending').length
   const completedCallbacks = filteredCallbacks.filter(cb => cb.status === 'completed').length
-  const convertedCallbacks = filteredCallbacks.filter(cb => cb.converted_to_deal).length
-  const uniqueAgents = new Set(filteredCallbacks.map(cb => cb.sales_agent)).size
+  const convertedCallbacks = filteredCallbacks.filter(cb => cb.convertedToDeal).length
+  const uniqueAgents = new Set(filteredCallbacks.map(cb => cb.salesAgentName)).size
   const conversionRate = totalCallbacks > 0 ? (convertedCallbacks / totalCallbacks) * 100 : 0
 
   if (loading) {
@@ -201,7 +224,7 @@ export default function CallbacksTablePage() {
           <CardContent>
             <div className="text-2xl font-bold">{totalCallbacks}</div>
             <p className="text-xs text-muted-foreground">
-              {callbacks.length} total in database
+              {normalizedCallbacks.length} total in database
             </p>
           </CardContent>
         </Card>
@@ -347,52 +370,52 @@ export default function CallbacksTablePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCallbacks.map((callback) => (
-                  <TableRow key={callback.id}>
+                {filteredCallbacks.map((cb) => (
+                  <TableRow key={cb.id}>
                     <TableCell>
                       <div className="font-medium">{callback.customer_name}</div>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs space-y-1">
-                        <div>{callback.email}</div>
-                        <div className="text-muted-foreground">{callback.phone_number}</div>
+                        <div>{cb.email}</div>
+                        <div className="text-muted-foreground">{cb.phoneNumber}</div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{callback.sales_agent}</div>
+                      <div className="font-medium">{cb.salesAgentName}</div>
                       <div className="text-xs text-muted-foreground">
-                        by {callback.created_by}
+                        by {cb.createdBy}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{callback.sales_team}</Badge>
+                      <Badge variant="outline">{cb.salesTeam}</Badge>
                     </TableCell>
                     <TableCell>
                       <div className="text-xs">
                         <div className="font-medium">
-                          {format(new Date(callback.first_call_date), 'MMM dd, yyyy')}
+                          {cb.firstCallDate ? format(new Date(cb.firstCallDate), 'MMM dd, yyyy') : 'N/A'}
                         </div>
-                        <div className="text-muted-foreground">{callback.first_call_time}</div>
+                        <div className="text-muted-foreground">{cb.firstCallTime}</div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="text-xs max-w-[150px] truncate" title={callback.callback_reason}>
-                        {callback.callback_reason}
+                      <div className="text-xs max-w-[150px] truncate" title={cb.callbackReason}>
+                        {cb.callbackReason}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getStatusBadgeVariant(callback.status)} className="gap-1">
-                        <span>{getStatusIcon(callback.status)}</span>
-                        {callback.status}
+                      <Badge variant={getStatusBadgeVariant(cb.status)} className="gap-1">
+                        <span>{getStatusIcon(cb.status)}</span>
+                        {cb.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="text-xs max-w-[200px] truncate" title={callback.callback_notes}>
-                        {callback.callback_notes || 'No notes'}
+                      <div className="text-xs max-w-[200px] truncate" title={cb.callbackNotes}>
+                        {cb.callbackNotes || 'No notes'}
                       </div>
                     </TableCell>
                     <TableCell>
-                      {callback.converted_to_deal ? (
+                      {cb.convertedToDeal ? (
                         <Badge variant="default" className="gap-1">
                           ✅ Yes
                         </Badge>
@@ -403,7 +426,7 @@ export default function CallbacksTablePage() {
                       )}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {callback.created_at ? format(new Date(callback.created_at), 'MMM dd, yyyy') : 'N/A'}
+                      {cb.createdAt ? format(new Date(cb.createdAt), 'MMM dd, yyyy') : 'N/A'}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -14,6 +14,7 @@ import { showSuccess, showError } from "@/lib/sweetalert";
 import { Phone, Calendar, Clock, User, MessageSquare, CheckCircle, XCircle, Edit } from "lucide-react";
 import { apiService, Callback as APICallback } from "@/lib/api-service";
 
+// View model we will use consistently with camelCase fields
 interface Callback {
   id?: string;
   customerName: string;
@@ -27,13 +28,13 @@ interface Callback {
   callbackReason: string;
   status: 'pending' | 'contacted' | 'completed' | 'cancelled';
   createdBy: string;
-  created_by_id: string;
-  SalesAgentID: string;
-  created_at?: any;
-  updated_at?: any;
-  converted_to_deal?: boolean;
-  converted_at?: string;
-  converted_by?: string;
+  createdById: string;
+  salesAgentId: string;
+  createdAt?: string;
+  updatedAt?: string;
+  convertedToDeal?: boolean;
+  convertedAt?: string;
+  convertedBy?: string;
 }
 
 interface CallbacksManagementProps {
@@ -62,24 +63,27 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
       }
       
       const data = await apiService.getCallbacks(filters);
-      // Convert API format to component format
-      const convertedData = data.map((callback: APICallback) => ({
-        id: callback.id,
-        customerName: callback.customerName,
-        phoneNumber: callback.phoneNumber,
-        email: callback.email || '',
-        salesAgentName: callback.salesAgentName,
-        salesTeam: callback.salesTeam || '',
-        firstCallDate: callback.firstCallDate,
-        firstCallTime: callback.firstCallTime || '',
-        callbackNotes: callback.callbackNotes || '',
-        callbackReason: callback.callbackReason || '',
-        status: callback.status,
-        createdBy: callback.createdBy,
-        created_by_id: callback.createdById,
-        SalesAgentID: callback.salesAgentId,
-        created_at: callback.createdAt,
-        updated_at: callback.updatedAt
+      // Normalize to camelCase view model
+      const convertedData: Callback[] = data.map((cb: any) => ({
+        id: cb.id,
+        customerName: cb.customerName ?? cb.customer_name ?? '',
+        phoneNumber: cb.phoneNumber ?? cb.phone_number ?? '',
+        email: cb.email ?? '',
+        salesAgentName: cb.salesAgentName ?? cb.sales_agent ?? '',
+        salesTeam: cb.salesTeam ?? cb.sales_team ?? '',
+        firstCallDate: cb.firstCallDate ?? cb.first_call_date ?? '',
+        firstCallTime: cb.firstCallTime ?? cb.first_call_time ?? '',
+        callbackNotes: cb.callbackNotes ?? cb.callback_notes ?? '',
+        callbackReason: cb.callbackReason ?? cb.callback_reason ?? '',
+        status: cb.status,
+        createdBy: cb.createdBy ?? cb.created_by ?? '',
+        createdById: cb.createdById ?? cb.created_by_id ?? '',
+        salesAgentId: cb.salesAgentId ?? cb.SalesAgentID ?? '',
+        createdAt: cb.createdAt ?? cb.created_at ?? '',
+        updatedAt: cb.updatedAt ?? cb.updated_at ?? '',
+        convertedToDeal: cb.converted_to_deal ?? cb.convertedToDeal ?? false,
+        convertedAt: cb.converted_at ?? cb.convertedAt ?? undefined,
+        convertedBy: cb.converted_by ?? cb.convertedBy ?? undefined,
       }));
       setCallbacks(convertedData);
     } catch (error) {
@@ -242,33 +246,33 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
                   <TableRow key={callback.id}>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{callback.customer_name}</div>
+                        <div className="font-medium">{callback.customerName}</div>
                         <div className="text-sm text-muted-foreground">{callback.email}</div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-1">
                         <Phone className="h-4 w-4" />
-                        <span>{callback.phone_number}</span>
+                        <span>{callback.phoneNumber}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <Calendar className="h-4 w-4" />
                         <span className="text-sm">
-                          {formatDateTime(callback.first_call_date, callback.first_call_time)}
+                          {formatDateTime(callback.firstCallDate, callback.firstCallTime)}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-1">
                         <User className="h-4 w-4" />
-                        <span>{callback.sales_agent}</span>
+                        <span>{callback.salesAgentName}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm capitalize">
-                        {callback.callback_reason?.replace('-', ' ') || 'Not specified'}
+                        {callback.callbackReason?.replace('-', ' ') || 'Not specified'}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -294,7 +298,6 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
                             </Button>
                           </>
                         )}
-                        
                         {callback.status === 'contacted' && (
                           <Button
                             size="sm"
@@ -304,7 +307,6 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
                             Convert to Deal
                           </Button>
                         )}
-                        
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button size="sm" variant="ghost">
@@ -318,15 +320,15 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
                             <div className="space-y-4">
                               <div>
                                 <Label>Customer</Label>
-                                <p className="text-sm">{callback.customer_name}</p>
+                                <p className="text-sm">{callback.customerName}</p>
                               </div>
                               <div>
                                 <Label>Callback Notes</Label>
-                                <p className="text-sm">{callback.callback_notes || 'No notes'}</p>
+                                <p className="text-sm">{callback.callbackNotes || 'No notes'}</p>
                               </div>
                               <div>
                                 <Label>Created</Label>
-                                <p className="text-sm">{new Date(callback.created_at).toLocaleString()}</p>
+                                <p className="text-sm">{callback.createdAt ? new Date(callback.createdAt).toLocaleString() : 'N/A'}</p>
                               </div>
                             </div>
                           </DialogContent>
@@ -386,7 +388,7 @@ function ConvertToDealForm({
     device_id: '',
     device_key: '',
     no_user: '1',
-    comment: callback.callback_notes || ''
+    comment: callback.callbackNotes || ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -416,24 +418,24 @@ function ConvertToDealForm({
         }
       };
 
-      // Create deal from callback
+      // Create deal from callback (snake_case for backend mapping)
       const dealData = {
-        customer_name: callback.customer_name,
-        phone_number: callback.phone_number,
+        customer_name: callback.customerName,
+        phone_number: callback.phoneNumber,
         email: callback.email,
         amount_paid: parseFloat(formData.amount),
         duration_months: getDurationMonths(formData.duration),
-        sales_agent: callback.sales_agent,
+        sales_agent: callback.salesAgentName,
         closing_agent: user?.name || '',
-        sales_team: callback.sales_team,
+        sales_team: callback.salesTeam,
         product_type: formData.type_program,
         service_tier: formData.type_service,
         signup_date: new Date().toISOString().split('T')[0],
-        notes: `Converted from callback. Original notes: ${callback.callback_notes}. ${formData.comment}`,
+        notes: `Converted from callback. Original notes: ${callback.callbackNotes}. ${formData.comment}`,
         status: 'active' as const,
         stage: 'closed-won' as const,
         priority: 'medium' as const,
-        SalesAgentID: callback.created_by_id || user?.id || '',
+        SalesAgentID: callback.createdById || user?.id || '',
         ClosingAgentID: user?.id || '',
         created_by: user?.name || 'Unknown',
         created_by_id: user?.id || '',
@@ -445,11 +447,11 @@ function ConvertToDealForm({
         converted_from_callback: callback.id
       };
 
-      // Create the deal using Firebase service
-      await dealsService.createDeal(dealData, user);
+      // Create the deal using API service (MySQL)
+      await apiService.createDeal(dealData);
 
-      // Update callback status to completed using Firebase service
-      await callbacksService.updateCallback(callback.id!, {
+      // Update callback status to completed using API service (MySQL)
+      await apiService.updateCallback(callback.id!, {
         status: 'completed' as const,
         converted_to_deal: true,
         converted_at: new Date().toISOString(),

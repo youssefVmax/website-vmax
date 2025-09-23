@@ -86,21 +86,21 @@ export class DirectMySQLService {
 
   async getCallbacks(filters: Record<string, string> = {}): Promise<any> {
     try {
-      console.log('🔄 DirectMySQLService: Fetching callbacks via unified API');
+      console.log('🔄 DirectMySQLService: Fetching callbacks via callbacks API');
+      
+      // Use direct callbacks API for better role-based filtering
       const params = new URLSearchParams({
-        userRole: 'manager',
-        dataTypes: 'callbacks',
         limit: '1000',
         ...filters
       });
       
-      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      const response = await fetch(`/api/callbacks?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const result = await response.json();
-      return result.success ? (result.data.callbacks || []) : [];
+      return result.success ? (result.callbacks || []) : [];
     } catch (error) {
       console.error('❌ DirectMySQLService: Error fetching callbacks:', error);
       return [];
@@ -204,36 +204,225 @@ export class DirectMySQLService {
   async createNotification(notificationData: any): Promise<any> {
     return this.makeDirectRequest('notifications-api.php', {
       method: 'POST',
-      body: JSON.stringify(notificationData)
-    });
   }
+}
 
-  // Update operations
-  async updateDeal(id: string, dealData: any): Promise<any> {
-    return this.makeDirectRequest(`deals-api.php?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(dealData)
+// Updated to use unified API to prevent connection issues
+async getDeals(filters: Record<string, string> = {}): Promise<any> {
+  try {
+    console.log('🔄 DirectMySQLService: Fetching deals via unified API');
+    const params = new URLSearchParams({
+      userRole: 'manager', // Default to manager for direct service
+      dataTypes: 'deals',
+      limit: '1000',
+      ...filters
     });
+    
+    const response = await fetch(`/api/unified-data?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result.success ? (result.data.deals || []) : [];
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error fetching deals:', error);
+    return [];
   }
+}
 
-  async updateCallback(id: string, callbackData: any): Promise<any> {
-    return this.makeDirectRequest(`callbacks-api.php?id=${id}`, {
-      method: 'PUT',
+async getCallbacks(filters: Record<string, string> = {}): Promise<any> {
+  try {
+    console.log('🔄 DirectMySQLService: Fetching callbacks via callbacks API');
+    
+    // Use direct callbacks API for better role-based filtering
+    const params = new URLSearchParams({
+      limit: '1000',
+      ...filters
+    });
+    
+    const response = await fetch(`/api/callbacks?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result.success ? (result.callbacks || []) : [];
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error fetching callbacks:', error);
+    return [];
+  }
+}
+
+async getTargets(filters: Record<string, string> = {}): Promise<any> {
+  try {
+    console.log('🔄 DirectMySQLService: Fetching targets via unified API');
+    const params = new URLSearchParams({
+      userRole: 'manager',
+      dataTypes: 'targets',
+      limit: '1000',
+      ...filters
+    });
+    
+    const response = await fetch(`/api/unified-data?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result.success ? (result.data.targets || []) : [];
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error fetching targets:', error);
+    return [];
+  }
+}
+
+async getNotifications(filters: Record<string, string> = {}): Promise<any> {
+  try {
+    console.log('🔄 DirectMySQLService: Fetching notifications via unified API');
+    const params = new URLSearchParams({
+      userRole: 'manager',
+      dataTypes: 'notifications',
+      limit: '1000',
+      ...filters
+    });
+    
+    const response = await fetch(`/api/unified-data?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result.success ? (result.data.notifications || []) : [];
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error fetching notifications:', error);
+    return [];
+  }
+}
+
+async getUsers(filters: Record<string, string> = {}): Promise<any> {
+  try {
+    console.log('🔄 DirectMySQLService: Fetching users via unified API');
+    const params = new URLSearchParams({
+      userRole: 'manager',
+      dataTypes: 'users',
+      limit: '1000',
+      ...filters
+    });
+    
+    const response = await fetch(`/api/unified-data?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    return result.success ? (result.data.users || []) : [];
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error fetching users:', error);
+    return [];
+  }
+}
+
+// Analytics endpoints
+async getDashboardStats(): Promise<any> {
+  return this.makeDirectRequest('analytics-api.php?endpoint=dashboard-stats');
+}
+
+async getAnalytics(filters: Record<string, string> = {}): Promise<any> {
+  const queryParams = new URLSearchParams(filters);
+  return this.makeDirectRequest(`analytics-api.php?${queryParams.toString()}`);
+}
+
+// Create operations
+async createDeal(dealData: any): Promise<any> {
+  return this.makeDirectRequest('deals-api.php', {
+    method: 'POST',
+    body: JSON.stringify(dealData)
+  });
+}
+
+async createCallback(callbackData: any): Promise<any> {
+  try {
+    const response = await fetch('/api/callbacks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(callbackData)
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error creating callback:', error);
+    throw error;
   }
+}
 
-  // Delete operations
-  async deleteDeal(id: string): Promise<any> {
-    return this.makeDirectRequest(`deals-api.php?id=${id}`, {
+async createNotification(notificationData: any): Promise<any> {
+  return this.makeDirectRequest('notifications-api.php', {
+    method: 'POST',
+    body: JSON.stringify(notificationData)
+  });
+}
+
+// Update operations
+async updateCallback(id: string, callbackData: any): Promise<any> {
+  try {
+    const response = await fetch('/api/callbacks', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ id, ...callbackData })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error updating callback:', error);
+    throw error;
+  }
+}
+
+// Delete operations
+async deleteDeal(id: string): Promise<any> {
+  try {
+    const response = await fetch(`/api/deals?id=${id}`, {
       method: 'DELETE'
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error deleting deal:', error);
+    throw error;
   }
+}
 
-  async deleteCallback(id: string): Promise<any> {
-    return this.makeDirectRequest(`callbacks-api.php?id=${id}`, {
+async deleteCallback(id: string): Promise<any> {
+  try {
+    const response = await fetch(`/api/callbacks?id=${id}`, {
       method: 'DELETE'
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('❌ DirectMySQLService: Error deleting callback:', error);
+    throw error;
   }
 }
 
