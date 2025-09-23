@@ -36,7 +36,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
 import { dealsService } from "@/lib/mysql-deals-service"
-import { callbacksService } from "@/lib/mysql-callbacks-service"
+import { callbacksService, type Callback } from "@/lib/mysql-callbacks-service"
 import { targetsService } from "@/lib/mysql-targets-service"
 import SalesAnalysisDashboard from '@/components/sales-dashboard'
 import NotificationsPage from "@/components/notifications-page"
@@ -59,6 +59,7 @@ import { CallbacksManagement } from "@/components/callbacks-management"
 import ManageCallbacksPage from "@/components/manage-callback"
 import NewCallbackPage from "@/components/new-callback"
 import { apiService, Deal } from '@/lib/api-service'
+
 import { unifiedDataService } from '@/lib/unified-data-service'
 import { useEnhancedAnalytics } from '@/hooks/useEnhancedAnalytics'
 
@@ -1231,36 +1232,102 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Function to create sample deals
+  const createSampleDeals = async () => {
+    try {
+      console.log('🔄 AdminDealsTablePage: Creating sample deals...');
+      const response = await fetch('/api/create-sample-deals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ AdminDealsTablePage: Sample deals created successfully');
+        // Reload deals after creating samples
+        window.location.reload();
+      } else {
+        throw new Error(result.message || 'Failed to create sample deals');
+      }
+    } catch (error) {
+      console.error('❌ AdminDealsTablePage: Error creating sample deals:', error);
+      setError(`Failed to create sample deals: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   useEffect(() => {
     const fetchDeals = async () => {
       try {
         setLoading(true)
         setError(null)
-        console.log('Fetching deals...')
-        const deals = await dealsService.getDeals('manager')
-        console.log('Deals fetched:', deals.length)
-        setDeals(deals)
+        console.log('🔄 AdminDealsTablePage: Fetching all deals...')
+        
+        // First, test the API directly
+        const testResponse = await fetch('/api/health-check');
+        const healthData = await testResponse.json();
+        console.log('🔍 AdminDealsTablePage: Health check:', healthData);
+        
+        // Check if database has any deals at all
+        if (healthData.success && healthData.counts) {
+          console.log('🔍 AdminDealsTablePage: Database counts:', healthData.counts);
+          if (healthData.counts.deals === 0) {
+            console.log('⚠️ AdminDealsTablePage: Database has 0 deals - this explains why no data is shown');
+          }
+        }
+        
+        // Try direct API call first to test if deals exist
+        console.log('🔍 AdminDealsTablePage: Testing direct deals API...');
+        const directDealsResponse = await fetch('/api/deals');
+        const directDealsData = await directDealsResponse.json();
+        console.log('🔍 AdminDealsTablePage: Direct deals API response:', directDealsData);
+        
+        // Use unified data service to get ALL deals (no user filtering for admin view)
+        const dashboardData = await unifiedDataService.fetchUnifiedData({
+          userRole: 'manager',
+          dataTypes: ['deals'],
+          limit: 1000, // Get more deals for admin view
+          offset: 0
+        });
+        
+        console.log('🔍 AdminDealsTablePage: Unified API Response:', dashboardData);
+        
+        if (dashboardData.success && dashboardData.data && dashboardData.data.deals) {
+          const allDeals = dashboardData.data.deals;
+          console.log('✅ AdminDealsTablePage: Deals fetched:', allDeals.length);
+          console.log('🔍 AdminDealsTablePage: Sample deals:', allDeals.slice(0, 3));
+          setDeals(allDeals);
+        } else if (directDealsData.success && directDealsData.deals) {
+          // Fallback to direct API if unified service fails
+          console.log('✅ AdminDealsTablePage: Using direct API fallback, deals:', directDealsData.deals.length);
+          setDeals(directDealsData.deals);
+        } else {
+          console.error('❌ AdminDealsTablePage: Both APIs failed:', { dashboardData, directDealsData });
+          throw new Error('No deals found in database. Both unified and direct APIs returned empty results.');
+        }
       } catch (error) {
-        console.error('Error fetching deals:', error)
-        setError(error instanceof Error ? error.message : 'Unknown error')
+        console.error('❌ AdminDealsTablePage: Error fetching deals:', error)
+        setError(error instanceof Error ? error.message : 'Failed to fetch deals')
       } finally {
         setLoading(false)
       }
     }
     fetchDeals()
-  }, [])
+  }, [user.id, user.name, user.managedTeam])
 
   const exportToCSV = () => {
     if (deals.length === 0) return
 
     const headers = ['Deal ID', 'Customer Name', 'Email', 'Phone', 'Amount Paid', 'Sales Agent', 'Status']
     const csvData = deals.map(deal => [
-      deal.DealID || deal.id || '',
-      deal.customer_name || '',
+      deal.dealId || deal.id || '',
+      deal.customerName || deal.customer_name || '',
       deal.email || '',
-      deal.phone_number || '',
-      deal.amount_paid || 0,
-      deal.sales_agent || '',
+      deal.phoneNumber || deal.customer_phone || '',
+      deal.amountPaid || deal.amount_paid || 0,
+      deal.salesAgentName || '',
       deal.status || ''
     ])
 
@@ -1321,28 +1388,82 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
             <Users className="h-4 w-4 mr-2" />
             Full Table View
           </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => window.open('/api/health-check', '_blank')}
+          >
+            <Database className="h-4 w-4 mr-2" />
+            Check Database
+          </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Deals ({Math.min(10, deals.length)})</CardTitle>
+          <CardTitle>All Deals ({deals.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {deals.slice(0, 10).map((deal, index) => (
-              <div key={deal.id || index} className="flex justify-between items-center p-3 border rounded">
-                <div>
-                  <div className="font-medium">{deal.customer_name}</div>
-                  <div className="text-sm text-muted-foreground">{deal.sales_agent}</div>
+          {deals.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-lg font-medium text-muted-foreground mb-2">No deals found</div>
+              <div className="text-sm text-muted-foreground mb-4">
+                <p className="mb-2">The database appears to be empty or there's a connection issue.</p>
+                <p className="mb-2">Possible causes:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>No deals have been created in the database yet</li>
+                  <li>Database connection or query issues</li>
+                  <li>API endpoint configuration problems</li>
+                </ul>
+                <p className="mt-2 text-xs">
+                  <strong>Solution:</strong> Click "Create Sample Deals" to add test data, or check the console logs for detailed error information.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex gap-2 justify-center">
+                  <Button 
+                    onClick={createSampleDeals}
+                    variant="default"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Sample Deals
+                  </Button>
+                  <Button 
+                    onClick={() => window.location.reload()} 
+                    variant="outline"
+                  >
+                    Refresh Page
+                  </Button>
                 </div>
-                <div className="text-right">
-                  <div className="font-medium">${deal.amount_paid?.toLocaleString()}</div>
-                  <div className="text-sm text-muted-foreground">{deal.status}</div>
+                <div className="text-xs text-muted-foreground">
+                  Check the browser console (F12) for detailed error logs
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {deals.slice(0, 20).map((deal, index) => (
+                <div key={deal.id || index} className="flex justify-between items-center p-3 border rounded hover:bg-muted/50 transition-colors">
+                  <div>
+                    <div className="font-medium">{deal.customerName || deal.customer_name || 'Unknown Customer'}</div>
+                    <div className="text-sm text-muted-foreground">{deal.salesAgentName || 'Unknown Agent'}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-green-600">
+                      ${(deal.amountPaid || deal.amount_paid || 0).toLocaleString()}
+                    </div>
+                    <div className="text-sm text-muted-foreground capitalize">
+                      {deal.status || 'Unknown'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {deals.length > 20 && (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  Showing first 20 of {deals.length} deals
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -1378,12 +1499,12 @@ function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveT
 
     const headers = ['Customer Name', 'Phone', 'Email', 'Sales Agent', 'Status', 'Call Date']
     const csvData = callbacks.map(callback => [
-      callback.customer_name || '',
-      callback.phone_number || '',
+      callback.customerName || '',
+      callback.phoneNumber || '',
       callback.email || '',
-      callback.sales_agent || '',
+      callback.salesAgentName || '',
       callback.status || '',
-      callback.first_call_date || ''
+      callback.firstCallDate || ''
     ])
 
     const csvContent = [headers, ...csvData]
@@ -1455,12 +1576,12 @@ function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveT
             {callbacks.slice(0, 10).map((callback, index) => (
               <div key={callback.id || index} className="flex justify-between items-center p-3 border rounded">
                 <div>
-                  <div className="font-medium">{callback.customer_name}</div>
-                  <div className="text-sm text-muted-foreground">{callback.sales_agent}</div>
+                  <div className="font-medium">{callback.customerName}</div>
+                  <div className="text-sm text-muted-foreground">{callback.salesAgentName}</div>
                 </div>
                 <div className="text-right">
                   <div className="font-medium">{callback.status}</div>
-                  <div className="text-sm text-muted-foreground">{callback.first_call_date}</div>
+                  <div className="text-sm text-muted-foreground">{callback.firstCallDate}</div>
                 </div>
               </div>
             ))}

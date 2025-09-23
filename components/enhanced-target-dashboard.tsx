@@ -114,19 +114,62 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
   // Strict access control - only managers can manage targets
   const canManageTargets = userRole === 'manager'
 
+  // Function to create targets table
+  const createTargetsTable = async () => {
+    try {
+      console.log('🔄 EnhancedTargetDashboard: Creating targets table...');
+      const response = await fetch('/api/create-targets-table', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Targets table created successfully with sample data!",
+          variant: "default"
+        });
+        // Reload data after creating table
+        await loadData();
+      } else {
+        throw new Error(result.message || 'Failed to create targets table');
+      }
+    } catch (error) {
+      console.error('❌ EnhancedTargetDashboard: Error creating targets table:', error);
+      toast({
+        title: "Error",
+        description: `Failed to create targets table: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    }
+  }
+
   // Load data
   const loadData = async () => {
     try {
       setLoading(true)
+      console.log('🔄 EnhancedTargetDashboard: Loading targets data...');
       
       if (isManager) {
+        console.log('🔄 EnhancedTargetDashboard: Loading data for manager:', user.id);
+        
         const [targetsData, teamTargetsData] = await Promise.all([
-          targetsService.getTargets(user.id, userRole),
-          targetsService.getTeamTargets(user.id)
+          targetsService.getTargets(user.id, userRole).catch(err => {
+            console.error('❌ EnhancedTargetDashboard: Error loading individual targets:', err);
+            return [];
+          }),
+          targetsService.getTeamTargets(user.id).catch(err => {
+            console.error('❌ EnhancedTargetDashboard: Error loading team targets:', err);
+            return [];
+          })
         ])
         
-        console.log('🎯 EnhancedTargetDashboard: Targets loaded:', targetsData);
-        console.log('🎯 EnhancedTargetDashboard: Team targets loaded:', teamTargetsData);
+        console.log('🎯 EnhancedTargetDashboard: Targets loaded:', targetsData.length, 'targets');
+        console.log('🎯 EnhancedTargetDashboard: Team targets loaded:', teamTargetsData.length, 'team targets');
         
         // Load progress for individual targets using MySQL data
         const targetsWithProgress = targetsData.map((target) => {
@@ -180,43 +223,76 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
         setTargets(targetsWithProgress)
         setTeamTargets(teamTargetsWithProgress)
       } else {
-        const targetsData = await targetsService.getTargets(user.id, userRole)
+        console.log('🔄 EnhancedTargetDashboard: Loading data for non-manager:', user.id);
+        
+        const targetsData = await targetsService.getTargets(user.id, userRole).catch(err => {
+          console.error('❌ EnhancedTargetDashboard: Error loading user targets:', err);
+          return [];
+        });
+        
+        console.log('🎯 EnhancedTargetDashboard: User targets loaded:', targetsData.length, 'targets');
         
         const targetsWithProgress = await Promise.all(
           targetsData.map(async (target) => {
-            const progress = await targetsService.getTargetProgress(user.id, target.period)
-            const salesProgress = target.monthlyTarget > 0 ? (progress.currentSales / target.monthlyTarget) * 100 : 0
-            const dealsProgress = target.dealsTarget > 0 ? (progress.currentDeals / target.dealsTarget) * 100 : 0
-            
-            let status: 'on-track' | 'behind' | 'exceeded' = 'on-track'
-            if (salesProgress >= 100 || dealsProgress >= 100) {
-              status = 'exceeded'
-            } else if (salesProgress < 70 && dealsProgress < 70) {
-              status = 'behind'
-            }
+            try {
+              const progress = await targetsService.getTargetProgress(user.id, target.period);
+              const salesProgress = target.monthlyTarget > 0 ? (progress.currentSales / target.monthlyTarget) * 100 : 0;
+              const dealsProgress = target.dealsTarget > 0 ? (progress.currentDeals / target.dealsTarget) * 100 : 0;
+              
+              let status: 'on-track' | 'behind' | 'exceeded' = 'on-track';
+              if (salesProgress >= 100 || dealsProgress >= 100) {
+                status = 'exceeded';
+              } else if (salesProgress < 70 && dealsProgress < 70) {
+                status = 'behind';
+              }
 
-            return {
-              ...target,
-              currentSales: progress.currentSales,
-              currentDeals: progress.currentDeals,
-              salesProgress,
-              dealsProgress,
-              status
+              return {
+                ...target,
+                currentSales: progress.currentSales,
+                currentDeals: progress.currentDeals,
+                salesProgress,
+                dealsProgress,
+                status
+              };
+            } catch (progressError) {
+              console.error('❌ EnhancedTargetDashboard: Error loading progress for target:', target.id, progressError);
+              return {
+                ...target,
+                currentSales: 0,
+                currentDeals: 0,
+                salesProgress: 0,
+                dealsProgress: 0,
+                status: 'on-track' as const
+              };
             }
           })
-        )
+        );
         
-        setTargets(targetsWithProgress)
+        setTargets(targetsWithProgress);
       }
     } catch (error) {
-      console.error('Error loading targets:', error)
+      console.error('❌ EnhancedTargetDashboard: Error loading targets:', error);
+      
+      // Provide more specific error information
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ EnhancedTargetDashboard: Detailed error:', {
+        message: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+        user: user.id,
+        userRole
+      });
+      
       toast({
-        title: "Error",
-        description: "Failed to load targets data",
+        title: "Error Loading Targets",
+        description: `Failed to load targets data: ${errorMessage}. This might mean the targets table doesn't exist or is empty.`,
         variant: "destructive"
-      })
+      });
+      
+      // Set empty arrays to prevent further errors
+      setTargets([]);
+      setTeamTargets([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -592,15 +668,25 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
             <h3 className="text-lg font-medium mb-2">No targets found</h3>
             <p className="text-muted-foreground mb-4">
               {targets.length === 0 
-                ? "No targets have been created yet." 
+                ? "No targets have been created yet. This might be because the targets table doesn't exist in the database." 
                 : "No targets match your current filters."}
             </p>
             {isManager && targets.length === 0 && (
-              <DynamicTargetCreator 
-                userRole={userRole} 
-                user={user} 
-                onTargetCreated={loadData}
-              />
+              <div className="space-y-3">
+                <Button 
+                  onClick={createTargetsTable}
+                  variant="outline"
+                  className="mb-3"
+                >
+                  <Target className="h-4 w-4 mr-2" />
+                  Create Targets Table & Sample Data
+                </Button>
+                <DynamicTargetCreator 
+                  userRole={userRole} 
+                  user={user} 
+                  onTargetCreated={loadData}
+                />
+              </div>
             )}
           </CardContent>
         </Card>

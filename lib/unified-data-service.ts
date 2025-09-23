@@ -58,10 +58,16 @@ class UnifiedDataService {
       const response = await fetch(`/api/unified-data?${params.toString()}`);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('❌ UnifiedDataService: API error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
       }
 
       const result: UnifiedDataResponse = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'API returned unsuccessful response');
+      }
       
       if (result.success) {
         // Cache the successful result
