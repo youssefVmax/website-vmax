@@ -1,9 +1,11 @@
-interface UnifiedDataOptions {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+import { requestManager } from './request-manager';
+
+export interface UnifiedDataOptions {
+  userRole: 'manager' | 'team-leader' | 'salesman';
   userId?: string;
   userName?: string;
   managedTeam?: string;
-  dataTypes: string[];
+  dataTypes?: string[];
   dateRange?: string;
   limit?: number;
   offset?: number;
@@ -23,39 +25,78 @@ interface UnifiedDataResponse {
   error?: string;
 }
 
-class UnifiedDataService {
-  private cache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
-  private readonly DEFAULT_TTL = 30000; // 30 seconds cache
+export class UnifiedDataService {
+  private baseUrl = '/api/unified-data';
+  private cache = new Map<string, { data: UnifiedDataResponse; timestamp: number }>();
+  private readonly CACHE_TTL = 30000; // 30 seconds cache
+  private pendingRequests = new Map<string, Promise<UnifiedDataResponse>>();
 
-  /**
-   * Fetch all required data in a single API call
-   */
+  private getCacheKey(options: UnifiedDataOptions): string {
+    return JSON.stringify({
+      userRole: options.userRole,
+      userId: options.userId,
+      dataTypes: options.dataTypes?.sort(),
+      managedTeam: options.managedTeam
+    });
+  }
+
+  private isCacheValid(timestamp: number): boolean {
+    return Date.now() - timestamp < this.CACHE_TTL;
+  }
+
   async fetchUnifiedData(options: UnifiedDataOptions): Promise<UnifiedDataResponse> {
-    const cacheKey = this.generateCacheKey(options);
+    const cacheKey = this.getCacheKey(options);
     
     // Check cache first
-    const cached = this.getFromCache(cacheKey);
-    if (cached) {
-      console.log('🚀 UnifiedDataService: Using cached data for', options.dataTypes);
-      return cached;
+    const cached = this.cache.get(cacheKey);
+    if (cached && this.isCacheValid(cached.timestamp)) {
+      console.log('📋 UnifiedDataService: Returning cached data');
+      return cached.data;
+    }
+    
+    // Check if request is already pending
+    const pending = this.pendingRequests.get(cacheKey);
+    if (pending) {
+      console.log('⏳ UnifiedDataService: Request already pending, waiting...');
+      return pending;
     }
 
+    
+    // Create the request promise
+    const requestPromise = this.performRequest(options, cacheKey);
+    this.pendingRequests.set(cacheKey, requestPromise);
+    
     try {
-      console.log('🔄 UnifiedDataService: Fetching unified data:', options);
-
+      const result = await requestPromise;
+      return result;
+    } finally {
+      this.pendingRequests.delete(cacheKey);
+    }
+  }
+  
+  private async performRequest(options: UnifiedDataOptions, cacheKey: string): Promise<UnifiedDataResponse> {
+    try {
+      console.log('🔄 UnifiedDataService: Fetching unified data...', {
+        userRole: options.userRole,
+        userId: options.userId,
+        dataTypes: options.dataTypes,
+        managedTeam: options.managedTeam
+      });
+      
       const params = new URLSearchParams({
         userRole: options.userRole,
-        dataTypes: options.dataTypes.join(','),
-        dateRange: options.dateRange || 'all',
-        limit: (options.limit || 100).toString(),
-        offset: (options.offset || 0).toString()
+        ...(options.userId && { userId: options.userId }),
+        ...(options.userName && { userName: options.userName }),
+        ...(options.managedTeam && { managedTeam: options.managedTeam }),
+        ...(options.dataTypes && { dataTypes: options.dataTypes.join(',') })
       });
 
-      if (options.userId) params.append('userId', options.userId);
-      if (options.userName) params.append('userName', options.userName);
-      if (options.managedTeam) params.append('managedTeam', options.managedTeam);
-
-      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      const response = await requestManager.fetch(`${this.baseUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -69,13 +110,15 @@ class UnifiedDataService {
         throw new Error(result.error || 'API returned unsuccessful response');
       }
       
-      if (result.success) {
-        // Cache the successful result
-        this.setCache(cacheKey, result, this.DEFAULT_TTL);
-        console.log('✅ UnifiedDataService: Data fetched successfully');
-      }
-
+      // Cache the successful result
+      this.cache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now()
+      });
+      
+      console.log('✅ UnifiedDataService: Data fetched and cached successfully');
       return result;
+      
     } catch (error) {
       console.error('❌ UnifiedDataService: Error fetching data:', error);
       return {
@@ -207,35 +250,23 @@ class UnifiedDataService {
   }
 
   /**
-   * Generate cache key from options
+   * Clean expired cache entries
    */
-  private generateCacheKey(options: UnifiedDataOptions): string {
-    return `${options.userRole}-${options.userId || 'all'}-${options.dataTypes.sort().join(',')}-${options.dateRange || 'all'}-${options.limit || 100}-${options.offset || 0}`;
-  }
-
-  /**
-   * Get data from cache if not expired
-   */
-  private getFromCache(key: string): UnifiedDataResponse | null {
-    const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.timestamp < cached.ttl) {
-      return cached.data;
-    }
-    if (cached) {
-      this.cache.delete(key); // Remove expired cache
-    }
-    return null;
-  }
-
-  /**
-   * Set data in cache with TTL
-   */
-  private setCache(key: string, data: UnifiedDataResponse, ttl: number): void {
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now(),
-      ttl
+  private cleanExpiredCache(): void {
+    const now = Date.now();
+    const keysToDelete: string[] = [];
+    
+    this.cache.forEach((cached, key) => {
+      if (!this.isCacheValid(cached.timestamp)) {
+        keysToDelete.push(key);
+      }
     });
+    
+    keysToDelete.forEach(key => this.cache.delete(key));
+    
+    if (keysToDelete.length > 0) {
+      console.log(`🗑️ UnifiedDataService: Cleaned ${keysToDelete.length} expired cache entries`);
+    }
   }
 
   /**
