@@ -7,12 +7,12 @@ const MAX_RETRIES = 3;
 export function getPool(): mysql.Pool {
   if (!pool) {
     // Use your environment variables directly
-    const DB_HOST = process.env.DB_HOST || '168.231.116.87';
+    const DB_HOST = process.env.DB_HOST || 'vmaxcom.org';
     const DB_PORT = process.env.DB_PORT || '3306';
     const DB_USER = process.env.DB_USER || 'youssef';
     const DB_PASSWORD = process.env.DB_PASSWORD || 'Vmaxllc#2004youssef';
     const DB_NAME = process.env.DB_NAME || 'vmax';
-    const CONNECTION_LIMIT = process.env.DB_CONNECTION_LIMIT || '50';
+    const CONNECTION_LIMIT = process.env.DB_CONNECTION_LIMIT || '80';
 
     console.log(`🔄 Creating MySQL connection pool to ${DB_HOST}:${DB_PORT} with user ${DB_USER} to database ${DB_NAME}`);
     
@@ -31,7 +31,7 @@ export function getPool(): mysql.Pool {
       timezone: 'Z',
       
       // Queue Management
-      queueLimit: 50, // Limit queued connections to prevent overload
+      queueLimit: 90, // Limit queued connections to prevent overload
       
       // Additional Pool Options
       supportBigNumbers: true,

@@ -49,11 +49,11 @@ import { EnhancedTargetDashboard } from "./enhanced-target-dashboard"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import EnhancedAnalytics from "@/components/enhanced-analytics"
-import AnalyticsConnectionTest from "@/components/analytics-connection-test"
+// Removed: import AnalyticsConnectionTest from "@/components/analytics-connection-test" - component deleted
 import MyDealsTable from "@/components/my-deals-table"
 import { ImportExportControls } from "@/components/import-export-controls"
 import UserManagement from "@/components/user-management"
-import { AnimatedMetricCard } from "@/components/animated-metrics"
+// Removed: import { AnimatedMetricCard } from "@/components/animated-metrics" - component deleted
 import AccessDenied from "@/components/access-denied"
 import { CallbacksManagement } from "@/components/callbacks-management"
 import ManageCallbacksPage from "@/components/manage-callback"
@@ -548,7 +548,7 @@ function PageContent({
     case "analytics":
       return <AdvancedAnalytics userRole={user.role} user={user} />
     case "analytics-test":
-      return <AnalyticsConnectionTest />
+      return <div className="p-6 text-center text-muted-foreground">Analytics test component has been removed</div>
     case "all-deals":
     case "my-deals":
     case "support-deals":
@@ -733,38 +733,75 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
 
       {/* Role-based KPIs with Real-time Animation */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <AnimatedMetricCard
-          title={user.role === 'manager' ? "Team Sales" : "My Sales"}
-          value={metrics?.totalSales || 0}
-          previousValue={(metrics?.totalSales || 0) * 0.95}
-          icon={DollarSign}
-          format="currency"
-          color="green"
-        />
-        <AnimatedMetricCard
-          title={user.role === 'manager' ? "Total Deals" : "My Deals"}
-          value={metrics?.deals?.length || 0}
-          previousValue={Math.max(0, (metrics?.deals?.length || 0) - 2)}
-          icon={TrendingUp}
-          format="number"
-          color="blue"
-        />
-        <AnimatedMetricCard
-          title={user.role === 'manager' ? "Active Agents" : "Performance Score"}
-          value={user.role === 'manager' ? totalAgents : Math.min(100, ((metrics?.deals?.length || 0) * 10))}
-          previousValue={user.role === 'manager' ? Math.max(0, totalAgents - 1) : Math.min(95, ((metrics?.deals?.length || 0) * 10) - 5)}
-          icon={Users}
-          format={user.role === 'manager' ? "number" : "percentage"}
-          color="purple"
-        />
-        <AnimatedMetricCard
-          title={user.role === 'manager' ? "Avg Deal Size" : "Weekly Target"}
-          value={user.role === 'manager' ? (metrics?.averageDealSize || 0) : Math.min(100, (((metrics?.deals?.length || 0) / 7) * 100))}
-          previousValue={user.role === 'manager' ? (metrics?.averageDealSize || 0) * 0.9 : Math.min(95, (((metrics?.deals?.length || 0) / 7) * 100) - 5)}
-          icon={Target}
-          format={user.role === 'manager' ? "currency" : "percentage"}
-          color="orange"
-        />
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {user.role === 'manager' ? "Team Sales" : "My Sales"}
+                </p>
+                <p className="text-2xl font-bold">
+                  ${(metrics?.totalSales || 0).toLocaleString()}
+                </p>
+              </div>
+              <DollarSign className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {user.role === 'manager' ? "Total Deals" : "My Deals"}
+                </p>
+                <p className="text-2xl font-bold">
+                  {metrics?.deals?.length || 0}
+                </p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {user.role === 'manager' ? "Active Agents" : "Performance Score"}
+                </p>
+                <p className="text-2xl font-bold">
+                  {user.role === 'manager' 
+                    ? totalAgents 
+                    : `${Math.min(100, ((metrics?.deals?.length || 0) * 10))}%`
+                  }
+                </p>
+              </div>
+              <Users className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {user.role === 'manager' ? "Avg Deal Size" : "Weekly Target"}
+                </p>
+                <p className="text-2xl font-bold">
+                  {user.role === 'manager' 
+                    ? `$${(metrics?.averageDealSize || 0).toLocaleString()}`
+                    : `${Math.min(100, (((metrics?.deals?.length || 0) / 7) * 100))}%`
+                  }
+                </p>
+              </div>
+              <Target className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
 

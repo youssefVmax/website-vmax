@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { apiService, User as APIUser } from "@/lib/api-service"
 import { mysqlUserService, User } from "@/lib/firebase-user-service"
-import { showSuccess, showToast } from "@/lib/sweetalert"
+import { showSuccess, showToast, showUserAdded } from "@/lib/sweetalert"
 
 const TEAMS = [
   'ALI ASHRAF',
@@ -118,7 +118,14 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       resetForm()
       setError(null)
       
-      // Show success toast notification at the top
+      // Show enhanced SweetAlert notification
+      await showUserAdded(
+        formData.name,
+        formData.role,
+        'User account created successfully!'
+      );
+      
+      // Also show toast for additional feedback
       await showToast(`User "${formData.name}" created successfully!`, 'success')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create user'

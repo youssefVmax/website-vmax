@@ -28,22 +28,56 @@ export default function CallbacksTablePage() {
 
   // Normalize all callbacks to a consistent camelCase view model
   const normalizedCallbacks = useMemo(() => {
-    return callbacks.map((cb: any) => ({
-      id: cb.id,
-      customerName: cb.customerName ?? cb.customer_name ?? '',
-      phoneNumber: cb.phoneNumber ?? cb.phone_number ?? '',
-      email: cb.email ?? '',
-      salesAgentName: cb.salesAgentName ?? cb.sales_agent ?? '',
-      salesTeam: cb.salesTeam ?? cb.sales_team ?? '',
-      firstCallDate: cb.firstCallDate ?? cb.first_call_date ?? '',
-      firstCallTime: cb.firstCallTime ?? cb.first_call_time ?? '',
-      callbackReason: cb.callbackReason ?? cb.callback_reason ?? '',
-      callbackNotes: cb.callbackNotes ?? cb.callback_notes ?? '',
-      status: cb.status,
-      createdBy: cb.createdBy ?? cb.created_by ?? '',
-      createdAt: cb.createdAt ?? cb.created_at ?? '',
-      convertedToDeal: cb.converted_to_deal ?? cb.convertedToDeal ?? false,
-    }))
+    console.log('🔄 Normalizing callbacks, count:', callbacks.length)
+    if (callbacks.length > 0) {
+      console.log('📋 Sample callback before normalization:', callbacks[0])
+    }
+    
+    // Handle case where callbacks might be null or undefined
+    if (!callbacks || !Array.isArray(callbacks)) {
+      console.warn('⚠️ Callbacks is not an array:', callbacks)
+      return []
+    }
+    
+    const normalized = callbacks.map((cb: any, index: number) => {
+      if (!cb) {
+        console.warn(`⚠️ Callback at index ${index} is null/undefined`)
+        return null
+      }
+      
+      const normalizedCallback = {
+        id: cb.id ?? cb.ID ?? `callback-${index}`,
+        customerName: cb.customerName ?? cb.customer_name ?? cb.CustomerName ?? cb.Customer_Name ?? 'Unknown Customer',
+        phoneNumber: cb.phoneNumber ?? cb.phone_number ?? cb.PhoneNumber ?? cb.Phone_Number ?? '',
+        email: cb.email ?? cb.Email ?? cb.EMAIL ?? '',
+        salesAgentName: cb.salesAgentName ?? cb.sales_agent ?? cb.SalesAgentName ?? cb.sales_agent_name ?? cb.SalesAgent ?? 'Unknown Agent',
+        salesTeam: cb.salesTeam ?? cb.sales_team ?? cb.SalesTeam ?? cb.Sales_Team ?? 'Unknown Team',
+        firstCallDate: cb.firstCallDate ?? cb.first_call_date ?? cb.FirstCallDate ?? cb.First_Call_Date ?? '',
+        firstCallTime: cb.firstCallTime ?? cb.first_call_time ?? cb.FirstCallTime ?? cb.First_Call_Time ?? '',
+        callbackReason: cb.callbackReason ?? cb.callback_reason ?? cb.CallbackReason ?? cb.Callback_Reason ?? '',
+        callbackNotes: cb.callbackNotes ?? cb.callback_notes ?? cb.CallbackNotes ?? cb.Callback_Notes ?? '',
+        status: cb.status ?? cb.Status ?? cb.STATUS ?? 'pending',
+        createdBy: cb.createdBy ?? cb.created_by ?? cb.CreatedBy ?? cb.Created_By ?? '',
+        createdAt: cb.createdAt ?? cb.created_at ?? cb.CreatedAt ?? cb.Created_At ?? '',
+        convertedToDeal: cb.converted_to_deal ?? cb.convertedToDeal ?? cb.ConvertedToDeal ?? cb.Converted_To_Deal ?? false,
+      }
+      
+      if (index === 0) {
+        console.log('📋 First callback normalization details:', {
+          original: cb,
+          normalized: normalizedCallback
+        })
+      }
+      
+      return normalizedCallback
+    }).filter(Boolean) // Remove any null entries
+    
+    if (normalized.length > 0) {
+      console.log('📋 Sample callback after normalization:', normalized[0])
+    }
+    console.log('✅ Normalized callbacks count:', normalized.length)
+    
+    return normalized
   }, [callbacks])
 
   useEffect(() => {
@@ -67,6 +101,7 @@ export default function CallbacksTablePage() {
       console.log('✅ Callbacks API response:', result)
       
       if (result.success && Array.isArray(result.callbacks)) {
+        console.log('📊 First callback sample:', result.callbacks[0])
         setCallbacks(result.callbacks)
         console.log(`📊 Loaded ${result.callbacks.length} callbacks`)
       } else {
@@ -84,10 +119,13 @@ export default function CallbacksTablePage() {
   }
 
   const filterAndSortCallbacks = () => {
+    console.log('🔍 Starting filter with normalized callbacks:', normalizedCallbacks.length)
+    console.log('🔍 Search term:', searchTerm, 'Status filter:', statusFilter, 'Team filter:', teamFilter)
     let filtered = [...normalizedCallbacks]
 
     // Apply search filter
     if (searchTerm) {
+      const beforeSearch = filtered.length
       filtered = filtered.filter(cb =>
         (cb.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (cb.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -96,16 +134,21 @@ export default function CallbacksTablePage() {
         (cb.callbackReason || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (cb.callbackNotes || '').toLowerCase().includes(searchTerm.toLowerCase())
       )
+      console.log('🔍 After search filter:', beforeSearch, '->', filtered.length)
     }
 
     // Apply status filter
     if (statusFilter !== 'all') {
+      const beforeStatus = filtered.length
       filtered = filtered.filter(cb => cb.status === statusFilter)
+      console.log('🔍 After status filter:', beforeStatus, '->', filtered.length)
     }
 
     // Apply team filter
     if (teamFilter !== 'all') {
+      const beforeTeam = filtered.length
       filtered = filtered.filter(cb => cb.salesTeam === teamFilter)
+      console.log('🔍 After team filter:', beforeTeam, '->', filtered.length)
     }
 
     // Apply sorting
@@ -140,6 +183,7 @@ export default function CallbacksTablePage() {
       return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1)
     })
 
+    console.log('✅ Filtered callbacks result:', filtered.length)
     setFilteredCallbacks(filtered)
   }
 

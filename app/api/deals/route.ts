@@ -22,15 +22,45 @@ export async function GET(request: NextRequest) {
     const salesAgentId = searchParams.get('salesAgentId') || searchParams.get('SalesAgentID');
     const salesTeam = searchParams.get('salesTeam') || searchParams.get('team');
     const status = searchParams.get('status');
+    const userRole = searchParams.get('userRole');
+    const userId = searchParams.get('userId');
     const page = parseInt(searchParams.get('page') || '1', 10) || 1;
     const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 200);
     const offset = (page - 1) * limit;
 
     const where: string[] = [];
     const params: any[] = [];
-    if (salesAgentId) { where.push('`SalesAgentID` = ?'); params.push(salesAgentId); }
-    if (salesTeam) { where.push('`sales_team` = ?'); params.push(salesTeam); }
+
+    // Role-based data filtering
+    if (userRole === 'salesman' && userId) {
+      // Salesmen can only see their own deals
+      where.push('`SalesAgentID` = ?');
+      params.push(userId);
+    } else if (userRole === 'team_leader' && userId) {
+      // Team leaders see their own deals + their team's deals
+      const [userRows] = await query<any>('SELECT `managedTeam` FROM `users` WHERE `id` = ?', [userId]);
+      const managedTeam = userRows[0]?.managedTeam;
+      if (managedTeam) {
+        where.push('(`SalesAgentID` = ? OR `sales_team` = ?)');
+        params.push(userId, managedTeam);
+      } else {
+        where.push('`SalesAgentID` = ?');
+        params.push(userId);
+      }
+    }
+    // Managers can see all deals (no additional filtering)
+
+    // Additional filters
+    if (salesAgentId && userRole === 'manager') { 
+      where.push('`SalesAgentID` = ?'); 
+      params.push(salesAgentId); 
+    }
+    if (salesTeam && userRole === 'manager') { 
+      where.push('`sales_team` = ?'); 
+      params.push(salesTeam); 
+    }
     if (status) { where.push('`status` = ?'); params.push(status); }
+    
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const [rows] = await query<any>(
@@ -44,7 +74,9 @@ export async function GET(request: NextRequest) {
       total: totals[0]?.c || 0,
       page,
       limit,
-      success: true
+      success: true,
+      userRole,
+      userId
     }));
   } catch (error) {
     console.error('Error fetching deals:', error);

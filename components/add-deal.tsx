@@ -114,7 +114,7 @@ export function AddDealPage() {
     username: "",
     sales_agent: user?.name || "",
     closing_agent: "",
-    team: user?.team || "Un Known", // Auto-populate with user's team
+    team: user?.team || "CS TEAM", // Auto-populate with user's team
     duration: "TWO YEAR",
     type_program: "IBO PLAYER",
     type_service: "SILVER",

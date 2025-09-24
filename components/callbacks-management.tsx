@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { showSuccess, showError } from "@/lib/sweetalert";
+import { showSuccess, showError, showCallbackAdded, showDealAdded } from "@/lib/sweetalert";
 import { Phone, Calendar, Clock, User, MessageSquare, CheckCircle, XCircle, Edit } from "lucide-react";
 import { apiService, Callback as APICallback } from "@/lib/api-service";
 
@@ -119,7 +119,11 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
       }
       
       await apiService.updateCallback(id, updates);
-      showSuccess('Success', 'Callback updated successfully');
+      await showCallbackAdded(
+        callbacks.find(c => c.id === id)?.customerName || 'Customer',
+        new Date().toLocaleDateString(),
+        'Callback updated successfully!'
+      );
       fetchCallbacks();
     } catch (error) {
       console.error('Error updating callback:', error);
@@ -458,7 +462,11 @@ function ConvertToDealForm({
         converted_by: user?.name || 'Unknown'
       });
 
-      showSuccess('Success', 'Callback converted to deal successfully!');
+      await showDealAdded(
+        parseFloat(formData.amount),
+        callback.customerName || 'Customer',
+        'Callback converted to deal successfully!'
+      );
       onSuccess();
     } catch (error) {
       console.error('Error converting callback to deal:', error);

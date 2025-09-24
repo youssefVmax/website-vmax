@@ -575,12 +575,12 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                 <div>
                   <p className="text-sm font-medium text-purple-700">Top Salesman</p>
                   <p className="text-2xl font-bold text-purple-900 truncate max-w-[150px]">
-                    {kpis.callbacksByAgent.length > 0 
+                    {kpis.callbacksByAgent && kpis.callbacksByAgent.length > 0 
                       ? kpis.callbacksByAgent[0]?.agent || 'No agents'
                       : 'No agents'}
                   </p>
                   <p className="text-xs text-purple-600 mt-1">
-                    {kpis.callbacksByAgent.length > 0 
+                    {kpis.callbacksByAgent && kpis.callbacksByAgent.length > 0 
                       ? `${kpis.callbacksByAgent[0]?.count || 0} callbacks`
                       : '0 callbacks'}
                   </p>
@@ -625,7 +625,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={kpis.callbacksByStatus}
+                    data={kpis.callbacksByStatus || []}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -635,7 +635,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                     nameKey="status"
                     label={(entry: any) => `${entry.status}: ${entry.percentage.toFixed(0)}%`}
                   >
-                    {kpis.callbacksByStatus.map((_, index) => (
+                    {(kpis.callbacksByStatus || []).map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -654,7 +654,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={kpis.dailyCallbackTrend}>
+                <AreaChart data={kpis.dailyCallbackTrend || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="date" 
@@ -699,7 +699,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={kpis.callbacksByAgent.slice(0, 8)} layout="horizontal">
+                <BarChart data={kpis.callbacksByAgent?.slice(0, 8) || []} layout="horizontal">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
@@ -720,7 +720,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={kpis.monthlyTrend}>
+                <LineChart data={kpis.monthlyTrend || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="month" 
@@ -748,7 +748,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
       </div>
 
       {/* Top Performing Agents (Manager Only) */}
-      {userRole === 'manager' && kpis.topPerformingAgents.length > 0 && (
+      {userRole === 'manager' && kpis.topPerformingAgents && kpis.topPerformingAgents.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Top Performing Agents (Conversion Rate)</CardTitle>
@@ -765,7 +765,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                   </tr>
                 </thead>
                 <tbody>
-                  {kpis.topPerformingAgents.map((agent, index) => (
+                  {(kpis.topPerformingAgents || []).map((agent, index) => (
                     <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                       <td className="py-2 font-medium">{agent.agent}</td>
                       <td className="py-2">{agent.totalCallbacks}</td>
@@ -809,7 +809,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                 </tr>
               </thead>
               <tbody>
-                {kpis.recentCallbacks.map((callback, index) => (
+                {(kpis.recentCallbacks || []).map((callback, index) => (
                   <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                     <td className="py-2 font-medium">{callback.customer_name}</td>
                     <td className="py-2">{callback.phone_number}</td>

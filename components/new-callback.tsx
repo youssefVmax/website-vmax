@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { callbacksService } from "@/lib/mysql-callbacks-service";
+import { showCallbackAdded, showError } from "@/lib/sweetalert";
 import { 
   Calendar, 
   Clock, 
@@ -101,11 +102,18 @@ export default function NewCallbackPage() {
       const id = await callbacksService.addCallback(payload);
       console.log('Callback created with ID:', id, 'Payload:', payload);
       
-      // Detailed success notification with key callback details
+      // Show enhanced SweetAlert notification
+      await showCallbackAdded(
+        form.customer_name,
+        `${form.first_call_date} ${form.first_call_time}`,
+        'Callback scheduled successfully!'
+      );
+      
+      // Also show toast for additional details
       toast({ 
         title: "✅ Callback Created Successfully!",
-        description: `Customer: ${form.customer_name} | Phone: ${form.phone_number} | First call: ${form.first_call_date} ${form.first_call_time}`,
-        duration: 5000
+        description: `Customer: ${form.customer_name} | Phone: ${form.phone_number}`,
+        duration: 3000
       });
       
       // Don't navigate - stay on the form to allow creating more callbacks

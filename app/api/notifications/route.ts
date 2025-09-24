@@ -16,11 +16,12 @@ export async function OPTIONS() {
   return addCorsHeaders(new NextResponse(null, { status: 200 }));
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(request.url);
     const salesAgentId = searchParams.get('salesAgentId');
     const userRole = searchParams.get('userRole');
+    const userId = searchParams.get('userId');
     const isRead = searchParams.get('isRead');
     const page = parseInt(searchParams.get('page') || '1', 10) || 1;
     const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 200);
@@ -28,9 +29,33 @@ export async function GET(req: NextRequest) {
 
     const where: string[] = [];
     const params: any[] = [];
-    if (salesAgentId) { where.push('`salesAgentId` = ?'); params.push(salesAgentId); }
-    if (userRole) { where.push('`userRole` = ?'); params.push(userRole); }
-    if (isRead !== null) { where.push('`isRead` = ?'); params.push(isRead === 'true' ? 1 : 0); }
+
+    // Role-based data filtering for notifications
+    if (userRole === 'salesman' && userId) {
+      // Salesmen can only see notifications sent to them
+      where.push('(`salesAgentId` = ? OR JSON_CONTAINS(`to`, ?))');
+      params.push(userId, `"${userId}"`);
+    } else if (userRole === 'team_leader' && userId) {
+      // Team leaders see notifications sent to them
+      where.push('(`salesAgentId` = ? OR JSON_CONTAINS(`to`, ?))');
+      params.push(userId, `"${userId}"`);
+    }
+    // Managers can see all notifications (no additional filtering)
+
+    // Additional filters
+    if (salesAgentId && userRole === 'manager') { 
+      where.push('`salesAgentId` = ?'); 
+      params.push(salesAgentId); 
+    }
+    if (userRole && userRole !== 'manager') { 
+      where.push('`userRole` = ?'); 
+      params.push(userRole); 
+    }
+    if (isRead !== null) { 
+      where.push('`isRead` = ?'); 
+      params.push(isRead === 'true' ? 1 : 0); 
+    }
+    
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const [rows] = await query<any>(
@@ -44,10 +69,12 @@ export async function GET(req: NextRequest) {
       total: totals[0]?.c || 0,
       page,
       limit,
-      success: true
+      success: true,
+      userRole,
+      userId
     }));
   } catch (error) {
-    console.error('Error reading notifications:', error);
+    console.error('Error fetching notifications:', error);
     return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to fetch notifications' }, { status: 502 }));
   }
 }
