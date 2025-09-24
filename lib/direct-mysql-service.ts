@@ -1,7 +1,7 @@
 // Client-side service that calls Next.js API routes (not PHP directly)
-import { API_CONFIG } from './config'
+import { requestManager } from './request-manager';
 
-export class DirectMySQLService {
+class DirectMySQLService {
   // Force all requests through Next.js API on same origin so they show in Network tab
   // and avoid direct calls to external PHP host.
   private baseUrl = `/api`;
@@ -32,7 +32,7 @@ export class DirectMySQLService {
     const url = `${this.baseUrl}/${endpoint}`;
 
     try {
-      const response = await fetch(url, {
+      const response = await requestManager.fetch(url, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -40,7 +40,7 @@ export class DirectMySQLService {
           ...options.headers,
         },
         ...options,
-        signal: this.createTimeoutSignal(API_CONFIG.TIMEOUT || 30000),
+        // Timeout is handled by requestManager
       });
 
       if (!response.ok) {
@@ -69,13 +69,12 @@ export class DirectMySQLService {
         ...filters
       });
       
-      const response = await fetch(`${this.baseUrl}/deals?${queryParams.toString()}`, {
+      const response = await requestManager.fetch(`${this.baseUrl}/deals?${queryParams.toString()}`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
-        },
-        signal: this.createTimeoutSignal(API_CONFIG.TIMEOUT || 10000),
+        }
       });
 
       if (!response.ok) {
@@ -101,7 +100,7 @@ export class DirectMySQLService {
         ...filters
       });
       
-      const response = await fetch(`/api/callbacks?${params.toString()}`);
+      const response = await requestManager.fetch(`/api/callbacks?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -124,7 +123,7 @@ export class DirectMySQLService {
         ...filters
       });
       
-      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      const response = await requestManager.fetch(`/api/unified-data?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -147,7 +146,7 @@ export class DirectMySQLService {
         ...filters
       });
       
-      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      const response = await requestManager.fetch(`/api/unified-data?${params.toString()}`);
       if (!response.ok) {
         // Try to get more detailed error information
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
@@ -179,7 +178,7 @@ export class DirectMySQLService {
     try {
       console.log('🔄 DirectMySQLService: Using fallback notifications approach');
       // Try direct notifications API if it exists
-      const response = await fetch('/api/notifications?limit=1000');
+      const response = await requestManager.fetch('/api/notifications?limit=1000');
       if (response.ok) {
         const result = await response.json();
         return Array.isArray(result) ? result : (result.data || []);
@@ -204,7 +203,7 @@ export class DirectMySQLService {
         ...filters
       });
       
-      const response = await fetch(`/api/unified-data?${params.toString()}`);
+      const response = await requestManager.fetch(`/api/unified-data?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -217,64 +216,89 @@ export class DirectMySQLService {
     }
   }
 
-  // Analytics endpoints
+  // Analytics endpoints - Updated to use Next.js API
   async getDashboardStats(): Promise<any> {
-    return this.makeDirectRequest('analytics-api.php?endpoint=dashboard-stats');
-  }
-
-  async getAnalytics(filters: Record<string, string> = {}): Promise<any> {
-    const queryParams = new URLSearchParams(filters);
-    return this.makeDirectRequest(`analytics-api.php?${queryParams.toString()}`);
-  }
-
-  // Create operations
-  async createDeal(dealData: any): Promise<any> {
-    return this.makeDirectRequest('deals-api.php', {
-      method: 'POST',
-      body: JSON.stringify(dealData)
-    });
-  }
-
-  async createCallback(callbackData: any): Promise<any> {
-    return this.makeDirectRequest('callbacks-api.php', {
-      method: 'POST',
-      body: JSON.stringify(callbackData)
-    });
-  }
-
-  async createNotification(notificationData: any): Promise<any> {
-    return this.makeDirectRequest('notifications-api.php', {
-      method: 'POST',
-      body: JSON.stringify(notificationData)
-    });
-  }
-
-  // Update operations
-  async updateCallback(id: string, callbackData: any): Promise<any> {
     try {
-      const response = await fetch('/api/callbacks', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id, ...callbackData })
-      });
-      
+      console.log('🔄 DirectMySQLService: Fetching dashboard stats via analytics API');
+      const response = await requestManager.fetch('/api/analytics?userRole=manager&dateRange=today');
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+      const result = await response.json();
+      return result.success ? result.data : {};
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error fetching dashboard stats:', error);
+      return {};
+    }
+  }
+
+  async getAnalytics(filters: Record<string, string> = {}): Promise<any> {
+    try {
+      console.log('🔄 DirectMySQLService: Fetching analytics via analytics API');
+      const params = new URLSearchParams({
+        userRole: 'manager',
+        dateRange: 'today',
+        ...filters
+      });
+      const response = await requestManager.fetch(`/api/analytics?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const result = await response.json();
+      return result.success ? result.data : {};
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error fetching analytics:', error);
+      return {};
+    }
+  }
+
+  // Create operations - Updated to use Next.js APIs
+  async createDeal(dealData: any): Promise<any> {
+    try {
+      console.log('🔄 DirectMySQLService: Creating deal via deals API');
+      const response = await requestManager.fetch('/api/deals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(dealData)
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       return await response.json();
     } catch (error) {
-      console.error('❌ DirectMySQLService: Error updating callback:', error);
+      console.error('❌ DirectMySQLService: Error creating deal:', error);
       throw error;
     }
   }
 
-  // Delete operations
+  async createCallback(callbackData: any): Promise<any> {
+    try {
+      console.log('🔄 DirectMySQLService: Creating callback via callbacks API');
+      const response = await requestManager.fetch('/api/callbacks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(callbackData)
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('❌ DirectMySQLService: Error creating callback:', error);
+      throw error;
+    }
+  }
+
+
+  // Delete operations - Updated to use request manager
   async deleteDeal(id: string): Promise<any> {
     try {
-      const response = await fetch(`/api/deals?id=${id}`, {
+      console.log('🔄 DirectMySQLService: Deleting deal via deals API');
+      const response = await requestManager.fetch(`/api/deals?id=${id}`, {
         method: 'DELETE'
       });
       
@@ -291,7 +315,8 @@ export class DirectMySQLService {
 
   async deleteCallback(id: string): Promise<any> {
     try {
-      const response = await fetch(`/api/callbacks?id=${id}`, {
+      console.log('🔄 DirectMySQLService: Deleting callback via callbacks API');
+      const response = await requestManager.fetch(`/api/callbacks?id=${id}`, {
         method: 'DELETE'
       });
       

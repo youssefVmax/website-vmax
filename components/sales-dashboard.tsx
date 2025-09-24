@@ -16,8 +16,8 @@ import { analyticsApiService } from '@/lib/analytics-api-service';
 import { unifiedAnalyticsService, type UserContext } from '@/lib/unified-analytics-service';
 import CallbackKPIDashboard from './callback-kpi-dashboard'
 import AdvancedAnalytics from './advanced-analytics'
-import ComprehensiveAnalyticsDashboard from './comprehensive-analytics-dashboard';
-import { DashboardCharts } from './dashboard-charts';
+import { EnhancedComprehensiveAnalytics } from './enhanced-comprehensive-analytics';
+import { EnhancedDashboardCharts } from './enhanced-dashboard-charts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
 
@@ -871,7 +871,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
         </TabsContent>
         
         <TabsContent value="charts" className="space-y-6">
-          <DashboardCharts userRole={userRole} user={user} />
+          <EnhancedDashboardCharts userRole={userRole} user={user} />
         </TabsContent>
         
         <TabsContent value="callbacks" className="space-y-6">
@@ -879,13 +879,7 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
         </TabsContent>
 
         <TabsContent value="comprehensive" className="space-y-6">
-          <ComprehensiveAnalyticsDashboard 
-            userRole={userRole}
-            userId={user?.id}
-            userName={user?.name}
-            userTeam={user?.managedTeam}
-            managedTeam={user?.managedTeam}
-          />
+          <EnhancedComprehensiveAnalytics userRole={userRole} userId={user?.id} userName={user?.name} managedTeam={user?.managedTeam} />
         </TabsContent>
       </Tabs>
     </div>
@@ -893,3 +887,4 @@ function SalesAnalysisDashboard({ userRole, user }: SalesAnalysisDashboardProps)
 }
 
 export default SalesAnalysisDashboard;
+

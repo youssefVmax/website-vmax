@@ -8,8 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts'
 import { TrendingUp, DollarSign, Users, Target, Calendar, Download, Filter, BarChart3, PieChart as PieChartIcon, Activity, Award } from "lucide-react"
-import { useMySQLSalesData } from "@/hooks/useMySQLSalesData"
-import { useEnhancedAnalytics } from "@/hooks/useEnhancedAnalytics"
+import { useUnifiedData } from '@/hooks/useUnifiedData'
 import { Deal } from "@/lib/api-service"
 import { addDays, format } from "date-fns"
 import { Label } from "@/components/ui/label"
@@ -21,28 +20,23 @@ interface AdvancedAnalyticsProps {
 }
 
 export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
-  const { deals, loading, error, refreshData } = useMySQLSalesData({ 
-    userRole, 
-    userId: user.id, 
-    userName: user.name,
-    managedTeam: user.managedTeam
-  })
-
-  // Enhanced analytics for better data
-  const { 
-    analytics: enhancedAnalytics, 
-    loading: analyticsLoading, 
-    error: analyticsError,
-    lastUpdated: analyticsLastUpdated 
-  } = useEnhancedAnalytics({
+  // Use unified data hook for consistent data fetching
+  const {
+    data,
+    kpis,
+    loading,
+    error,
+    lastUpdated: dataLastUpdated,
+    refresh
+  } = useUnifiedData({
     userRole,
     userId: user.id,
     userName: user.name,
-    username: user.username,
     managedTeam: user.managedTeam,
-    autoRefresh: true,
-    refreshInterval: 60000
-  })
+    autoLoad: true
+  });
+
+  const deals = data.deals || []
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [dateRange, setDateRange] = useState({
@@ -60,74 +54,52 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     }
   }, [deals])
 
-  // Use enhanced analytics timestamp if available
-  useEffect(() => {
-    if (analyticsLastUpdated) {
-      setLastUpdated(analyticsLastUpdated)
-    }
-  }, [analyticsLastUpdated])
-
   const analytics = useMemo(() => {
-    // Use enhanced analytics if available, otherwise fall back to local calculation
-    if (enhancedAnalytics && enhancedAnalytics.overview) {
-      console.log('🚀 AdvancedAnalytics: Using enhanced analytics data:', enhancedAnalytics);
-      
-      // Transform enhanced analytics to match expected format
+    console.log('🚀 AdvancedAnalytics: Processing deals data:', { 
+      dealsCount: deals?.length || 0, 
+      sampleDeal: deals?.[0],
+      dateRange,
+      selectedTeam,
+      selectedService
+    });
+    
+    if (!Array.isArray(deals) || deals.length === 0) {
+      console.log('🚀 AdvancedAnalytics: No deals data available');
       return {
-        totalRevenue: enhancedAnalytics.overview.totalRevenue,
-        totalDeals: enhancedAnalytics.overview.totalDeals,
-        averageDealSize: enhancedAnalytics.overview.averageDealSize,
-        topAgents: Array.isArray(enhancedAnalytics.charts?.topAgents) ? enhancedAnalytics.charts.topAgents.map(agent => ({
-          agent: agent.agent,
-          revenue: agent.sales,
-          deals: agent.deals
-        })) : [],
-        teamData: enhancedAnalytics.charts?.teamDistribution || [],
-        teamPerformance: enhancedAnalytics.charts?.teamDistribution || [],
-        dailyTrend: enhancedAnalytics.charts?.dailyTrend || [],
-        serviceData: Array.isArray(enhancedAnalytics.charts?.serviceDistribution) ? enhancedAnalytics.charts.serviceDistribution.map(service => ({
-          service: service.service,
-          revenue: service.sales,
-          deals: 1 // Default value since we don't have deals count per service
-        })) : [],
-        servicePerformance: Array.isArray(enhancedAnalytics.charts?.serviceDistribution) ? enhancedAnalytics.charts.serviceDistribution.map(service => ({
-          service: service.service,
-          revenue: service.sales,
-          deals: 1 // Default value since we don't have deals count per service
-        })) : [],
-        performanceCorrelation: Array.isArray(enhancedAnalytics.charts?.topAgents) ? enhancedAnalytics.charts.topAgents.map(agent => ({
-          agent: agent.agent,
-          deals: agent.deals,
-          avgDealSize: agent.deals > 0 ? agent.sales / agent.deals : 0
-        })) : [],
-        filteredDeals: Array.isArray(enhancedAnalytics.tables?.recentDeals) ? enhancedAnalytics.tables.recentDeals : [],
-        revenueToday: 0, // Will be calculated from daily trend
+        totalRevenue: 0,
+        totalDeals: 0,
+        averageDealSize: 0,
+        revenueToday: 0,
         dealsToday: 0,
         revenueThisWeek: 0,
         dealsThisWeek: 0,
+        dailyTrend: [],
+        topAgents: [],
+        teamPerformance: [],
+        servicePerformance: [],
+        performanceCorrelation: [],
+        filteredDeals: []
       };
-    }
-
-    if (!Array.isArray(deals) || deals.length === 0) {
-      console.log('🚀 AdvancedAnalytics: No deals data available');
-      return null;
     }
 
     // Filter by date range
     const filteredDeals = deals.filter(deal => {
-      const dealDate = new Date(deal.signupDate || deal.createdAt || new Date())
+      const dealDate = new Date(deal.created_at || deal.signupDate || deal.createdAt || new Date())
       return dealDate >= dateRange.from && dealDate <= dateRange.to
     })
 
     // Further filter by team and service
     const finalFilteredDeals = filteredDeals.filter(deal => {
-      const teamMatch = selectedTeam === "all" || deal.salesTeam === selectedTeam
-      const serviceMatch = selectedService === "all" || deal.serviceTier === selectedService
+      const teamMatch = selectedTeam === "all" || deal.sales_team === selectedTeam || deal.salesTeam === selectedTeam
+      const serviceMatch = selectedService === "all" || deal.service_tier === selectedService || deal.serviceTier === selectedService
       return teamMatch && serviceMatch
     })
 
     // Calculate metrics
-    const totalRevenue = finalFilteredDeals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0)
+    const totalRevenue = finalFilteredDeals.reduce((sum, deal) => {
+      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
+      return sum + amount
+    }, 0)
     const totalDeals = finalFilteredDeals.length
     const averageDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0
 
@@ -143,85 +115,91 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
     let revenueToday = 0, dealsToday = 0
     let revenueThisWeek = 0, dealsThisWeek = 0
-    for (const deal of finalFilteredDeals) {
-      const dealDate = new Date(deal.signupDate || deal.createdAt || new Date())
+    for (const deal of deals) { // Use all deals for time-based metrics
+      const dealDate = new Date(deal.created_at || deal.signupDate || deal.createdAt || new Date())
+      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
       if (format(dealDate, 'yyyy-MM-dd') === todayStr) {
-        revenueToday += deal.amountPaid || 0
-        dealsToday += 1
+        revenueToday += amount
+        dealsToday++
       }
-      if (dealDate >= startOfWeek && dealDate <= dateRange.to) {
-        revenueThisWeek += deal.amountPaid || 0
-        dealsThisWeek += 1
+      if (dealDate >= startOfWeek) {
+        revenueThisWeek += amount
+        dealsThisWeek++
       }
     }
 
     // Daily trend
     const dailyData = finalFilteredDeals.reduce((acc, deal) => {
-      const date = format(new Date(deal.signupDate || deal.createdAt || new Date()), 'yyyy-MM-dd')
+      const date = format(new Date(deal.created_at || deal.signupDate || deal.createdAt || new Date()), 'yyyy-MM-dd')
       if (!acc[date]) {
         acc[date] = { date, revenue: 0, deals: 0 }
       }
-      acc[date].revenue += deal.amountPaid || 0
+      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
+      acc[date].revenue += amount
       acc[date].deals += 1
       return acc
     }, {} as Record<string, { date: string; revenue: number; deals: number }>)
 
-    const dailyTrend = Object.values(dailyData).sort((a, b) => 
+    const dailyTrend = Object.values(dailyData).sort((a: any, b: any) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     )
 
     // Revenue by agent
     const revenueByAgent = finalFilteredDeals.reduce((acc, deal) => {
-      const agent = deal.salesAgentName || 'Unknown'
-      acc[agent] = (acc[agent] || 0) + (deal.amountPaid || 0)
+      const agent = deal.sales_agent || deal.salesAgentName || 'Unknown'
+      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
+      acc[agent] = (acc[agent] || 0) + amount
       return acc
     }, {} as Record<string, number>)
 
     // Revenue by team
     const teamData = finalFilteredDeals.reduce((acc, deal) => {
-      const team = deal.salesTeam || 'Unknown'
+      const team = deal.sales_team || deal.salesTeam || 'Unknown'
       if (!acc[team]) {
         acc[team] = { team, revenue: 0, deals: 0 }
       }
-      acc[team].revenue += deal.amountPaid || 0
+      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
+      acc[team].revenue += amount
       acc[team].deals += 1
       return acc
     }, {} as Record<string, { team: string; revenue: number; deals: number }>)
 
-    const teamPerformance = Object.values(teamData).sort((a, b) => b.revenue - a.revenue)
+    const teamPerformance = Object.values(teamData).sort((a: any, b: any) => b.revenue - a.revenue)
 
     // Revenue by service
     const revenueByService = finalFilteredDeals.reduce((acc, deal) => {
-      const service = deal.serviceTier || 'Other'
-      acc[service] = (acc[service] || 0) + (deal.amountPaid || 0)
+      const service = deal.service_tier || deal.serviceTier || 'Other'
+      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
+      acc[service] = (acc[service] || 0) + amount
       return acc
     }, {} as Record<string, number>)
 
     const serviceData = finalFilteredDeals.reduce((acc, deal) => {
-      const service = deal.serviceTier || 'Other'
+      const service = deal.service_tier || deal.serviceTier || 'Other'
       if (!acc[service]) {
         acc[service] = { service, revenue: 0, deals: 0 }
       }
-      acc[service].revenue += deal.amountPaid || 0
+      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
+      acc[service].revenue += amount
       acc[service].deals += 1
       return acc
     }, {} as Record<string, { service: string; revenue: number; deals: number }>)
 
-    const servicePerformance = Object.values(serviceData).sort((a, b) => b.revenue - a.revenue)
+    const servicePerformance = Object.values(serviceData).sort((a: any, b: any) => b.revenue - a.revenue)
 
     // Top agents
     const topAgents = Object.entries(revenueByAgent)
-      .map(([agent, revenue]) => ({
+      .map(([agent, revenue]: [string, any]) => ({
         agent,
         revenue,
         deals: finalFilteredDeals.filter(deal => 
-          deal.salesAgentName === agent
+          (deal.sales_agent || deal.salesAgentName) === agent
         ).length,
         avgDealSize: revenue / Math.max(1, finalFilteredDeals.filter(deal => 
-          deal.salesAgentName === agent
+          (deal.sales_agent || deal.salesAgentName) === agent
         ).length)
       }))
-      .sort((a, b) => b.revenue - a.revenue)
+      .sort((a: any, b: any) => b.revenue - a.revenue)
       .slice(0, 10)
 
     // Performance correlation (deal size vs deals count)
@@ -232,7 +210,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       totalRevenue: agent.revenue
     }))
 
-    return {
+    const result = {
       totalRevenue,
       totalDeals,
       averageDealSize,
@@ -246,8 +224,19 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       dealsToday,
       revenueThisWeek,
       dealsThisWeek,
-    }
-  }, [deals, dateRange, selectedTeam, selectedService, enhancedAnalytics])
+    };
+    
+    console.log('✅ AdvancedAnalytics: Calculated KPIs:', {
+      revenueToday,
+      dealsToday,
+      revenueThisWeek,
+      dealsThisWeek,
+      totalRevenue,
+      totalDeals
+    });
+    
+    return result;
+  }, [deals, dateRange, selectedTeam, selectedService])
 
   // Export filtered detailed rows as CSV (Excel-compatible)
   const handleExport = () => {
@@ -279,28 +268,28 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     URL.revokeObjectURL(url)
   }
 
-  if (loading || analyticsLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center p-6">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
         <span className="ml-3 text-muted-foreground">
-          {analyticsLoading ? 'Loading enhanced analytics...' : 'Loading data...'}
+          Loading analytics data...
         </span>
       </div>
     )
   }
 
-  if (error || analyticsError) {
+  if (error) {
     return (
       <Card className="border-destructive">
         <CardContent className="p-6 text-destructive">
-          Error loading analytics: {error?.message || analyticsError || 'Unknown error'}
+          Error loading analytics: {error || 'Unknown error'}
           <div className="mt-2">
             <Button 
               variant="outline" 
               size="sm" 
               onClick={() => {
-                refreshData();
+                refresh();
                 window.location.reload();
               }}
             >
@@ -463,10 +452,10 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Top Performer</p>
                 <p className="text-lg font-bold capitalize">
-                  {analytics.topAgents[0]?.agent || 'N/A'}
+                  {analytics?.topAgents?.[0]?.agent || 'N/A'}
                 </p>
                 <p className="text-xs text-orange-600">
-                  ${analytics.topAgents[0]?.revenue.toLocaleString() || '0'}
+                  ${(analytics?.topAgents?.[0]?.revenue || 0).toLocaleString()}
                 </p>
               </div>
               <Award className="h-8 w-8 text-orange-600" />
@@ -482,7 +471,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Revenue Today</p>
-                <p className="text-2xl font-bold">${analytics.revenueToday.toLocaleString()}</p>
+                <p className="text-2xl font-bold">${(analytics?.revenueToday || 0).toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground">Live from stream</p>
               </div>
               <Activity className="h-8 w-8 text-cyan-600" />
@@ -495,7 +484,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Deals Today</p>
-                <p className="text-2xl font-bold">{analytics.dealsToday}</p>
+                <p className="text-2xl font-bold">{analytics?.dealsToday || 0}</p>
                 <p className="text-xs text-muted-foreground">Live from stream</p>
               </div>
               <Users className="h-8 w-8 text-cyan-600" />
@@ -508,7 +497,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Revenue This Week</p>
-                <p className="text-2xl font-bold">${analytics.revenueThisWeek.toLocaleString()}</p>
+                <p className="text-2xl font-bold">${(analytics?.revenueThisWeek || 0).toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground">Mon - Today</p>
               </div>
               <BarChart3 className="h-8 w-8 text-emerald-600" />
@@ -521,7 +510,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Deals This Week</p>
-                <p className="text-2xl font-bold">{analytics.dealsThisWeek}</p>
+                <p className="text-2xl font-bold">{analytics?.dealsThisWeek || 0}</p>
                 <p className="text-xs text-muted-foreground">Mon - Today</p>
               </div>
               <Users className="h-8 w-8 text-emerald-600" />
