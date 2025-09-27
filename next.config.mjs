@@ -9,9 +9,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    optimizeCss: false,
-  },
   // Force development mode to see unminified errors
   productionBrowserSourceMaps: true,
   // Add CORS headers for development
