@@ -93,12 +93,15 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
 
       console.log('🔄 Loading users from MySQL API...')
 
-      // Direct fetch to MySQL users API
-      const response = await fetch('/api/users?limit=1000', {
+      // Direct fetch to MySQL users API with cache busting
+      const timestamp = Date.now();
+      const response = await fetch(`/api/users?limit=1000&_t=${timestamp}`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       })
 
@@ -315,9 +318,18 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
     if (!confirm('Are you sure you want to delete this user?')) return
 
     try {
+      console.log('🗑️ Attempting to delete user with ID:', userId);
+      
+      // Count users before deletion
+      const beforeCount = users.length;
+      console.log('📊 Users count before deletion:', beforeCount);
+      
       // Direct API call to MySQL
       const response = await fetch(`/api/users?id=${userId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
       })
 
       if (!response.ok) {
@@ -335,13 +347,22 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       }
 
       const result = await response.json()
-      console.log('✅ User deleted successfully from MySQL:', result)
+      console.log('✅ Delete API response:', result)
+      console.log('✅ Affected rows:', result.affected);
 
+      // Reload users from database
+      console.log('🔄 Reloading users from database...');
       await loadUsers()
+      
+      // Count users after reload
+      const afterCount = users.length;
+      console.log('📊 Users count after reload:', afterCount);
+      console.log('📊 Expected reduction:', beforeCount - afterCount);
+      
       setError(null)
     } catch (err) {
       setError('Failed to delete user')
-      console.error('Error deleting user from MySQL:', err)
+      console.error('❌ Error deleting user from MySQL:', err)
     }
   }
 

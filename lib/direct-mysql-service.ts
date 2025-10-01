@@ -354,7 +354,8 @@ class DirectMySQLService {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(callbackData)
+        // API currently requires ID in the JSON body
+        body: JSON.stringify({ id, ...callbackData })
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

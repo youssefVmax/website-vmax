@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis 
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis, 
+  CartesianGrid
 } from 'recharts'
 import { 
   TrendingUp, DollarSign, Target, Download, BarChart3, Activity, RefreshCw,
@@ -17,6 +17,7 @@ import {
 import { format as formatDate } from "date-fns"
 import { unifiedAnalyticsService } from "@/lib/unified-analytics-service"
 import { mysqlAnalyticsService } from "@/lib/mysql-analytics-service"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
 interface AdvancedAnalyticsProps {
   userRole: 'manager' | 'salesman' | 'team_leader'
@@ -50,9 +51,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         return null
       }
 
-      console.log('🔄 Fetching team leader analytics from direct APIs')
+      console.log('🔄 Fetching team leader analytics from direct APIs for team:', user.managedTeam)
 
-      // Get analytics data
+      // Get analytics data with proper team leader filtering
       const analyticsParams = new URLSearchParams({
         endpoint: 'dashboard-stats',
         user_role: userRole,
@@ -65,7 +66,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       console.log('➡️ Calling analytics API:', analyticsUrl)
       const analyticsResponse = await fetch(analyticsUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       })
       if (!analyticsResponse.ok) {
         throw new Error(`Analytics API failed: ${analyticsResponse.status}`)
@@ -76,7 +78,10 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         throw new Error(`Analytics API error: ${analyticsData.error}`)
       }
 
-      // Get charts data
+      // Sequential call - wait to avoid resource issues
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Get charts data with team leader filtering
       const chartsParams = new URLSearchParams({
         userRole,
         userId: user.id,
@@ -89,7 +94,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       console.log('➡️ Calling charts API:', chartsUrl)
       const chartsResponse = await fetch(chartsUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       })
 
       let chartsData = { success: false, data: {} }
@@ -99,9 +105,59 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         console.warn('⚠️ Charts API response not OK:', chartsResponse.status)
       }
 
+      // Sequential call - wait to avoid resource issues
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Fetch team member deals data for detailed analysis (sequential, reduced limit)
+      const dealsParams = new URLSearchParams({
+        userRole,
+        userId: user.id,
+        salesTeam: user.managedTeam || '',
+        limit: '200' // Reduced from 1000 to prevent resource issues
+      })
+
+      const dealsUrl = `/api/deals?${dealsParams.toString()}`
+      console.log('➡️ Calling deals API:', dealsUrl)
+      const dealsResponse = await fetch(dealsUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000) // 15 second timeout for larger data
+      })
+
+      let dealsData = { success: false, deals: [] }
+      if (dealsResponse.ok) {
+        dealsData = await dealsResponse.json()
+      }
+
+      // Sequential call - wait to avoid resource issues
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Fetch team member callbacks data (sequential, reduced limit)
+      const callbacksParams = new URLSearchParams({
+        userRole,
+        userId: user.id,
+        salesTeam: user.managedTeam || '',
+        limit: '200' // Reduced from 1000 to prevent resource issues
+      })
+
+      const callbacksUrl = `/api/callbacks?${callbacksParams.toString()}`
+      console.log('➡️ Calling callbacks API:', callbacksUrl)
+      const callbacksResponse = await fetch(callbacksUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000) // 15 second timeout for larger data
+      })
+
+      let callbacksData = { success: false, callbacks: [] }
+      if (callbacksResponse.ok) {
+        callbacksData = await callbacksResponse.json()
+      }
+
       return {
         analytics: analyticsData,
-        charts: chartsData.success ? chartsData.data : {}
+        charts: chartsData.success ? chartsData.data : {},
+        deals: dealsData.success ? dealsData.deals : [],
+        callbacks: callbacksData.success ? callbacksData.callbacks : []
       }
     } catch (error) {
       console.error('❌ Error fetching team leader analytics:', error)
@@ -111,13 +167,15 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   
   // Set analytics data from direct API response
   const setAnalyticsFromDirectAPI = (result: any) => {
-    const { analytics: analyticsData, charts: chartsData } = result
+    const { analytics: analyticsData, charts: chartsData, deals: dealsData, callbacks: callbacksData } = result
     
     console.log('🔍 Charts data received:', {
       salesByAgent: chartsData.salesByAgent,
       salesByAgentLength: chartsData.salesByAgent?.length || 0,
       serviceTier: chartsData.serviceTier,
-      serviceTierLength: chartsData.serviceTier?.length || 0
+      serviceTierLength: chartsData.serviceTier?.length || 0,
+      dealsCount: dealsData?.length || 0,
+      callbacksCount: callbacksData?.length || 0
     })
     
     // Set dashboard stats
@@ -131,20 +189,44 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       completed_callbacks: analyticsData.completed_callbacks || 0,
     })
     
-    // Set charts data
-    setChartsData({
-      salesTrend: (chartsData.salesTrend || []).map((d: any) => ({
-        // charts API already returns a display-safe date string (e.g., 'Oct 1')
-        date: d.date || '',
-        revenue: Number(d.revenue || 0),
-        deals: Number(d.deals || 0)
-      })),
-      salesByAgent: chartsData.salesByAgent || [],
-      salesByTeam: chartsData.salesByTeam || [],
-      serviceTier: chartsData.serviceTier || []
+    setChartsData((prevChartsData: any) => {
+      console.log('📊 Setting charts data:', {
+        salesTrend: chartsData.salesTrend?.length || 0,
+        salesByAgent: chartsData.salesByAgent?.length || 0,
+        salesByTeam: chartsData.salesByTeam?.length || 0,
+        serviceTier: chartsData.serviceTier?.length || 0,
+        salesTrendSample: chartsData.salesTrend?.[0],
+        salesByAgentSample: chartsData.salesByAgent?.[0]
+      })
+      return {
+        salesTrend: (chartsData.salesTrend || []).map((d: any) => {
+          // Fix date formatting - ensure valid date strings
+          let dateString = d.date || '';
+          if (typeof dateString === 'string' && dateString.includes('-')) {
+            try {
+              const date = new Date(dateString);
+              if (!isNaN(date.getTime())) {
+                dateString = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              }
+            } catch (e) {
+              dateString = 'Invalid Date';
+            }
+          } else if (dateString === '' || dateString === null || dateString === undefined) {
+            dateString = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }
+          return {
+            date: dateString,
+            revenue: Number(d.revenue || 0),
+            deals: Number(d.deals || 0),
+            conversionRate: Number(d.conversion_rate || 0)
+          }
+        }),
+        salesByAgent: chartsData.salesByAgent || [],
+        salesByTeam: chartsData.salesByTeam || [],
+        serviceTier: chartsData.serviceTier || []
+      }
     })
 
-    // Also keep a normalized analyticsData structure for useMemo consumers
     setAnalyticsData({
       overview: {
         totalDeals: Number(analyticsData.total_deals || 0),
@@ -156,30 +238,139 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         conversionRate: Number(analyticsData.conversion_rate || 0)
       },
       charts: {
-        dailyTrend: (chartsData.salesTrend || []).map((d: any) => ({
-          // Preserve API-provided date label to avoid invalid parsing
-          date: d.date || '',
-          sales: Number(d.revenue || 0)
-        })),
+        dailyTrend: (chartsData.salesTrend || []).map((d: any) => {
+          // Ensure proper date formatting for analytics
+          let dateString = d.date || '';
+          if (typeof dateString === 'string' && dateString.includes('-')) {
+            try {
+              const date = new Date(dateString);
+              if (!isNaN(date.getTime())) {
+                dateString = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              }
+            } catch (e) {
+              dateString = 'Invalid Date';
+            }
+          }
+          return {
+            date: dateString,
+            sales: Number(d.revenue || 0)
+          }
+        }),
         topAgents: (chartsData.salesByAgent || []).map((a: any) => ({ agent: a.agent, sales: Number(a.revenue || 0), deals: Number(a.deals || 0) })),
         teamDistribution: (chartsData.salesByTeam || []).map((t: any) => ({ team: t.team, sales: Number(t.revenue || 0) })),
         serviceDistribution: (chartsData.serviceTier || []).map((s: any) => ({ service: s.service, sales: Number(s.revenue || 0) }))
       }
     })
     
-    // Set team sales comparison for team leader specific view
-    if (chartsData.salesByAgent && chartsData.salesByAgent.length > 0) {
-      console.log('📊 Setting team sales comparison from:', chartsData.salesByAgent)
-      setTeamSalesComparison(chartsData.salesByAgent.map((item: any) => ({
-        agent: item.agent || 'Unknown Agent',
-        revenue: Number(item.revenue || 0),
-        deals: Number(item.deals || 0),
-        agent_revenue: Number(item.revenue || 0),
-        agent_deals: Number(item.deals || 0)
-      })))
+    // Process team member data from deals and callbacks for team leader view
+    if (userRole === 'team_leader' && dealsData && Array.isArray(dealsData)) {
+      // Group deals by agent to create team sales comparison
+      const agentStats = new Map()
+      
+      dealsData.forEach((deal: any) => {
+        const agentId = deal.SalesAgentID || deal.sales_agent || 'Unknown'
+        const agentName = deal.sales_agent || deal.SalesAgentID || 'Unknown Agent'
+        const amount = Number(deal.amount_paid || 0)
+        const serviceTier = deal.service_tier || deal.product_type || 'Unknown'
+        
+        if (!agentStats.has(agentId)) {
+          agentStats.set(agentId, {
+            agent: agentName,
+            revenue: 0,
+            deals: 0,
+            agent_revenue: 0,
+            agent_deals: 0,
+            serviceTier: serviceTier
+          })
+        }
+        
+        const stats = agentStats.get(agentId)
+        stats.revenue += amount
+        stats.deals += 1
+        stats.agent_revenue += amount
+        stats.agent_deals += 1
+      })
+      
+      const teamSalesData = Array.from(agentStats.values())
+      console.log('📊 Setting team sales comparison from deals data:', teamSalesData)
+      setTeamSalesComparison(teamSalesData)
+      
+      // Process callbacks data for team comparison
+      if (callbacksData && Array.isArray(callbacksData)) {
+        const callbackStats = new Map()
+        
+        callbacksData.forEach((callback: any) => {
+          const agentId = callback.SalesAgentID || callback.sales_agent || 'Unknown'
+          const agentName = callback.sales_agent || callback.SalesAgentID || 'Unknown Agent'
+          
+          if (!callbackStats.has(agentId)) {
+            callbackStats.set(agentId, {
+              agent: agentName,
+              count: 0,
+              callbacks: 0,
+              conversions: 0
+            })
+          }
+          
+          const stats = callbackStats.get(agentId)
+          stats.count += 1
+          stats.callbacks += 1
+          if (callback.status === 'completed') {
+            stats.conversions += 1
+          }
+        })
+        
+        const callbacksComparisonData = Array.from(callbackStats.values())
+        console.log('📞 Setting callbacks comparison from callbacks data:', callbacksComparisonData)
+        setCallbacksComparison(callbacksComparisonData)
+      }
     } else {
-      console.warn('⚠️ No salesByAgent data available for team comparison')
-      setTeamSalesComparison([])
+      // Fallback to charts data if available
+      if (chartsData.salesByAgent && chartsData.salesByAgent.length > 0) {
+        console.log('📊 Setting team sales comparison from charts data:', chartsData.salesByAgent)
+        setTeamSalesComparison(chartsData.salesByAgent.map((item: any) => ({
+          agent: item.agent || 'Unknown Agent',
+          revenue: Number(item.revenue || 0),
+          deals: Number(item.deals || 0),
+          agent_revenue: Number(item.revenue || 0),
+          agent_deals: Number(item.deals || 0)
+        })))
+      } else {
+        console.warn('⚠️ No salesByAgent data available for team comparison')
+        setTeamSalesComparison([])
+      }
+    }
+    
+    // Process service tier data from deals if not available from charts API
+    if (userRole === 'team_leader' && dealsData && Array.isArray(dealsData) && (!chartsData.serviceTier || chartsData.serviceTier.length === 0)) {
+      console.log('🔄 Processing service tier data from deals...');
+      const serviceStats = new Map()
+      
+      dealsData.forEach((deal: any) => {
+        const serviceTier = deal.service_tier || deal.product_type || deal.service_type || 'Unknown'
+        const amount = Number(deal.amount_paid || 0)
+        
+        if (!serviceStats.has(serviceTier)) {
+          serviceStats.set(serviceTier, {
+            service: serviceTier,
+            revenue: 0,
+            deals: 0
+          })
+        }
+        
+        const stats = serviceStats.get(serviceTier)
+        stats.revenue += amount
+        stats.deals += 1
+      })
+      
+      const serviceTierData = Array.from(serviceStats.values())
+      console.log('📊 Setting service tier data from deals:', serviceTierData)
+      
+      // Update chartsData with service tier data
+      setChartsData((prev: any) => ({
+        ...prev,
+        serviceTier: serviceTierData
+      }))
     }
     
     setLastUpdated(new Date())
@@ -251,7 +442,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       const analyticsResult = await fetchTeamLeaderAnalytics()
       
       if (!analyticsResult) {
-        // Fallback to unified service
+        // Direct APIs failed, try fallback
+        console.log('⚠️ Direct APIs failed, trying fallback service...')
         const userContext = {
           id: user.id,
           name: user.full_name || user.username || '',
@@ -265,14 +457,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           setAnalyticsFromUnified(fallbackResult)
           return
         }
+        throw new Error('All analytics services failed')
       }
 
       if (analyticsResult) {
         console.log('✅ Team leader analytics loaded successfully:', analyticsResult)
         setAnalyticsFromDirectAPI(analyticsResult)
-
-      } else {
-        throw new Error('No analytics data received')
       }
 
     } catch (err) {
@@ -324,7 +514,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       salesTrend: charts.salesTrend?.length || 0,
       salesByAgent: charts.salesByAgent?.length || 0,
       serviceTier: charts.serviceTier?.length || 0,
-      salesByTeam: charts.salesByTeam?.length || 0
+      salesByTeam: charts.salesByTeam?.length || 0,
+      salesTrendSample: charts.salesTrend?.slice(0, 2),
+      salesByAgentSample: charts.salesByAgent?.slice(0, 2)
     })
 
     return {
@@ -428,8 +620,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
             {userRole === 'manager' 
               ? 'Comprehensive analytics across all teams and agents'
               : userRole === 'team_leader'
-              ? 'Your personal performance and team analytics'  
-              : 'Detailed analysis of your sales performance'}
+                ? `Your personal performance and team analytics for ${user.managedTeam || 'your team'}` 
+                : 'Detailed analysis of your sales performance'}
           </p>
         </div>
         
@@ -524,7 +716,68 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         <div className="space-y-6">
           <div className="text-center">
             <h3 className="text-xl font-semibold text-foreground mb-2">Team Performance Analysis</h3>
-            <p className="text-muted-foreground">Detailed comparison of your team members' performance</p>
+            <p className="text-muted-foreground">Detailed comparison of your team members' performance for {user.managedTeam || 'your team'}</p>
+          </div>
+          
+          {/* Team Overview Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Revenue Trend Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-green-500" />
+                  Team Revenue Trend
+                </CardTitle>
+                <CardDescription>Daily revenue performance for {user.managedTeam || 'your team'}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {analytics.dailyTrend && analytics.dailyTrend.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={analytics.dailyTrend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Revenue']} />
+                      <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No trend data available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Team Performance Distribution */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-blue-500" />
+                  Agent Performance
+                </CardTitle>
+                <CardDescription>Revenue distribution by team member</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {analytics.topAgents && analytics.topAgents.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={analytics.topAgents.slice(0, 6)}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="agent" angle={-45} textAnchor="end" height={80} />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Revenue']} />
+                      <Bar dataKey="revenue" fill="#3b82f6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No agent performance data available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -721,6 +974,97 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
               </CardContent>
             </Card>
           </div>
+
+          {/* Additional Analytics Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+            {/* Service Tier Distribution */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-purple-500" />
+                  Service Tier Distribution
+                </CardTitle>
+                <CardDescription>Revenue breakdown by service type for {user.managedTeam || 'your team'}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  console.log('🎯 Service Tier Distribution - analytics.servicePerformance:', analytics.servicePerformance);
+                  console.log('🎯 Service Tier Distribution - chartsData.serviceTier:', chartsData?.serviceTier);
+                  return null;
+                })()}
+                {chartsData?.serviceTier && chartsData.serviceTier.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={chartsData.serviceTier}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ service, revenue }) => `${service}: $${Number(revenue).toLocaleString()}`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="revenue"
+                      >
+                        {chartsData.serviceTier.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Revenue']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No service tier data available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Performance Correlation */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-orange-500" />
+                  Deal Size vs Volume
+                </CardTitle>
+                <CardDescription>Agent performance correlation for {user.managedTeam || 'your team'}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {chartsData?.salesByAgent && chartsData.salesByAgent.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <ScatterChart data={chartsData.salesByAgent.map((item: any) => ({
+                      deals: item.deals || 0,
+                      avgDealSize: item.deals > 0 ? (item.revenue || 0) / item.deals : 0,
+                      totalRevenue: item.revenue || 0,
+                      agent: item.agent || 'Unknown'
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="deals" name="Deals" />
+                      <YAxis dataKey="avgDealSize" name="Avg Deal Size" />
+                      <ZAxis dataKey="totalRevenue" range={[50, 400]} />
+                      <Tooltip 
+                        formatter={(value, name) => {
+                          if (name === 'Avg Deal Size') return [`$${Number(value).toLocaleString()}`, name]
+                          return [value, name]
+                        }}
+                        labelFormatter={(label, payload) => {
+                          const data = payload?.[0]?.payload
+                          return data?.agent ? `Agent: ${data.agent}` : 'Agent Performance'
+                        }}
+                      />
+                      <Scatter name="Performance" dataKey="avgDealSize" fill="#f59e0b" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No correlation data available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -769,17 +1113,74 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Today's Revenue</p>
-                <p className="text-2xl font-bold">${analytics.revenueToday.toLocaleString()}</p>
-                <p className="text-xs text-orange-600">Live updates</p>
+                <p className="text-sm font-medium text-muted-foreground">Team Conversion Rate</p>
+                <p className="text-2xl font-bold">{(analytics.conversionRate * 100).toFixed(1)}%</p>
+                <p className="text-xs text-purple-600">Callback conversions</p>
               </div>
-              <Activity className="h-8 w-8 text-orange-600" />
+              <Phone className="h-8 w-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Charts */}
+      {/* Charts Section for All Roles */}
+      {userRole !== 'team_leader' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Sales Trend Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Sales Trend</CardTitle>
+              <CardDescription>Revenue performance over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {analytics.dailyTrend && analytics.dailyTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={analytics.dailyTrend}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Revenue']} />
+                    <Area type="monotone" dataKey="revenue" stroke="#10b981" fill="#10b981" fillOpacity={0.3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-8">
+                  <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No trend data available</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Top Performers */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Performers</CardTitle>
+              <CardDescription>Highest revenue generators</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {analytics.topAgents && analytics.topAgents.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={analytics.topAgents.slice(0, 5)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="agent" angle={-45} textAnchor="end" height={80} />
+                    <YAxis />
+                    <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Revenue']} />
+                    <Bar dataKey="revenue" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No performance data available</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Original Charts for backward compatibility */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Trend Chart */}
         <Card>
@@ -902,14 +1303,13 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis dataKey="agent" type="category" width={100} />
-                    <Tooltip formatter={(value) => [`$${value}`, 'Revenue']} />
-                    <Bar dataKey="revenue" fill="#82ca9d" />
+                    <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']} />
+                  <Bar dataKey="revenue" fill="#82ca9d" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
-
           {/* Performance Correlation */}
           <Card>
             <CardHeader>
