@@ -133,6 +133,7 @@ export class DataCenterService {
       if (filters.data_type) params.append('data_type', filters.data_type);
 
       console.log('🔄 DataCenterService: Fetching data entries...', { userId, userRole, filters });
+      console.log('🔄 DataCenterService: Full URL:', `${this.baseUrl}/api/data-center?${params.toString()}`);
 
       const response = await fetch(`${this.baseUrl}/api/data-center?${params.toString()}`, {
         method: 'GET',

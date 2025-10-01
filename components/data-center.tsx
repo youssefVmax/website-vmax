@@ -102,17 +102,49 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       setLoading(true)
       setError(null)
       
+      // Use a valid user ID from the database instead of the hardcoded one
+      const validUserId = user.id === 'manager-001' ? '0ChFAyPoh0nOK9MybrJn' : user.id;
+      console.log('🔍 Loading data with user ID:', validUserId, 'Role:', userRole);
+      
       // Load shared data entries
-      const result = await dataCenterService.getDataEntries(user.id, userRole, {
+      const result = await dataCenterService.getDataEntries(validUserId, userRole, {
         page: 1,
         limit: 50,
         data_type: 'all'
       })
       setDataEntries(result.data || [])
       
-      // For now, initialize with empty arrays since we don't have data file APIs yet
-      setUploadedFiles([])
-        setNumberAssignments([])
+      // Load shared files from data_center table (files only)
+      console.log('🔍 About to fetch files with:', { userId: validUserId, userRole, data_type: 'file' });
+      const filesResult = await dataCenterService.getDataEntries(validUserId, userRole, {
+        page: 1,
+        limit: 100,
+        data_type: 'file'
+      })
+      
+      console.log('🔍 Files result:', filesResult);
+      console.log('🔍 Files data length:', filesResult.data?.length || 0);
+      if (filesResult.data && filesResult.data.length > 0) {
+        console.log('🔍 Sample file entry:', filesResult.data[0]);
+      }
+      
+      // Convert data_center entries to file format for display
+      const files = (filesResult.data || []).map((entry: any) => ({
+        id: entry.id,
+        name: entry.title,
+        size: entry.content ? entry.content.match(/\(([\d.]+) MB\)/)?.[1] + ' MB' : '0 MB',
+        recordCount: entry.content ? parseInt(entry.content.match(/(\d+) records/)?.[1] || '0') || 0 : 0,
+        uploadDate: entry.created_at,
+        uploadedBy: entry.sent_by_name || 'Unknown',
+        uploadedById: entry.sent_by_id,
+        assignedTo: entry.sent_to_team ? [entry.sent_to_team] : (entry.sent_to_name ? [entry.sent_to_name] : []),
+        notes: entry.description,
+        status: entry.status || 'active',
+        priority: entry.priority || 'medium'
+      }))
+      
+      setUploadedFiles(files)
+      setNumberAssignments([])
     } catch (err) {
       console.error('Error loading data:', err)
       setError('Failed to load data')
@@ -210,11 +242,13 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
 
     try {
-      await dataCenterService.createDataEntry(user.id, userRole, createDataForm);
+      // Use a valid user ID from the database instead of the hardcoded one
+      const validUserId = user.id === 'manager-001' ? '0ChFAyPoh0nOK9MybrJn' : user.id;
+      await dataCenterService.createDataEntry(validUserId, userRole, createDataForm);
       
       toast({
         title: "Success",
-        description: "Data shared successfully",
+        description: userRole === 'salesman' ? "Feedback shared successfully" : "Data shared successfully",
       });
 
       // Reset form and close modal
@@ -235,7 +269,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       console.error('Error creating data entry:', error);
       toast({
         title: "Error",
-        description: "Failed to share data",
+        description: userRole === 'salesman' ? "Failed to share feedback" : "Failed to share data",
         variant: "destructive",
       });
     }
@@ -369,7 +403,16 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         priority: shareFileForm.priority
       };
 
-    
+      // Actually send the file entry to the API
+      console.log('🔍 About to create file entry:', fileEntry);
+      console.log('🔍 Using user ID:', user.id, 'User role:', userRole);
+      
+      // Use a valid user ID from the database instead of the hardcoded one
+      const validUserId = user.id === 'manager-001' ? '0ChFAyPoh0nOK9MybrJn' : user.id;
+      console.log('🔍 Adjusted user ID for API call:', validUserId);
+      
+      await dataCenterService.createDataEntry(validUserId, userRole, fileEntry);
+      console.log('✅ File entry created successfully');
 
       // Add to shared files list for display
       const sharedFile = {
@@ -389,8 +432,6 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         feedbacks: []
       };
 
-      setSharedFiles(prev => [...prev, sharedFile]);
-
       const shareTarget = shareFileForm.shareType === 'team' 
         ? `team "${shareFileForm.sent_to_team}"` 
         : `individual user`;
@@ -399,6 +440,9 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         title: "File Shared Successfully",
         description: `${shareFileForm.file.name} has been shared with ${shareTarget}.`
       });
+
+      // Reload data to show the new file
+      loadData();
 
       // Reset form and close modal
       setShareFileForm({
@@ -827,7 +871,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Share Data</DialogTitle>
+              <DialogTitle>{userRole === 'salesman' ? 'Share Feedback' : 'Share Data'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -930,7 +974,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                   Cancel
                 </Button>
                 <Button onClick={handleCreateDataEntry}>
-                  Share Data
+                  {userRole === 'salesman' ? 'Share Feedback' : 'Share Data'}
                 </Button>
               </div>
             </div>
@@ -1178,7 +1222,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
             className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Share Data
+            {userRole === 'salesman' ? 'Share Feedback' : 'Share Data'}
           </Button>
           {isManager && (
             <Button 
@@ -1200,7 +1244,12 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
             Shared Data ({dataEntries.length})
           </CardTitle>
           <CardDescription>
-            {isManager ? 'Manage shared data and communications' : 'View data shared with you'}
+            {isManager 
+              ? 'Manage shared data and communications' 
+              : userRole === 'salesman' 
+                ? 'Share feedback and view data shared with you'
+                : 'View data shared with you'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
