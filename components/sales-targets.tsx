@@ -68,7 +68,7 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
         
         setSales(salesData)
         setTargets(targetsData)
-        setAgentOptions(usersData.map(u => ({ id: u.id, name: u.name, team: u.team })))
+        setAgentOptions(usersData.map(u => ({ id: u.id, name: u.name, team: u.team || 'Unknown' })))
         
       } catch (error) {
         console.error('Failed to load data:', error)
@@ -118,8 +118,8 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
       const currentSales = agentSales.reduce((sum, sale) => sum + sale.amountPaid, 0)
       const currentDeals = agentSales.length
       
-      const salesProgress = target.monthlyTarget > 0 ? (currentSales / target.monthlyTarget) * 100 : 0
-      const dealsProgress = target.dealsTarget > 0 ? (currentDeals / target.dealsTarget) * 100 : 0
+      const salesProgress = (target.monthlyTarget && target.monthlyTarget > 0) ? (currentSales / target.monthlyTarget) * 100 : 0
+      const dealsProgress = (target.dealsTarget && target.dealsTarget > 0) ? (currentDeals / target.dealsTarget) * 100 : 0
       
       let status: 'on-track' | 'behind' | 'exceeded' = 'on-track'
       if (salesProgress >= 100 || dealsProgress >= 100) {
@@ -193,7 +193,7 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
     };
 
     try {
-      await apiService.createSalesTarget(payload)
+      await apiService.createTarget(payload)
       setNewTarget({ agentId: '', agentName: '', team: '', monthlyTarget: '', dealsTarget: '', period: 'January 2025' })
       
       // Refresh targets
@@ -218,7 +218,7 @@ export default function SalesTargets({ userRole, user }: SalesTargetsProps) {
     if (!editingTarget) return
 
     try {
-        await apiService.updateSalesTarget(editingTarget.id, {
+        await apiService.updateTarget(editingTarget.id, {
           agentId: editingTarget.agentId,
           agentName: editingTarget.agentName,
           monthlyTarget: editingTarget.monthlyTarget,

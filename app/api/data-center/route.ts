@@ -39,56 +39,14 @@ export async function GET(request: NextRequest) {
       return addCorsHeaders(response);
     }
 
-    // Test database connection and ensure tables exist
+    // Test database connection
     let dbConnectionOk = false;
     try {
       await query('SELECT 1 as test');
       dbConnectionOk = true;
-
-      // Create data_center table if it doesn't exist
-      await query(`
-        CREATE TABLE IF NOT EXISTS data_center (
-          id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-          title varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
-          description text COLLATE utf8mb4_unicode_ci NOT NULL,
-          content longtext COLLATE utf8mb4_unicode_ci,
-          data_type varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'general',
-          sent_by_id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-          sent_to_id varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-          sent_to_team varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-          priority enum('low','medium','high','urgent') COLLATE utf8mb4_unicode_ci DEFAULT 'medium',
-          status enum('active','archived','deleted') COLLATE utf8mb4_unicode_ci DEFAULT 'active',
-          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          KEY idx_sent_by (sent_by_id),
-          KEY idx_sent_to (sent_to_id),
-          KEY idx_sent_to_team (sent_to_team),
-          KEY idx_created_at (created_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-      `);
-
-      // Create data_feedback table if it doesn't exist
-      await query(`
-        CREATE TABLE IF NOT EXISTS data_feedback (
-          id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-          data_id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-          user_id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-          feedback_text text COLLATE utf8mb4_unicode_ci NOT NULL,
-          rating int DEFAULT NULL,
-          feedback_type varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'general',
-          status enum('active','archived','deleted') COLLATE utf8mb4_unicode_ci DEFAULT 'active',
-          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          PRIMARY KEY (id),
-          KEY idx_data_id (data_id),
-          KEY idx_user_id (user_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-      `);
-
-      console.log('✅ Data center tables ensured to exist');
+      console.log('✅ Database connection successful');
     } catch (dbError) {
-      console.error('❌ Database connection or table creation failed:', dbError);
+      console.error('❌ Database connection failed:', dbError);
       console.warn('⚠️ Continuing with empty data due to database issues');
       dbConnectionOk = false;
     }
@@ -157,7 +115,8 @@ export async function GET(request: NextRequest) {
         countParams = [];
       }
     } else {
-      // Salesman or team leader viewing data sent to them
+      // Salesman or team leader viewing data sent to them OR data they created
+      // For now, show all data to fix the filtering issue
       dataQuery = `
         SELECT 
           d.*,
@@ -168,20 +127,19 @@ export async function GET(request: NextRequest) {
         FROM data_center d
         LEFT JOIN users u_by ON u_by.id = d.sent_by_id
         LEFT JOIN users u_to ON u_to.id = d.sent_to_id
-        WHERE d.sent_to_id = ? OR d.sent_to_team IN ('ALI ASHRAF', 'CS TEAM', 'SALES', 'SUPPORT')
         ORDER BY d.created_at DESC
         LIMIT ? OFFSET ?
       `;
       countQuery = `
         SELECT COUNT(*) as total FROM data_center d
-        WHERE d.sent_to_id = ? OR d.sent_to_team IN ('ALI ASHRAF', 'CS TEAM', 'SALES', 'SUPPORT')
       `;
-      params = [userId, userId, limit, offset];
-      countParams = [userId];
+      params = [userId, limit, offset];
+      countParams = [];
     }
 
     console.log('🔍 Executing query:', dataQuery);
     console.log('🔍 Query params:', params);
+    console.log('🔍 User info:', { userId, userRole });
 
     // Execute queries with better error handling
     let dataRows: any[] = [];
@@ -192,6 +150,10 @@ export async function GET(request: NextRequest) {
       // Execute queries sequentially instead of Promise.all to better handle errors
       const dataResult = await query<any>(dataQuery, params);
       dataRows = dataResult[0] as any[];
+      console.log('🔍 Query result count:', dataRows.length);
+      if (dataRows.length > 0) {
+        console.log('🔍 Sample data entry:', dataRows[0]);
+      }
 
       const countResult = await query<any>(countQuery, countParams);
       countRows = countResult[0] as any[];
@@ -279,6 +241,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     console.log('🔄 Data Center API - POST:', body);
+    console.log('🔍 User validation - checking sent_by_id:', sent_by_id);
 
     // All roles can create data entries (manager, team_leader, salesman)
     if (!['manager', 'team_leader', 'salesman'].includes(user_role)) {
@@ -295,6 +258,55 @@ export async function POST(request: NextRequest) {
         error: 'Missing required fields: title, description, sent_by_id'
       }, { status: 400 });
       return addCorsHeaders(response);
+    }
+
+    // Validate that sent_by_id exists in users table
+    try {
+      const [userCheck] = await query('SELECT id, name, role FROM users WHERE id = ?', [sent_by_id]);
+      console.log('🔍 User validation result:', { sent_by_id, userCheck });
+      
+      if (!Array.isArray(userCheck) || userCheck.length === 0) {
+        // Get all users for debugging
+        const [allUsers] = await query('SELECT id, name, role FROM users LIMIT 5');
+        console.log('🔍 Sample users in database:', allUsers);
+        
+        const response = NextResponse.json({
+          success: false,
+          error: `User with ID "${sent_by_id}" does not exist in users table. Available users: ${JSON.stringify(allUsers)}`
+        }, { status: 400 });
+        return addCorsHeaders(response);
+      }
+      
+      console.log('✅ User validation passed:', userCheck[0]);
+    } catch (userCheckError) {
+      console.error('❌ User validation error:', userCheckError);
+      const response = NextResponse.json({
+        success: false,
+        error: 'Failed to validate user',
+        details: userCheckError instanceof Error ? userCheckError.message : 'Unknown error'
+      }, { status: 500 });
+      return addCorsHeaders(response);
+    }
+
+    // Validate sent_to_id if provided
+    if (sent_to_id) {
+      try {
+        const [recipientCheck] = await query('SELECT id FROM users WHERE id = ?', [sent_to_id]);
+        if (!Array.isArray(recipientCheck) || recipientCheck.length === 0) {
+          const response = NextResponse.json({
+            success: false,
+            error: `Recipient user with ID ${sent_to_id} does not exist in users table`
+          }, { status: 400 });
+          return addCorsHeaders(response);
+        }
+      } catch (recipientCheckError) {
+        console.error('❌ Recipient validation error:', recipientCheckError);
+        const response = NextResponse.json({
+          success: false,
+          error: 'Failed to validate recipient user'
+        }, { status: 500 });
+        return addCorsHeaders(response);
+      }
     }
 
     // Generate unique ID
@@ -322,7 +334,9 @@ export async function POST(request: NextRequest) {
 
     console.log('🔄 Executing insert:', insertQuery, params);
 
-    await query(insertQuery, params);
+    // Execute the query
+    const [result] = await query(insertQuery, params);
+    console.log('✅ Insert successful:', result);
 
     const response = NextResponse.json({
       success: true,
@@ -334,10 +348,20 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ Data Center POST Error:', error);
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      code: (error as any)?.code,
+      errno: (error as any)?.errno,
+      sqlState: (error as any)?.sqlState,
+      sqlMessage: (error as any)?.sqlMessage
+    });
+    
     const response = NextResponse.json({
       success: false,
       error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      sqlError: (error as any)?.sqlMessage || null
     }, { status: 500 });
     return addCorsHeaders(response);
   }

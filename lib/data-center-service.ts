@@ -90,14 +90,8 @@ export interface PaginatedFeedbackResponse<T> extends PaginatedResponse<T> {
 export class DataCenterService {
   private baseUrl: string;
   constructor() {
-    // Use empty base for browser (relative URLs). On server, prefer env override,
-    // otherwise use production domain https://vmaxcom.org, and localhost in development.
-    const envBase = (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_BASE_URL) || '';
-    const isServer = typeof window === 'undefined';
-    const isProd = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production';
-    this.baseUrl = isServer
-      ? (envBase || (isProd ? 'https://vmaxcom.org' : 'http://localhost:3001'))
-      : '';
+    // Use local API routes that connect directly to production database
+    this.baseUrl = '';
   }
 
   /**
@@ -222,12 +216,23 @@ export class DataCenterService {
         body: JSON.stringify({
           ...data,
           sent_by_id: userId,
-          user_role: userRole
+          user_role: userRole,
+          // Convert empty strings to null for database compatibility
+          sent_to_id: data.sent_to_id || null,
+          sent_to_team: data.sent_to_team || null
         })
       });
 
       if (!response.ok) {
-        throw new Error(`Create API error: ${response.status} ${response.statusText}`);
+        let errorDetails = `${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          console.error('❌ API Error Details:', errorData);
+          errorDetails = errorData.error || errorData.details || errorDetails;
+        } catch (e) {
+          console.error('❌ Could not parse error response');
+        }
+        throw new Error(`Create API error: ${errorDetails}`);
       }
 
       const result = await response.json();

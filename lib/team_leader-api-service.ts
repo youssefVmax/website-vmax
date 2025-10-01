@@ -84,9 +84,8 @@ export class TeamLeaderApiService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://vmaxcom.org' 
-      : 'http://localhost:3001';
+    // Force use of production URL https://vmaxcom.org for all API calls
+    this.baseUrl = 'https://vmaxcom.org';
   }
 
   /**

@@ -44,21 +44,20 @@ interface DataCenterProps {
   userRole: 'manager' | 'salesman' | 'team_leader'
   user: { name: string; username: string; id: string }
 }
-
 export function DataCenter({ userRole, user }: DataCenterProps) {
   const { toast } = useToast()
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [users, setUsers] = useState<any[]>([])
   const [userLoading, setUserLoading] = useState(true)
-
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [numberAssignments, setNumberAssignments] = useState<NumberAssignment[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([])
+  const [sharedFiles, setSharedFiles] = useState<any[]>([])
   
   // Data Center shared data states
   const [dataEntries, setDataEntries] = useState<DataCenterEntry[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showShareFileModal, setShowShareFileModal] = useState(false)
   const [createDataForm, setCreateDataForm] = useState({
     title: '',
     description: '',
@@ -67,6 +66,17 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     sent_to_team: '',
     sent_to_id: '',
     priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent'
+  });
+
+  // File sharing form state
+  const [shareFileForm, setShareFileForm] = useState({
+    title: '',
+    description: '',
+    file: null as File | null,
+    sent_to_team: '',
+    sent_to_id: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+    shareType: 'team' as 'team' | 'individual'
   });
 
   // Feedback state
@@ -102,7 +112,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       
       // For now, initialize with empty arrays since we don't have data file APIs yet
       setUploadedFiles([])
-      setNumberAssignments([])
+        setNumberAssignments([])
     } catch (err) {
       console.error('Error loading data:', err)
       setError('Failed to load data')
@@ -182,6 +192,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
           variant: "destructive"
         })
       } finally {
+        setUserLoading(false)
       }
     }
     loadUsers()
@@ -313,6 +324,107 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     }
   }
 
+  // Handle file sharing
+  const handleShareFile = async () => {
+    if (!shareFileForm.title.trim() || !shareFileForm.file) {
+      toast({
+        title: "Error",
+        description: "Please provide a title and select a file",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate that either team or individual is selected
+    if (shareFileForm.shareType === 'team' && !shareFileForm.sent_to_team) {
+      toast({
+        title: "Error",
+        description: "Please select a team to share with",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (shareFileForm.shareType === 'individual' && !shareFileForm.sent_to_id) {
+      toast({
+        title: "Error", 
+        description: "Please select an individual to share with",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Create file data entry with estimated record count based on file size
+      const fileSizeMB = shareFileForm.file.size / 1024 / 1024;
+      const estimatedRecords = Math.floor(fileSizeMB * 500); // Estimate ~500 records per MB
+      
+      const fileEntry = {
+        title: shareFileForm.title,
+        description: shareFileForm.description,
+        content: `File: ${shareFileForm.file.name} (${fileSizeMB.toFixed(2)} MB) - Estimated ${estimatedRecords} records`,
+        data_type: 'file',
+        sent_to_team: shareFileForm.sent_to_team,
+        sent_to_id: shareFileForm.sent_to_id,
+        priority: shareFileForm.priority
+      };
+
+    
+
+      // Add to shared files list for display
+      const sharedFile = {
+        id: Date.now().toString(),
+        title: shareFileForm.title,
+        description: shareFileForm.description,
+        fileName: shareFileForm.file.name,
+        fileSize: `${(shareFileForm.file.size / 1024 / 1024).toFixed(2)} MB`,
+        fileType: shareFileForm.file.type,
+        uploadDate: new Date().toISOString(),
+        uploadedBy: user.name,
+        uploadedById: user.id,
+        sent_to_team: shareFileForm.sent_to_team,
+        sent_to_id: shareFileForm.sent_to_id,
+        priority: shareFileForm.priority,
+        status: 'active',
+        feedbacks: []
+      };
+
+      setSharedFiles(prev => [...prev, sharedFile]);
+
+      const shareTarget = shareFileForm.shareType === 'team' 
+        ? `team "${shareFileForm.sent_to_team}"` 
+        : `individual user`;
+      
+      toast({
+        title: "File Shared Successfully",
+        description: `${shareFileForm.file.name} has been shared with ${shareTarget}.`
+      });
+
+      // Reset form and close modal
+      setShareFileForm({
+        title: '',
+        description: '',
+        file: null,
+        sent_to_team: '',
+        sent_to_id: '',
+        priority: 'medium',
+        shareType: 'team'
+      });
+      setShowShareFileModal(false);
+
+      // Reload data
+      loadData();
+
+    } catch (error) {
+      console.error('Error sharing file:', error);
+      toast({
+        title: "Share Failed",
+        description: "Failed to share file. Please try again.",
+        variant: "destructive"
+      });
+    }
+  }
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -425,8 +537,8 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const handleBulkAssignment = async () => {
     if (!bulkNumbers.trim() || !selectedAgent) {
       toast({
-        title: "Missing Information",
-        description: "Please provide numbers and select an agent.",
+        title: "Error",
+        description: "Please provide numbers and select an agent",
         variant: "destructive"
       })
       return
@@ -448,16 +560,19 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
 
       setBulkNumbers('')
       setSelectedAgent('')
-
+      
       toast({
-        title: "Numbers Assigned Successfully",
-        description: `${numbers.length} numbers assigned to ${selectedAgent}.`
+        title: "Assignment Created",
+        description: `${numbers.length} numbers assigned to ${selectedAgent}`
       })
+
+      // Reload assignments
+      loadData()
     } catch (error) {
-      console.error('Error assigning numbers:', error)
+      console.error('Error creating assignment:', error)
       toast({
         title: "Assignment Failed",
-        description: "Failed to assign numbers. Please try again.",
+        description: "Failed to create assignment. Please try again.",
         variant: "destructive"
       })
     }
@@ -507,6 +622,9 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         title: "Assignment Deleted",
         description: "The number assignment has been removed."
       })
+
+      // Reload assignments
+      loadData()
     } catch (error) {
       console.error('Error deleting assignment:', error)
       toast({
@@ -886,6 +1004,152 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         </Dialog>
       )}
 
+      {/* Share File Modal */}
+      {showShareFileModal && (
+        <Dialog open={showShareFileModal} onOpenChange={setShowShareFileModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Share File</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="file-title">Title</Label>
+                <Input
+                  id="file-title"
+                  value={shareFileForm.title}
+                  onChange={(e) => setShareFileForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Enter file title..."
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="file-description">Description</Label>
+                <Textarea
+                  id="file-description"
+                  value={shareFileForm.description}
+                  onChange={(e) => setShareFileForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Enter file description..."
+                  rows={3}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="file-upload">Select File</Label>
+                <Input
+                  id="file-upload"
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    setShareFileForm(prev => ({ ...prev, file: file || null }));
+                  }}
+                  accept=".xls,.xlsx,.csv"
+                />
+                {shareFileForm.file && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Selected: {shareFileForm.file.name} ({(shareFileForm.file.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label>Priority</Label>
+                <Select value={shareFileForm.priority} onValueChange={(value: 'low' | 'medium' | 'high' | 'urgent') => setShareFileForm(prev => ({ ...prev, priority: value }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Share With</Label>
+                <div className="flex space-x-4 mt-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      name="shareType"
+                      value="team"
+                      checked={shareFileForm.shareType === 'team'}
+                      onChange={(e) => setShareFileForm(prev => ({ 
+                        ...prev, 
+                        shareType: 'team',
+                        sent_to_id: '', // Clear individual selection
+                      }))}
+                      className="text-blue-600"
+                    />
+                    <span>Team</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="radio"
+                      name="shareType"
+                      value="individual"
+                      checked={shareFileForm.shareType === 'individual'}
+                      onChange={(e) => setShareFileForm(prev => ({ 
+                        ...prev, 
+                        shareType: 'individual',
+                        sent_to_team: '', // Clear team selection
+                      }))}
+                      className="text-blue-600"
+                    />
+                    <span>Individual</span>
+                  </label>
+                </div>
+              </div>
+
+              {shareFileForm.shareType === 'team' && (
+                <div>
+                  <Label>Select Team</Label>
+                  <Select value={shareFileForm.sent_to_team} onValueChange={(value) => setShareFileForm(prev => ({ ...prev, sent_to_team: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
+                      <SelectItem value="CS TEAM">CS TEAM</SelectItem>
+                      <SelectItem value="Sales Team">Sales Team</SelectItem>
+                      <SelectItem value="Management">Management</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {shareFileForm.shareType === 'individual' && (
+                <div>
+                  <Label>Select Individual</Label>
+                  <Select value={shareFileForm.sent_to_id} onValueChange={(value) => setShareFileForm(prev => ({ ...prev, sent_to_id: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name} ({user.role})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setShowShareFileModal(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleShareFile}>
+                  Share File
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
@@ -901,22 +1165,13 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         </div>
         <div className="flex gap-2">
           {isManager && (
-            <>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept=".csv,.xlsx,.xls"
-                className="hidden"
-              />
-              <Button 
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload File
-              </Button>
-            </>
+            <Button 
+              onClick={() => setShowShareFileModal(true)}
+              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload File
+            </Button>
           )}
           <Button 
             onClick={() => setShowCreateModal(true)}
@@ -927,15 +1182,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
           </Button>
           {isManager && (
             <Button 
-              onClick={() => {
-                // Navigate to feedback management or show feedback modal
-                window.open('/feedback-management', '_blank')
-              }}
-              variant="outline"
-              className="border-purple-200 text-purple-700 hover:bg-purple-50"
+              onClick={() => setShowShareFileModal(true)}
+              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
             >
-              <Eye className="h-4 w-4 mr-2" />
-              View All Feedback
+              <Upload className="h-4 w-4 mr-2" />
+              Share File
             </Button>
           )}
         </div>
@@ -1025,6 +1276,118 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Shared Files Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <FileText className="h-5 w-5 mr-2" />
+            Shared Files ({sharedFiles.length})
+          </CardTitle>
+          <CardDescription>
+            Files shared with you and your team - provide feedback on shared files
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sharedFiles.length === 0 ? (
+            <div className="text-center py-8">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium">No Files Shared</h3>
+              <p className="text-sm text-muted-foreground">
+                No files have been shared yet.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-3">File</th>
+                    <th className="text-left p-3">Title</th>
+                    <th className="text-left p-3">Size</th>
+                    <th className="text-left p-3">Shared By</th>
+                    <th className="text-left p-3">Date</th>
+                    <th className="text-left p-3">Priority</th>
+                    <th className="text-left p-3">Team</th>
+                    <th className="text-left p-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sharedFiles.map((file) => (
+                    <tr key={file.id} className="border-b hover:bg-muted/50">
+                      <td className="p-3">
+                        <div className="flex items-center space-x-2">
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium">{file.fileName}</span>
+                        </div>
+                      </td>
+                      <td className="p-3">{file.title}</td>
+                      <td className="p-3">{file.fileSize}</td>
+                      <td className="p-3">{file.uploadedBy}</td>
+                      <td className="p-3">{new Date(file.uploadDate).toLocaleDateString()}</td>
+                      <td className="p-3">
+                        <Badge className={`${
+                          file.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                          file.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                          file.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {file.priority}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        <span className="text-sm text-muted-foreground">
+                          {file.sent_to_team || 'Individual'}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex space-x-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              setSelectedDataId(file.id)
+                              setShowFeedbackModal(true)
+                            }}
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <MessageCircle className="h-4 w-4 mr-1" />
+                            Feedback
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Download
+                          </Button>
+                          {isManager && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                setSharedFiles(prev => prev.filter(f => f.id !== file.id))
+                                toast({
+                                  title: "File Removed",
+                                  description: "Shared file has been removed from the system."
+                                })
+                              }}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
@@ -1354,7 +1717,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       </div>
 
       {/* Data Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -1391,6 +1754,18 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                 </p>
               </div>
               <Users className="h-8 w-8 text-purple-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Shared Data</p>
+                <p className="text-2xl font-bold">{dataEntries.length}</p>
+              </div>
+              <MessageCircle className="h-8 w-8 text-orange-500" />
             </div>
           </CardContent>
         </Card>

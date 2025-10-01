@@ -414,6 +414,33 @@ class DirectApiService {
     return await directMySQLService.getTargets(filters);
   }
 
+  // Update a target via Next.js targets API
+  async updateTarget(id: string, targetData: {
+    agentId?: string;
+    agentName?: string;
+    monthlyTarget?: number;
+    dealsTarget?: number;
+    period?: string;
+    description?: string;
+    managerId?: string;
+    managerName?: string;
+    type?: 'individual' | 'team';
+  }): Promise<{ success: boolean }> {
+    const res = await fetch('/api/targets', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ id, ...targetData })
+    });
+    if (!res.ok) {
+      throw new Error(`Update target API error: ${res.status} ${res.statusText}`);
+    }
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to update target');
+    }
+    return { success: true };
+  }
+
   // Create a single (usually individual) target via Next.js targets API
   async createTarget(targetData: {
     type: 'individual' | 'team';
