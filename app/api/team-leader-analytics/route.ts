@@ -119,10 +119,15 @@ export async function GET(request: NextRequest) {
     `;
 
     // Execute queries
-    const [teamDeals] = await query<any>(teamDealsQuery, [managedTeam, userId]);
-    const [teamCallbacks] = await query<any>(teamCallbacksQuery, [managedTeam, userId]);
-    const [personalDeals] = await query<any>(personalDealsQuery, [userId]);
-    const [personalCallbacks] = await query<any>(personalCallbacksQuery, [userId]);
+    const teamDealsResult = await query<any>(teamDealsQuery, [managedTeam, userId]);
+    const teamCallbacksResult = await query<any>(teamCallbacksQuery, [managedTeam, userId]);
+    const personalDealsResult = await query<any>(personalDealsQuery, [userId]);
+    const personalCallbacksResult = await query<any>(personalCallbacksQuery, [userId]);
+
+    const teamDeals = teamDealsResult[0][0] || {};
+    const teamCallbacks = teamCallbacksResult[0][0] || {};
+    const personalDeals = personalDealsResult[0][0] || {};
+    const personalCallbacks = personalCallbacksResult[0][0] || {};
 
     // Get team member performance
     const teamMembersQuery = `
