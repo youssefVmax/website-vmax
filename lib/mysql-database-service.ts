@@ -141,15 +141,26 @@ export class MySQLDatabaseService {
   async createDealWithTracking(dealData: any, createdBy: any): Promise<string> {
     const dealId = await apiService.createDeal(dealData);
     
-    await this.logActivity({
-      user_id: createdBy?.id,
-      action: 'CREATE',
-      entity_type: 'deal',
-      entity_id: dealId.id,
-      new_values: dealData
-    });
+    // Log activity (optional - don't fail if this fails)
+    try {
+      await this.logActivity({
+        user_id: createdBy?.id,
+        action: 'CREATE',
+        entity_type: 'deal',
+        entity_id: dealId.id,
+        new_values: dealData
+      });
+    } catch (error) {
+      console.warn('Failed to log deal activity:', error);
+    }
 
-    await this.updateTeamMetrics(dealData.salesTeam || createdBy?.team);
+    // Update team metrics (optional - don't fail if this fails)
+    try {
+      await this.updateTeamMetrics(dealData.salesTeam || createdBy?.team);
+    } catch (error) {
+      console.warn('Failed to update team metrics after deal creation:', error);
+    }
+    
     return dealId.id;
   }
 
@@ -157,15 +168,26 @@ export class MySQLDatabaseService {
   async createCallbackWithTracking(callbackData: any, createdBy: any): Promise<string> {
     const callbackId = await apiService.createCallback(callbackData);
     
-    await this.logActivity({
-      user_id: createdBy?.id,
-      action: 'CREATE',
-      entity_type: 'callback',
-      entity_id: callbackId.id,
-      new_values: callbackData
-    });
+    // Log activity (optional - don't fail if this fails)
+    try {
+      await this.logActivity({
+        user_id: createdBy?.id,
+        action: 'CREATE',
+        entity_type: 'callback',
+        entity_id: callbackId.id,
+        new_values: callbackData
+      });
+    } catch (error) {
+      console.warn('Failed to log callback activity:', error);
+    }
 
-    await this.updateTeamMetrics(callbackData.salesTeam || createdBy?.team);
+    // Update team metrics (optional - don't fail if this fails)
+    try {
+      await this.updateTeamMetrics(callbackData.salesTeam || createdBy?.team);
+    } catch (error) {
+      console.warn('Failed to update team metrics after callback creation:', error);
+    }
+    
     return callbackId.id;
   }
 }

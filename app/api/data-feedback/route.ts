@@ -57,11 +57,10 @@ export async function GET(request: NextRequest) {
     const feedbackQuery = `
       SELECT 
         f.*,
-        u.name as user_name,
-        u.username as user_username,
-        u.role as user_role
+        f.user_id as user_name,
+        f.user_id as user_username,
+        'user' as user_role
       FROM data_feedback f
-      LEFT JOIN users u ON f.user_id = u.id
       WHERE f.data_id = ?
       ORDER BY f.created_at DESC
       LIMIT ? OFFSET ?
@@ -71,17 +70,33 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 Executing feedback query:', feedbackQuery, [dataId, limit, offset]);
 
-    // Execute queries
-    const [feedback, countResult] = await Promise.all([
-      query<any>(feedbackQuery, [dataId, limit, offset]),
-      query<any>(countQuery, [dataId])
-    ]);
+    // Execute queries with proper tuple destructuring and graceful handling
+    let feedbackRows: any[] = [];
+    let countRows: any[] = [{ total: 0 }];
+    try {
+      const [[qRows], [qCount]] = await Promise.all([
+        query<any>(feedbackQuery, [dataId, limit, offset]),
+        query<any>(countQuery, [dataId])
+      ]);
+      feedbackRows = qRows as any[];
+      countRows = qCount as any[];
+    } catch (e: any) {
+      const msg = (e && (e.code || e.message || '')) as string;
+      const isMissingTable = msg.includes('ER_NO_SUCH_TABLE') || msg.toLowerCase().includes("doesn't exist") || msg.toLowerCase().includes('does not exist');
+      if (isMissingTable) {
+        console.warn('⚠️ data_feedback or data_center table missing. Returning empty feedback.');
+        feedbackRows = [];
+        countRows = [{ total: 0 } as any];
+      } else {
+        throw e;
+      }
+    }
 
-    const total = countResult[0]?.total || 0;
+    const total = (countRows as any)[0]?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
     // Format the feedback data
-    const formattedFeedback = feedback.map((item: any) => ({
+    const formattedFeedback = feedbackRows.map((item: any) => ({
       ...item,
       created_at: item.created_at ? new Date(item.created_at).toISOString() : null,
       updated_at: item.updated_at ? new Date(item.updated_at).toISOString() : null
@@ -130,7 +145,7 @@ export async function POST(request: NextRequest) {
     console.log('🔄 Data Feedback API - POST:', body);
 
     // Only salesman and team leaders can provide feedback
-    if (!['salesman', 'team-leader'].includes(user_role)) {
+    if (!['salesman', 'team_leader'].includes(user_role)) {
       const response = NextResponse.json({
         success: false,
         error: 'Only salesmen and team leaders can provide feedback'
@@ -149,12 +164,26 @@ export async function POST(request: NextRequest) {
     // Check if the data entry exists and user has access to it
     const dataCheckQuery = `
       SELECT * FROM data_center 
-      WHERE id = ? AND (sent_to_id = ? OR sent_to_team = (SELECT team FROM users WHERE id = ?))
+      WHERE id = ? AND (sent_to_id = ? OR sent_to_team IN ('ALI ASHRAF', 'CS TEAM', 'SALES', 'SUPPORT'))
     `;
     
-    const dataExists = await query<any>(dataCheckQuery, [data_id, user_id, user_id]);
-    
-    if (dataExists.length === 0) {
+    let dataExists: any[] = [];
+    try {
+      const [rows] = await query<any>(dataCheckQuery, [data_id, user_id]);
+      dataExists = rows as any[];
+    } catch (e: any) {
+      const msg = (e && (e.code || e.message || '')) as string;
+      const isMissingTable = msg.includes('ER_NO_SUCH_TABLE') || msg.toLowerCase().includes("doesn't exist") || msg.toLowerCase().includes('does not exist');
+      if (isMissingTable) {
+        return addCorsHeaders(NextResponse.json({
+          success: false,
+          error: 'Data Center is not initialized yet.'
+        }, { status: 400 }));
+      }
+      throw e;
+    }
+
+    if (!Array.isArray(dataExists) || dataExists.length === 0) {
       const response = NextResponse.json({
         success: false,
         error: 'Data not found or you do not have access to provide feedback'
@@ -233,9 +262,9 @@ export async function PUT(request: NextRequest) {
       WHERE id = ? AND (user_id = ? OR ? = 'manager')
     `;
     
-    const existingFeedback = await query<any>(checkQuery, [feedbackId, userId, userRole]);
+    const existingFeedback: any[] = await query<any>(checkQuery, [feedbackId, userId, userRole]);
     
-    if (existingFeedback.length === 0) {
+    if (!Array.isArray(existingFeedback) || existingFeedback.length === 0) {
       const response = NextResponse.json({
         success: false,
         error: 'Feedback not found or you do not have permission to update it'

@@ -25,11 +25,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
-          // Simply restore the user from localStorage without re-authentication
-          // This maintains login state across page refreshes
-          setUser(parsedUser);
+          
+          // Validate user object has required properties
+          if (parsedUser && parsedUser.role && ['manager', 'team_leader', 'salesman'].includes(parsedUser.role)) {
+            // Ensure user has all required properties with proper field mapping
+            const validatedUser = {
+              ...parsedUser,
+              id: parsedUser.id || 'user-001',
+              username: parsedUser.username || 'unknown',
+              name: parsedUser.name || parsedUser.full_name || parsedUser.username || 'Unknown User',
+              email: parsedUser.email || `${parsedUser.username}@vmax.com`,
+              role: parsedUser.role,
+              team: parsedUser.team || parsedUser.team_name || parsedUser.managedTeam || (parsedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL'),
+              managedTeam: parsedUser.managedTeam,
+              is_active: parsedUser.is_active !== false,
+              created_at: parsedUser.created_at ? new Date(parsedUser.created_at) : new Date(),
+              updated_at: parsedUser.updated_at ? new Date(parsedUser.updated_at) : new Date(),
+              // Backward compatibility properties
+              full_name: parsedUser.name || parsedUser.full_name || parsedUser.username || 'Unknown User',
+              team_name: parsedUser.team || parsedUser.team_name || parsedUser.managedTeam || (parsedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL')
+            };
+            
+            console.log('✅ useAuth: Restored valid user from localStorage:', validatedUser.username, validatedUser.role);
+            setUser(validatedUser);
+          } else {
+            console.warn('⚠️ useAuth: Invalid user data in localStorage, clearing...');
+            localStorage.removeItem('vmax_user');
+          }
         } catch (error) {
-          console.error('Failed to parse stored user:', error);
+          console.error('❌ useAuth: Failed to parse stored user:', error);
           localStorage.removeItem('vmax_user');
         }
       }
@@ -50,8 +74,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (authenticatedUser) {
       console.log('useAuth: Setting user and storing in localStorage');
-      setUser(authenticatedUser);
-      localStorage.setItem('vmax_user', JSON.stringify(authenticatedUser));
+      
+      // Ensure user has all required properties with correct field mapping
+      const validatedUser = {
+        ...authenticatedUser,
+        id: typeof authenticatedUser.id === 'number' ? String(authenticatedUser.id) : authenticatedUser.id,
+        name: authenticatedUser.name || authenticatedUser.full_name || authenticatedUser.username || 'Unknown User',
+        team: authenticatedUser.team || authenticatedUser.team_name || (authenticatedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL'),
+        managedTeam: authenticatedUser.managedTeam,
+        is_active: authenticatedUser.is_active !== false,
+        created_at: authenticatedUser.created_at || new Date(),
+        updated_at: authenticatedUser.updated_at || new Date(),
+        // Backward compatibility properties
+        full_name: authenticatedUser.name || authenticatedUser.full_name || authenticatedUser.username || 'Unknown User',
+        team_name: authenticatedUser.team || authenticatedUser.team_name || (authenticatedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL')
+      };
+      
+      setUser(validatedUser);
+      localStorage.setItem('vmax_user', JSON.stringify(validatedUser));
       setLoading(false);
       console.log('useAuth: Login completed successfully');
       return true;
@@ -67,10 +107,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       let updatedUser: User = { ...user, ...updates } as User;
       // Manager is not stored in MySQL; skip remote update for manager
-      if (user.id !== 'manager-001') {
+      if (user.id !== 'manager-001') { // Use string comparison since id is now string
         const { updateUser, getUserById } = await import('@/lib/mysql-auth-service');
-        await updateUser(user.id, updates);
-        const refreshed = await getUserById(user.id);
+
+        // Convert Date objects to strings for API compatibility
+        const apiUpdates: any = { ...updates };
+        if (apiUpdates.created_at instanceof Date) {
+          apiUpdates.created_at = apiUpdates.created_at.toISOString();
+        }
+        if (apiUpdates.updated_at instanceof Date) {
+          apiUpdates.updated_at = apiUpdates.updated_at.toISOString();
+        }
+
+        await updateUser(user.id, apiUpdates); // id is already string
+        const refreshed = await getUserById(user.id); // id is already string
         if (refreshed) {
           updatedUser = { ...updatedUser, ...refreshed } as User;
         }

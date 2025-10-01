@@ -9,22 +9,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { CalendarIcon, DollarSign, User, Building, Package, Settings, Save, X } from "lucide-react"
+import { CalendarIcon, DollarSign, User as UserIcon, Building, Package, Settings, Save, X } from "lucide-react"
 import { apiService } from "@/lib/api-service"
-import { User as UserType } from "@/lib/auth"
+import type { User } from "@/types/user"
+import type { User as ApiUser } from "@/lib/api-service"
 import { showDealAdded, showError, showLoading } from "@/lib/sweetalert"
-import { useToast } from "@/hooks/use-toast"
 
 interface EnhancedAddDealProps {
-  currentUser: UserType
+  currentUser: User
   onClose?: () => void
   onSuccess?: (dealId: string) => void
 }
 
 export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: EnhancedAddDealProps) {
-  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [users, setUsers] = useState<UserType[]>([])
+  const [users, setUsers] = useState<ApiUser[]>([])
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     // Customer Information
@@ -88,8 +87,8 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
 
   const loadUsers = async () => {
     try {
-      const allUsers = await userService.getAllUsers()
-      setUsers(allUsers.filter(user => user.role === 'salesman' || user.role === 'manager'))
+      const allUsers = await apiService.getUsers()
+      setUsers(allUsers.filter(u => ['salesman', 'manager', 'team_leader'].includes(u.role)))
     } catch (error) {
       console.error('Error loading users:', error)
     }
@@ -223,15 +222,9 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     if (!validation.isValid) {
       const errorCount = Object.keys(validation.errors).length;
       const firstError = Object.values(validation.errors)[0];
-      
-      toast({
-        title: "⚠️ Validation Error",
-        description: `${errorCount} field${errorCount > 1 ? 's need' : ' needs'} attention: ${firstError}`,
-        duration: 5000,
-        variant: "destructive",
-        className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-orange-800"
-      });
-      
+      // Use SweetAlert only (no toast, no await)
+      showError("Validation Error", `${errorCount} field${errorCount > 1 ? 's need' : ' needs'} attention: ${firstError}`)
+
       // Scroll to first error field
       const firstErrorField = Object.keys(validation.errors)[0];
       const element = document.getElementById(firstErrorField);
@@ -249,37 +242,35 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     setLoading(true);
 
     try {
-      console.log('Creating deal with data:', formData);
+      // Create via unified apiService
+      const result = await apiService.createDeal({
+        customerName: formData.customer_name,
+        email: formData.email,
+        phoneNumber: formData.phone_number,
+        country: formData.country || 'Unknown',
+        amountPaid: formData.amount_paid,
+        serviceTier: formData.service_tier as 'Silver' | 'Gold' | 'Premium',
+        salesAgentId: formData.SalesAgentID,
+        closingAgentId: formData.ClosingAgentID,
+        salesTeam: formData.sales_team,
+        stage: formData.stage,
+        status: formData.status,
+        priority: formData.priority,
+        signupDate: formData.signup_date,
+        durationYears: formData.duration_years,
+        durationMonths: formData.duration_months,
+        numberOfUsers: formData.number_of_users,
+        notes: formData.notes,
+        invoice_link: formData.invoice_link,
+        createdBy: currentUser.name || 'Unknown'
+      } as any)
 
-      // Combine form data with calculated fields
-      const dealData = {
-        ...formData,
-        ...calculatedFields,
-        // These will be calculated automatically by the service
-        sales_agent_norm: formData.sales_agent.toLowerCase().replace(/\s+/g, '_'),
-        closing_agent_norm: formData.closing_agent.toLowerCase().replace(/\s+/g, '_'),
-        duration_mean_paid: formData.amount_paid / formData.duration_months,
-        // These will be calculated by the service based on existing data
-        agent_avg_paid: 0,
-        is_above_avg: false,
-        paid_rank: 0,
-        created_by: currentUser.id || currentUser.username
-      }
+      // Do not await alerts per requirement - show success and close modal
+      showDealAdded(formData.amount_paid, formData.customer_name)
 
-      console.log('Processed deal data:', dealData)
-      const dealId = await dealsService.createDeal(dealData, currentUser)
-      console.log('Deal created successfully with ID:', dealId)
-      
-      // Show success message with toast notification
-      toast({
-        title: "🎉 Deal Created Successfully!",
-        description: `$${formData.amount_paid.toLocaleString()} deal for ${formData.customer_name}`,
-        duration: 4000,
-        className: "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200 text-emerald-800"
-      });
-      
+      // Call onSuccess callback to close the modal
       if (onSuccess) {
-        onSuccess(dealId);
+        onSuccess(result.id)
       }
       
       // Reset form and validation errors
@@ -317,13 +308,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
       });
     } catch (error) {
       console.error('Error creating deal:', error)
-      toast({
-        title: "❌ Deal Creation Failed",
-        description: "Failed to create deal. Please try again.",
-        duration: 5000,
-        variant: "destructive",
-        className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-red-800"
-      });
+      showError('Error', 'Failed to create deal. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -354,7 +339,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
             {/* Customer Information */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-4">
-                <User className="h-4 w-4" />
+                <UserIcon className="h-4 w-4" />
                 <h3 className="text-lg font-semibold">Customer Information</h3>
               </div>
               
@@ -794,13 +779,13 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
                 <Label htmlFor="invoice_link">Invoice Link</Label>
                 <Input
                   id="invoice_link"
-                  type="url"
+                  type="text"
                   value={formData.invoice_link}
                   onChange={(e) => handleInputChange('invoice_link', e.target.value)}
-                  placeholder="https://..."
+                  placeholder="paypal or website"
                 />
               </div>
-              
+            
               <div>
                 <Label htmlFor="device_key">Device Key</Label>
                 <Input

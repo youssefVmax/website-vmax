@@ -108,7 +108,7 @@ export class TeamLeaderApiService {
 
       console.log('🔄 TeamLeaderApiService: Fetching analytics...', { userId, managedTeam, dateRange });
 
-      const response = await fetch(`/api/team-leader-analytics?${params.toString()}`, {
+      const response = await fetch(`/api/team_leader-analytics?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -217,7 +217,7 @@ export class TeamLeaderApiService {
 
       console.log(`🔄 TeamLeaderApiService: Fetching ${dataType}...`, filters);
 
-      const response = await fetch(`/api/team-leader-data?${params.toString()}`, {
+      const response = await fetch(`/api/team_leader-data?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -276,7 +276,7 @@ export class TeamLeaderApiService {
 
       console.log(`🔄 TeamLeaderApiService: Updating ${dataType}...`, { itemId, updates });
 
-      const response = await fetch(`/api/team-leader-data?${params.toString()}`, {
+      const response = await fetch(`/api/team_leader-data?${params.toString()}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

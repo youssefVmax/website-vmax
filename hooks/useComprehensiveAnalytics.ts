@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { comprehensiveAnalyticsService, ComprehensiveAnalytics, AnalyticsFilters } from '@/lib/comprehensive-analytics-service'
 
 interface UseComprehensiveAnalyticsOptions {
-  userRole: 'manager' | 'team-leader' | 'salesman'
+  userRole: 'manager' | 'team_leader' | 'salesman'
   userId?: string
   userName?: string
   managedTeam?: string
@@ -115,7 +115,7 @@ export function useManagerAnalytics(options: Omit<UseComprehensiveAnalyticsOptio
 export function useTeamLeaderAnalytics(options: Omit<UseComprehensiveAnalyticsOptions, 'userRole'> & { managedTeam: string }) {
   return useComprehensiveAnalytics({
     ...options,
-    userRole: 'team-leader'
+    userRole: 'team_leader'
   })
 }
 

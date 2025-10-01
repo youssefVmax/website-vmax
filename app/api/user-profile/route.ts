@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         
         -- Get team statistics if user is a team leader
         CASE 
-          WHEN u.role = 'team-leader' AND u.managedTeam IS NOT NULL THEN
+          WHEN u.role = 'team_leader' AND u.managedTeam IS NOT NULL THEN
             (SELECT COUNT(*) FROM users WHERE team = u.managedTeam AND id != u.id)
           ELSE 0
         END as managed_team_size,
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 Executing user query:', userQuery, [userId]);
 
-    const userResult = await query<any>(userQuery, [userId]);
+    const [userResult] = await query<any>(userQuery, [userId]);
 
     if (userResult.length === 0) {
       const response = NextResponse.json({
@@ -190,7 +190,7 @@ export async function PUT(request: NextRequest) {
     
     console.log('🔄 Executing update:', updateQuery, params);
 
-    const result = await query(updateQuery, params);
+    const [result] = await query(updateQuery, params);
     
     if ((result as any).affectedRows === 0) {
       const response = NextResponse.json({

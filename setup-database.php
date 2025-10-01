@@ -177,7 +177,7 @@ class VMaxDatabaseSetup {
                     'email' => 'teamleader@vmax.com',
                     'password' => password_hash('team@Vmax', PASSWORD_DEFAULT),
                     'name' => 'Team Leader',
-                    'role' => 'team-leader',
+                    'role' => 'team_leader',
                     'team' => 'ALI ASHRAF',
                     'managedTeam' => 'ALI ASHRAF'
                 ]

@@ -96,12 +96,12 @@ const getCustomSwal = async () => {
     buttonsStyling: false,
     background: 'transparent',
     backdrop: 'rgba(0, 0, 0, 0.8)',
-    position: 'top',
+    position: 'center',
     showClass: {
-      popup: 'animate__animated animate__slideInDown animate__faster'
+      popup: 'animate__animated animate__zoomIn animate__faster'
     },
     hideClass: {
-      popup: 'animate__animated animate__slideOutUp animate__faster'
+      popup: 'animate__animated animate__zoomOut animate__faster'
     }
   });
 };
@@ -109,93 +109,93 @@ const getCustomSwal = async () => {
 // Success notification
 export const showSuccess = async (title: string, message?: string, options: any = {}) => {
   const customSwal = await getCustomSwal();
-  
-  // Default options
   const defaultOptions = {
     icon: 'success',
     title,
     text: message,
-    timer: 3000,
+    timer: 2200,
     timerProgressBar: true,
     showConfirmButton: false,
     toast: false,
-    position: 'top',
+    position: 'center',
+    background: '#0f172a',
+    color: '#ffffff',
     customClass: {
-      popup: 'animate__animated animate__fadeInDown',
-      title: 'text-2xl font-bold text-green-500',
-      htmlContainer: 'text-slate-700',
-      timerProgressBar: 'bg-green-500',
-    },
-    ...options // Allow overriding defaults
-  };
-
-  // Special styling for login success
-  if (title === 'Login Successful') {
-    defaultOptions.position = 'center';
-    defaultOptions.background = '#0f172a';
-    defaultOptions.color = '#ffffff';
-    defaultOptions.timer = 2000;
-    defaultOptions.customClass = {
-      popup: 'animate__animated animate__zoomIn animate__faster',
+      popup: 'animate__animated animate__zoomIn animate__faster border border-emerald-500/30 shadow-2xl shadow-emerald-500/20',
       title: 'text-2xl font-bold text-emerald-400',
       htmlContainer: 'text-slate-200',
       timerProgressBar: 'bg-emerald-500',
-    };
-    defaultOptions.showClass = {
-      popup: 'animate__animated animate__zoomIn animate__faster',
-    };
-    defaultOptions.hideClass = {
-      popup: 'animate__animated animate__zoomOut animate__faster',
-    };
-  }
-
-  return customSwal.fire(defaultOptions);
+    },
+    ...options
+  };
+  // Fire without blocking caller
+  setTimeout(() => { customSwal.fire(defaultOptions); }, 0);
+  return Promise.resolve();
 };
 
-// Error notification
+// Error notification with red text and black background
 export const showError = async (title: string, message?: string) => {
   const customSwal = await getCustomSwal();
-  return customSwal.fire({
+  setTimeout(() => { customSwal.fire({
     icon: 'error',
     title,
     text: message,
     confirmButtonText: 'OK',
     showConfirmButton: true,
-    position: 'top'
-  });
+    position: 'center',
+    background: '#000000', // Black background
+    color: '#ffffff', // White text for readability
+    customClass: {
+      popup: 'animate__animated animate__zoomIn animate__faster border border-red-500/50 shadow-2xl shadow-red-500/30',
+      title: 'text-2xl font-bold text-red-400', // Red title
+      htmlContainer: 'text-red-300', // Light red message text
+      confirmButton: 'bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition-colors',
+      icon: 'text-red-500'
+    },
+    showClass: {
+      popup: 'animate__animated animate__zoomIn animate__faster'
+    },
+    hideClass: {
+      popup: 'animate__animated animate__zoomOut animate__faster'
+    }
+  }); }, 0);
+  return Promise.resolve();
 };
 
 // Warning notification
 export const showWarning = async (title: string, message?: string) => {
   const customSwal = await getCustomSwal();
-  return customSwal.fire({
+  setTimeout(() => { customSwal.fire({
     icon: 'warning',
     title,
     text: message,
     showCancelButton: true,
     confirmButtonText: 'Continue',
     cancelButtonText: 'Cancel',
-    position: 'top'
-  });
+    position: 'center'
+  }); }, 0);
+  return Promise.resolve();
 };
 
 // Info notification
 export const showInfo = async (title: string, message?: string) => {
   const customSwal = await getCustomSwal();
-  return customSwal.fire({
+  setTimeout(() => { customSwal.fire({
     icon: 'info',
     title,
     text: message,
     confirmButtonText: 'Got it',
-    timer: 5000,
+    timer: 500,
     timerProgressBar: true,
-    position: 'top'
-  });
+    position: 'center'
+  }); }, 0);
+  return Promise.resolve();
 };
 
 // Confirmation dialog
 export const showConfirm = async (title: string, message?: string, confirmText = 'Yes', cancelText = 'No') => {
   const customSwal = await getCustomSwal();
+  // Confirmation dialogs should still return the promise for user choice
   return customSwal.fire({
     title,
     text: message,
@@ -204,192 +204,248 @@ export const showConfirm = async (title: string, message?: string, confirmText =
     confirmButtonText: confirmText,
     cancelButtonText: cancelText,
     reverseButtons: true,
-    position: 'top'
+    position: 'center'
   });
 };
 
 // Loading notification
 export const showLoading = async (title: string, message?: string) => {
   const customSwal = await getCustomSwal();
-  return customSwal.fire({
+  setTimeout(() => { customSwal.fire({
     title,
     text: message,
     allowOutsideClick: false,
     allowEscapeKey: false,
     showConfirmButton: false,
-    position: 'top',
+    position: 'center',
     didOpen: () => {
       const swal = customSwal;
       if (swal.showLoading) {
         swal.showLoading();
       }
     }
-  });
+  }); }, 0);
+  return Promise.resolve();
 };
 
 // Toast notification (small, non-intrusive)
 export const showToast = async (title: string, icon: 'success' | 'error' | 'warning' | 'info' = 'success') => {
-  const customSwal = await getCustomSwal();
-  return customSwal.fire({
-    toast: true,
-    position: 'top-end',
-    icon,
-    title,
-    showConfirmButton: false,
-    timer: 3000,
-    timerProgressBar: true,
-    didOpen: (toast: any) => {
-      const swal = customSwal;
-      toast.addEventListener('mouseenter', () => {
-        if (swal.stopTimer) swal.stopTimer();
-      });
-      toast.addEventListener('mouseleave', () => {
-        if (swal.resumeTimer) swal.resumeTimer();
-      });
-    }
-  });
+  // Replace top-right toast with centered animated modal
+  return showSuccess(title, undefined, { icon });
 };
 
-// Enhanced Deal Added notification with beautiful animation
+// Enhanced Deal Added notification with OK button and green design
 export const showDealAdded = async (dealAmount: number, customerName: string, customMessage?: string) => {
-  const customSwal = await getCustomSwal();
-  return customSwal.fire({
-    title: '🎉 Deal Added Successfully!',
-    html: `
-      <div class="text-center space-y-3">
-        <div class="text-2xl font-bold text-emerald-400">$${dealAmount.toLocaleString()}</div>
-        <div class="text-lg text-slate-300">Customer: ${customerName}</div>
-        ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
-      </div>
-    `,
-    icon: 'success',
-    timer: 2500,
-    timerProgressBar: true,
-    showConfirmButton: false,
-    position: 'center',
-    background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-    color: '#ffffff',
-    customClass: {
-      popup: 'animate__animated animate__bounceIn animate__faster border border-emerald-500/30 shadow-2xl shadow-emerald-500/20',
-      title: 'text-2xl font-bold text-emerald-400',
-      htmlContainer: 'text-slate-200',
-      timerProgressBar: 'bg-gradient-to-r from-emerald-400 to-green-500',
-    },
-    showClass: {
-      popup: 'animate__animated animate__bounceIn animate__faster'
-    },
-    hideClass: {
-      popup: 'animate__animated animate__fadeOutUp animate__faster'
-    }
-  });
+  try {
+    const customSwal = await getCustomSwal();
+    setTimeout(() => {
+      customSwal.fire({
+        title: '🎉 Deal Added Successfully!',
+        html: `
+          <div class="text-center space-y-3">
+            <div class="text-2xl font-bold text-green-400">$${dealAmount.toLocaleString()}</div>
+            <div class="text-lg text-slate-300">Customer: ${customerName}</div>
+            ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
+          </div>
+        `,
+        icon: 'success',
+        showConfirmButton: true,
+        confirmButtonText: 'OK',
+        position: 'center',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: '#ffffff',
+        customClass: {
+          popup: 'animate__animated animate__zoomIn animate__faster border border-green-500/30 shadow-2xl shadow-green-500/20',
+          title: 'text-2xl font-bold text-green-400',
+          htmlContainer: 'text-slate-200',
+          confirmButton: 'bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors',
+        },
+        showClass: {
+          popup: 'animate__animated animate__zoomIn animate__faster'
+        },
+        hideClass: {
+          popup: 'animate__animated animate__zoomOut animate__faster'
+        },
+        // Ensure modal closes properly
+        willClose: () => {
+          // Clean up any lingering modal state
+          const modal = document.querySelector('.swal2-container');
+          if (modal) {
+            modal.remove();
+          }
+        }
+      });
+    }, 100); // Small delay to ensure proper initialization
+  } catch (error) {
+    console.error('Error showing deal added notification:', error);
+    // Fallback to simple alert if SweetAlert fails
+    setTimeout(() => {
+      alert(`Deal Added Successfully!\n$${dealAmount.toLocaleString()}\nCustomer: ${customerName}`);
+    }, 100);
+  }
+  return Promise.resolve();
 };
 
-// Enhanced Callback Added notification
+// Enhanced Callback Added notification with OK button and green design
 export const showCallbackAdded = async (customerName: string, callbackDate: string, customMessage?: string) => {
-  const customSwal = await getCustomSwal();
-  return customSwal.fire({
-    title: '📞 Callback Scheduled!',
-    html: `
-      <div class="text-center space-y-3">
-        <div class="text-lg text-blue-400 font-semibold">${customerName}</div>
-        <div class="text-sm text-slate-300">Scheduled for: ${callbackDate}</div>
-        ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
-      </div>
-    `,
-    icon: 'success',
-    timer: 2000,
-    timerProgressBar: true,
-    showConfirmButton: false,
-    position: 'center',
-    background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-    color: '#ffffff',
-    customClass: {
-      popup: 'animate__animated animate__slideInRight animate__faster border border-blue-500/30 shadow-2xl shadow-blue-500/20',
-      title: 'text-xl font-bold text-blue-400',
-      htmlContainer: 'text-slate-200',
-      timerProgressBar: 'bg-gradient-to-r from-blue-400 to-cyan-500',
-    },
-    showClass: {
-      popup: 'animate__animated animate__slideInRight animate__faster'
-    },
-    hideClass: {
-      popup: 'animate__animated animate__slideOutRight animate__faster'
-    }
-  });
+  try {
+    const customSwal = await getCustomSwal();
+    setTimeout(() => {
+      customSwal.fire({
+        title: '📞 Callback Scheduled!',
+        html: `
+          <div class="text-center space-y-3">
+            <div class="text-lg text-green-400 font-semibold">${customerName}</div>
+            <div class="text-sm text-slate-300">Scheduled for: ${callbackDate}</div>
+            ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
+          </div>
+        `,
+        icon: 'success',
+        showConfirmButton: true,
+        confirmButtonText: 'OK',
+        position: 'center',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: '#ffffff',
+        customClass: {
+          popup: 'animate__animated animate__slideInRight animate__faster border border-green-500/30 shadow-2xl shadow-green-500/20',
+          title: 'text-xl font-bold text-green-400',
+          htmlContainer: 'text-slate-200',
+          confirmButton: 'bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors',
+        },
+        showClass: {
+          popup: 'animate__animated animate__slideInRight animate__faster'
+        },
+        hideClass: {
+          popup: 'animate__animated animate__slideOutRight animate__faster'
+        },
+        // Ensure modal closes properly
+        willClose: () => {
+          // Clean up any lingering modal state
+          const modal = document.querySelector('.swal2-container');
+          if (modal) {
+            modal.remove();
+          }
+        }
+      });
+    }, 100); // Small delay to ensure proper initialization
+  } catch (error) {
+    console.error('Error showing callback added notification:', error);
+    // Fallback to simple alert if SweetAlert fails
+    setTimeout(() => {
+      alert(`Callback Scheduled Successfully!\nCustomer: ${customerName}\nScheduled for: ${callbackDate}`);
+    }, 100);
+  }
+  return Promise.resolve();
 };
 
-// Enhanced User Added notification
+// Enhanced User Added notification with OK button and green design
 export const showUserAdded = async (userName: string, userRole: string, customMessage?: string) => {
-  const customSwal = await getCustomSwal();
-  return customSwal.fire({
-    title: '👤 User Created Successfully!',
-    html: `
-      <div class="text-center space-y-3">
-        <div class="text-lg text-purple-400 font-semibold">${userName}</div>
-        <div class="text-sm text-slate-300 capitalize">Role: ${userRole}</div>
-        ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
-      </div>
-    `,
-    icon: 'success',
-    timer: 2200,
-    timerProgressBar: true,
-    showConfirmButton: false,
-    position: 'center',
-    background: 'linear-gradient(135deg, #2d1b69 0%, #4c1d95 100%)',
-    color: '#ffffff',
-    customClass: {
-      popup: 'animate__animated animate__rotateIn animate__faster border border-purple-500/30 shadow-2xl shadow-purple-500/20',
-      title: 'text-xl font-bold text-purple-400',
-      htmlContainer: 'text-slate-200',
-      timerProgressBar: 'bg-gradient-to-r from-purple-400 to-pink-500',
-    },
-    showClass: {
-      popup: 'animate__animated animate__rotateIn animate__faster'
-    },
-    hideClass: {
-      popup: 'animate__animated animate__rotateOut animate__faster'
-    }
-  });
+  try {
+    const customSwal = await getCustomSwal();
+    setTimeout(() => {
+      customSwal.fire({
+        title: '👤 User Created Successfully!',
+        html: `
+          <div class="text-center space-y-3">
+            <div class="text-lg text-green-400 font-semibold">${userName}</div>
+            <div class="text-sm text-slate-300 capitalize">Role: ${userRole}</div>
+            ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
+          </div>
+        `,
+        icon: 'success',
+        showConfirmButton: true,
+        confirmButtonText: 'OK',
+        position: 'center',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: '#ffffff',
+        customClass: {
+          popup: 'animate__animated animate__rotateIn animate__faster border border-green-500/30 shadow-2xl shadow-green-500/20',
+          title: 'text-xl font-bold text-green-400',
+          htmlContainer: 'text-slate-200',
+          confirmButton: 'bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors',
+        },
+        showClass: {
+          popup: 'animate__animated animate__rotateIn animate__faster'
+        },
+        hideClass: {
+          popup: 'animate__animated animate__rotateOut animate__faster'
+        },
+        // Ensure modal closes properly
+        willClose: () => {
+          // Clean up any lingering modal state
+          const modal = document.querySelector('.swal2-container');
+          if (modal) {
+            modal.remove();
+          }
+        }
+      });
+    }, 100); // Small delay to ensure proper initialization
+  } catch (error) {
+    console.error('Error showing user added notification:', error);
+    // Fallback to simple alert if SweetAlert fails
+    setTimeout(() => {
+      alert(`User Created Successfully!\nName: ${userName}\nRole: ${userRole}`);
+    }, 100);
+  }
+  return Promise.resolve();
 };
 
-// Enhanced Feedback Added notification
+// Enhanced Feedback Added notification with OK button and green design
 export const showFeedbackAdded = async (feedbackType: string, customerName?: string, customMessage?: string) => {
-  const customSwal = await getCustomSwal();
-  return customSwal.fire({
-    title: '💬 Feedback Submitted!',
-    html: `
-      <div class="text-center space-y-3">
-        <div class="text-lg text-orange-400 font-semibold capitalize">${feedbackType} Feedback</div>
-        ${customerName ? `<div class="text-sm text-slate-300">From: ${customerName}</div>` : ''}
-        ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
-      </div>
-    `,
-    icon: 'success',
-    timer: 2000,
-    timerProgressBar: true,
-    showConfirmButton: false,
-    position: 'center',
-    background: 'linear-gradient(135deg, #7c2d12 0%, #ea580c 100%)',
-    color: '#ffffff',
-    customClass: {
-      popup: 'animate__animated animate__flipInX animate__faster border border-orange-500/30 shadow-2xl shadow-orange-500/20',
-      title: 'text-xl font-bold text-orange-400',
-      htmlContainer: 'text-slate-200',
-      timerProgressBar: 'bg-gradient-to-r from-orange-400 to-red-500',
-    },
-    showClass: {
-      popup: 'animate__animated animate__flipInX animate__faster'
-    },
-    hideClass: {
-      popup: 'animate__animated animate__flipOutX animate__faster'
-    }
-  });
+  try {
+    const customSwal = await getCustomSwal();
+    setTimeout(() => {
+      customSwal.fire({
+        title: '💬 Feedback Submitted!',
+        html: `
+          <div class="text-center space-y-3">
+            <div class="text-lg text-green-400 font-semibold capitalize">${feedbackType} Feedback</div>
+            ${customerName ? `<div class="text-sm text-slate-300">From: ${customerName}</div>` : ''}
+            ${customMessage ? `<div class="text-sm text-slate-400">${customMessage}</div>` : ''}
+          </div>
+        `,
+        icon: 'success',
+        showConfirmButton: true,
+        confirmButtonText: 'OK',
+        position: 'center',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: '#ffffff',
+        customClass: {
+          popup: 'animate__animated animate__flipInX animate__faster border border-green-500/30 shadow-2xl shadow-green-500/20',
+          title: 'text-xl font-bold text-green-400',
+          htmlContainer: 'text-slate-200',
+          confirmButton: 'bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors',
+        },
+        showClass: {
+          popup: 'animate__animated animate__flipInX animate__faster'
+        },
+        hideClass: {
+          popup: 'animate__animated animate__flipOutX animate__faster'
+        },
+        // Ensure modal closes properly
+        willClose: () => {
+          // Clean up any lingering modal state
+          const modal = document.querySelector('.swal2-container');
+          if (modal) {
+            modal.remove();
+          }
+        }
+      });
+    }, 100); // Small delay to ensure proper initialization
+  } catch (error) {
+    console.error('Error showing feedback added notification:', error);
+    // Fallback to simple alert if SweetAlert fails
+    setTimeout(() => {
+      alert(`Feedback Submitted Successfully!\nType: ${feedbackType}${customerName ? `\nFrom: ${customerName}` : ''}`);
+    }, 100);
+  }
+  return Promise.resolve();
 };
 
 // Enhanced Login Success notification
 export const showLoginSuccess = async (userName: string, userRole: string) => {
   const customSwal = await getCustomSwal();
-  return customSwal.fire({
+  setTimeout(() => { customSwal.fire({
     title: '🚀 Welcome Back!',
     html: `
       <div class="text-center space-y-3">
@@ -417,13 +473,14 @@ export const showLoginSuccess = async (userName: string, userRole: string) => {
     hideClass: {
       popup: 'animate__animated animate__zoomOut animate__faster'
     }
-  });
+  }); }, 0);
+  return Promise.resolve();
 };
 
 // Manager notification for new deals
 export const showManagerNotification = async (salesmanName: string, dealAmount: number, customerName: string) => {
   const customSwal = await getCustomSwal();
-  return customSwal.fire({
+  setTimeout(() => { customSwal.fire({
     title: `💰 New Deal Alert!`,
     html: `
       <div class="text-center space-y-2">
@@ -436,16 +493,17 @@ export const showManagerNotification = async (salesmanName: string, dealAmount: 
     timer: 3000,
     timerProgressBar: true,
     showConfirmButton: false,
-    position: 'top-end',
+    position: 'center',
     background: 'linear-gradient(135deg, #064e3b 0%, #059669 100%)',
     color: '#ffffff',
     customClass: {
-      popup: 'animate__animated animate__slideInRight animate__faster border border-green-500/30 shadow-xl shadow-green-500/20',
+      popup: 'animate__animated animate__zoomIn animate__faster border border-green-500/30 shadow-xl shadow-green-500/20',
       title: 'text-lg font-bold text-green-400',
       htmlContainer: 'text-slate-200',
       timerProgressBar: 'bg-gradient-to-r from-green-400 to-emerald-500',
     }
-  });
+  }); }, 0);
+  return Promise.resolve();
 };
 
 // Export a function that returns the custom swal instance

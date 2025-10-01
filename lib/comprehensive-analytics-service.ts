@@ -1,5 +1,5 @@
 // Comprehensive Analytics Service - Uses all API endpoints for complete dashboard
-import { DirectMySQLService } from './direct-mysql-service';
+import { directMySQLService } from './direct-mysql-service';
 
 export interface ComprehensiveAnalytics {
   // Dashboard Stats
@@ -81,7 +81,7 @@ export interface ComprehensiveAnalytics {
 }
 
 export interface AnalyticsFilters {
-  userRole: 'manager' | 'team-leader' | 'salesman';
+  userRole: 'manager' | 'team_leader' | 'salesman';
   userId?: string;
   userName?: string;
   managedTeam?: string;
@@ -90,10 +90,10 @@ export interface AnalyticsFilters {
 }
 
 class ComprehensiveAnalyticsService {
-  private directMySQLService: DirectMySQLService;
+  private directMySQLService = directMySQLService;
 
   constructor() {
-    this.directMySQLService = new DirectMySQLService();
+    // Use the singleton instance
   }
 
   /**
@@ -200,7 +200,7 @@ class ComprehensiveAnalyticsService {
   private async fetchDeals(filters: AnalyticsFilters) {
     const params = new URLSearchParams({
       ...(filters.userRole === 'salesman' && filters.userId && { salesAgentId: filters.userId }),
-      ...(filters.userRole === 'team-leader' && filters.managedTeam && { salesTeam: filters.managedTeam }),
+      ...(filters.userRole === 'team_leader' && filters.managedTeam && { salesTeam: filters.managedTeam }),
       limit: '100'
     });
 
@@ -214,7 +214,7 @@ class ComprehensiveAnalyticsService {
   private async fetchCallbacks(filters: AnalyticsFilters) {
     const params = new URLSearchParams({
       ...(filters.userRole === 'salesman' && filters.userId && { salesAgentId: filters.userId }),
-      ...(filters.userRole === 'team-leader' && filters.managedTeam && { salesTeam: filters.managedTeam }),
+      ...(filters.userRole === 'team_leader' && filters.managedTeam && { salesTeam: filters.managedTeam }),
       limit: '100'
     });
 

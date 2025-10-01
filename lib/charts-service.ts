@@ -40,7 +40,7 @@ export interface ChartsData {
 }
 
 export interface ChartsFilters {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   userId: string;
   managedTeam?: string;
   chartType?: string;

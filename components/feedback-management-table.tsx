@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast"
 import { dataCenterService, DataFeedback } from "@/lib/data-center-service"
 
 interface FeedbackManagementTableProps {
-  userRole: 'manager' | 'salesman' | 'team-leader'
+  userRole: 'manager' | 'salesman' | 'team_leader'
   user: { name: string; username: string; id: string; team?: string }
   dataId?: string // If provided, shows feedback for specific data entry
   showAllFeedback?: boolean // If true, shows all feedback across all data entries
@@ -49,20 +49,22 @@ export function FeedbackManagementTable({
   
   // Edit form state
   const [editForm, setEditForm] = useState({
-    feedback_text: '',
-    rating: 5,
-    feedback_type: 'general'
+    message: '',
+    feedback_type: 'general',
+    priority: 'medium',
+    status: 'pending'
   })
 
   // Pagination and filtering
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [filterType, setFilterType] = useState('all')
-  const [filterRating, setFilterRating] = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterPriority, setFilterPriority] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
 
   const isManager = userRole === 'manager'
-  const canEdit = userRole === 'salesman' || userRole === 'team-leader'
+  const canEdit = userRole === 'salesman' || userRole === 'team_leader'
 
   // Load feedback data
   useEffect(() => {
@@ -73,36 +75,23 @@ export function FeedbackManagementTable({
     try {
       setLoading(true)
       setError(null)
-
-      let feedbackData: DataFeedback[] = []
-
+      // Managers: show all feedback across data entries
       if (showAllFeedback) {
-        // Load all feedback across all data entries (manager view)
-        // This would require a new API endpoint for all feedback
-        const response = await fetch(`/api/data-feedback-all?user_id=${user.id}&user_role=${userRole}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          cache: 'no-store'
-        })
-
-        if (response.ok) {
-          const result = await response.json()
-          if (result.success) {
-            feedbackData = result.data
-          }
-        }
-      } else if (dataId) {
-        // Load feedback for specific data entry
-        const result = await dataCenterService.getFeedback(dataId, user.id, userRole, {
-          limit: 100 // Get more feedback for table view
-        })
-        feedbackData = result.data
+        const result = await dataCenterService.getAllFeedback(user.id, userRole, { limit: 100 })
+        // result.data already in DataFeedback shape
+        setFeedback(result.data)
+        return
       }
 
-      setFeedback(feedbackData)
+      // If a specific data entry is provided
+      if (dataId) {
+        const result = await dataCenterService.getFeedback(dataId, user.id, userRole, { limit: 100 })
+        setFeedback(result.data)
+        return
+      }
+
+      // Fallback: no dataId and not manager-all -> empty
+      setFeedback([])
     } catch (err) {
       console.error('Error loading feedback:', err)
       setError(err instanceof Error ? err.message : 'Failed to load feedback')
@@ -124,9 +113,10 @@ export function FeedbackManagementTable({
 
     setEditingFeedback(feedbackItem)
     setEditForm({
-      feedback_text: feedbackItem.feedback_text,
-      rating: feedbackItem.rating || 5,
-      feedback_type: feedbackItem.feedback_type
+      message: feedbackItem.message || feedbackItem.feedback_text || '',
+      feedback_type: feedbackItem.feedback_type,
+      priority: feedbackItem.priority || 'medium',
+      status: feedbackItem.status
     })
     setShowEditDialog(true)
   }
@@ -139,7 +129,11 @@ export function FeedbackManagementTable({
         editingFeedback.id,
         user.id,
         userRole,
-        editForm
+        {
+          feedback_text: editForm.message,
+          feedback_type: editForm.feedback_type,
+          status: editForm.status as any
+        }
       )
 
       toast({
@@ -163,7 +157,7 @@ export function FeedbackManagementTable({
   const handleDeleteFeedback = async (feedbackId: string) => {
     try {
       await dataCenterService.deleteFeedback(feedbackId, user.id, userRole)
-      
+
       toast({
         title: "Success",
         description: "Feedback deleted successfully"
@@ -183,12 +177,14 @@ export function FeedbackManagementTable({
   // Filter and paginate feedback
   const filteredFeedback = feedback.filter(item => {
     const matchesType = filterType === 'all' || item.feedback_type === filterType
-    const matchesRating = filterRating === 'all' || (item.rating && item.rating.toString() === filterRating)
-    const matchesSearch = !searchTerm || 
-      item.feedback_text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.user_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    return matchesType && matchesRating && matchesSearch
+    const matchesStatus = filterStatus === 'all' || item.status === filterStatus
+    const matchesPriority = filterPriority === 'all' || item.priority === filterPriority
+    const matchesSearch = !searchTerm ||
+      (item.message || item.feedback_text || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.subject || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.user_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+
+    return matchesType && matchesStatus && matchesPriority && matchesSearch
   })
 
   const totalPages = Math.ceil(filteredFeedback.length / itemsPerPage)
@@ -291,17 +287,28 @@ export function FeedbackManagementTable({
                 <SelectItem value="acknowledgment">Acknowledgment</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={filterRating} onValueChange={setFilterRating}>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Filter by rating" />
+                <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Ratings</SelectItem>
-                <SelectItem value="5">5 Stars</SelectItem>
-                <SelectItem value="4">4 Stars</SelectItem>
-                <SelectItem value="3">3 Stars</SelectItem>
-                <SelectItem value="2">2 Stars</SelectItem>
-                <SelectItem value="1">1 Star</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterPriority} onValueChange={setFilterPriority}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Filter by priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priority</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -315,9 +322,11 @@ export function FeedbackManagementTable({
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
-                <TableHead>Feedback</TableHead>
+                <TableHead>Subject</TableHead>
+                <TableHead>Message</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Rating</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Priority</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -330,13 +339,16 @@ export function FeedbackManagementTable({
                       <div className="flex items-center space-x-2">
                         <User className="h-4 w-4" />
                         <div>
-                          <div className="font-medium">{item.user_name}</div>
-                          <div className="text-sm text-gray-500">{item.user_role}</div>
+                          <div className="font-medium">{item.user_name || 'Unknown User'}</div>
+                          <div className="text-sm text-gray-500">{item.user_role || 'Unknown'}</div>
                         </div>
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{item.subject || 'No Subject'}</div>
+                    </TableCell>
                     <TableCell className="max-w-md">
-                      <p className="text-sm line-clamp-3">{item.feedback_text}</p>
+                      <p className="text-sm line-clamp-2">{item.message || item.feedback_text || item.subject}</p>
                     </TableCell>
                     <TableCell>
                       <Badge className={getFeedbackTypeColor(item.feedback_type)}>
@@ -344,22 +356,18 @@ export function FeedbackManagementTable({
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {item.rating && (
-                        <div className="flex items-center">
-                          {getRatingStars(item.rating)}
-                          <span className="ml-2 text-sm">{item.rating}/5</span>
-                        </div>
-                      )}
+                      <Badge variant={item.status === 'resolved' ? 'default' : item.status === 'in_progress' ? 'secondary' : 'outline'}>
+                        {item.status}
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center text-sm text-gray-500">
-                        <Calendar className="h-4 w-4 mr-1" />
-                        {new Date(item.created_at).toLocaleDateString()}
-                      </div>
+                      <Badge className={item.priority === 'urgent' ? 'bg-red-100 text-red-800' : item.priority === 'high' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}>
+                        {item.priority}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
-                        {(canEdit && item.user_id === user.id) || isManager ? (
+                        {(canEdit && item.user_id && item.user_id === user.id) || isManager ? (
                           <Button
                             size="sm"
                             variant="outline"
@@ -372,17 +380,16 @@ export function FeedbackManagementTable({
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              // View-only dialog for feedback they can't edit
                               toast({
                                 title: "Feedback Details",
-                                description: item.feedback_text
+                                description: item.message || item.feedback_text || 'No content available'
                               })
                             }}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                         )}
-                        {((canEdit && item.user_id === user.id) || isManager) && (
+                        {(canEdit && item.user_id && item.user_id === user.id) || isManager ? (
                           <Button
                             size="sm"
                             variant="outline"
@@ -394,14 +401,14 @@ export function FeedbackManagementTable({
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        )}
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <div className="text-gray-500">
                       <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p>No feedback found</p>
@@ -457,39 +464,20 @@ export function FeedbackManagementTable({
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Feedback Text</label>
+              <label className="text-sm font-medium">Feedback Message</label>
               <Textarea
-                value={editForm.feedback_text}
-                onChange={(e) => setEditForm(prev => ({ ...prev, feedback_text: e.target.value }))}
+                value={editForm.message}
+                onChange={(e) => setEditForm(prev => ({ ...prev, message: e.target.value }))}
                 placeholder="Enter your feedback..."
                 rows={4}
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Rating</label>
-                <Select 
-                  value={editForm.rating.toString()} 
-                  onValueChange={(value) => setEditForm(prev => ({ ...prev, rating: parseInt(value) }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">⭐⭐⭐⭐⭐ Excellent</SelectItem>
-                    <SelectItem value="4">⭐⭐⭐⭐ Good</SelectItem>
-                    <SelectItem value="3">⭐⭐⭐ Average</SelectItem>
-                    <SelectItem value="2">⭐⭐ Poor</SelectItem>
-                    <SelectItem value="1">⭐ Very Poor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
                 <label className="text-sm font-medium">Type</label>
-                <Select 
-                  value={editForm.feedback_type} 
+                <Select
+                  value={editForm.feedback_type}
                   onValueChange={(value) => setEditForm(prev => ({ ...prev, feedback_type: value }))}
                 >
                   <SelectTrigger>
@@ -497,14 +485,52 @@ export function FeedbackManagementTable({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="general">General</SelectItem>
-                    <SelectItem value="question">Question</SelectItem>
-                    <SelectItem value="suggestion">Suggestion</SelectItem>
-                    <SelectItem value="concern">Concern</SelectItem>
-                    <SelectItem value="acknowledgment">Acknowledgment</SelectItem>
+                    <SelectItem value="bug_report">Bug Report</SelectItem>
+                    <SelectItem value="feature_request">Feature Request</SelectItem>
+                    <SelectItem value="data_issue">Data Issue</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Priority</label>
+                <Select
+                  value={editForm.priority}
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, priority: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            {isManager && (
+              <div>
+                <label className="text-sm font-medium">Status</label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, status: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setShowEditDialog(false)}>

@@ -61,8 +61,8 @@ async function validateDatabaseIntegrity() {
     
     for (const table of tables) {
       try {
-        const [rows] = await query(`SELECT COUNT(*) as count FROM \`${table}\``);
-        const [structure] = await query(`DESCRIBE \`${table}\``);
+        const [rows] = await query(`SELECT COUNT(*) as count FROM  ${table} `);
+        const [structure] = await query(`DESCRIBE  ${table} `);
         
         results.checks[table] = {
           exists: true,
@@ -163,7 +163,7 @@ async function testDataInsertion() {
     
     try {
       await query(`
-        INSERT INTO \`deals\` (
+        INSERT INTO  deals  (
           id, DealID, customer_name, email, phone_number, 
           SalesAgentID, sales_agent, sales_team, stage, status, 
           amount_paid, created_at, updated_at
@@ -175,13 +175,13 @@ async function testDataInsertion() {
       ]);
 
       // Verify insertion
-      const [dealCheck] = await query(`SELECT * FROM \`deals\` WHERE id = ?`, [testDealId]);
+      const [dealCheck] = await query(`SELECT * FROM  deals  WHERE id = ?`, [testDealId]);
       
       if (Array.isArray(dealCheck) && dealCheck.length > 0) {
         results.tests.dealInsertion = { success: true, id: testDealId };
         
         // Clean up test data
-        await query(`DELETE FROM \`deals\` WHERE id = ?`, [testDealId]);
+        await query(`DELETE FROM  deals  WHERE id = ?`, [testDealId]);
         console.log('✅ Deal insertion test passed');
       } else {
         results.tests.dealInsertion = { success: false, error: 'Deal not found after insertion' };
@@ -201,7 +201,7 @@ async function testDataInsertion() {
     
     try {
       await query(`
-        INSERT INTO \`callbacks\` (
+        INSERT INTO  callbacks  (
           id, customer_name, phone_number, email, 
           SalesAgentID, sales_agent, sales_team, status, 
           priority, created_at, updated_at
@@ -213,13 +213,13 @@ async function testDataInsertion() {
       ]);
 
       // Verify insertion
-      const [callbackCheck] = await query(`SELECT * FROM \`callbacks\` WHERE id = ?`, [testCallbackId]);
+      const [callbackCheck] = await query(`SELECT * FROM  callbacks  WHERE id = ?`, [testCallbackId]);
       
       if (Array.isArray(callbackCheck) && callbackCheck.length > 0) {
         results.tests.callbackInsertion = { success: true, id: testCallbackId };
         
         // Clean up test data
-        await query(`DELETE FROM \`callbacks\` WHERE id = ?`, [testCallbackId]);
+        await query(`DELETE FROM  callbacks  WHERE id = ?`, [testCallbackId]);
         console.log('✅ Callback insertion test passed');
       } else {
         results.tests.callbackInsertion = { success: false, error: 'Callback not found after insertion' };
@@ -323,7 +323,7 @@ async function validateFieldMapping() {
 
   try {
     for (const [table, mapping] of Object.entries(expectedMappings)) {
-      const [columns] = await query(`DESCRIBE \`${table}\``);
+      const [columns] = await query(`DESCRIBE  ${table} `);
       
       if (Array.isArray(columns)) {
         const dbColumns = columns.map((col: any) => col.Field);
@@ -404,7 +404,7 @@ async function performBulkDataTest(testData: any) {
         
         try {
           await query(`
-            INSERT INTO \`deals\` (
+            INSERT INTO  deals  (
               id, DealID, customer_name, email, phone_number, 
               SalesAgentID, sales_agent, sales_team, stage, status, 
               amount_paid, created_at, updated_at
@@ -420,7 +420,7 @@ async function performBulkDataTest(testData: any) {
           dealResults.push({ success: true, id: testId });
           
           // Clean up
-          await query(`DELETE FROM \`deals\` WHERE id = ?`, [testId]);
+          await query(`DELETE FROM  deals  WHERE id = ?`, [testId]);
         } catch (error) {
           dealResults.push({ 
             success: false, 

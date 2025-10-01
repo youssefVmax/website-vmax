@@ -15,7 +15,6 @@ import { useToast } from "./ui/use-toast"
 import { apiService } from "@/lib/api-service"
 import { DealDetailsModal } from "./DealDetailsModal"
 import type { DealDetails } from "./DealDetailsModal"
-import { Notification as FirebaseNotification } from "@/types/firebase"
 import NotificationDetailsModal from "./notification-details-modal"
 import { useNotifications } from "@/hooks/use-notifications"
 import { useAuth } from "@/hooks/useAuth"
@@ -111,7 +110,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     priority: "medium" as PriorityType,
   })
 
-  // Load notifications from Firebase on component mount
+  // Load notifications from hook on component mount
   useEffect(() => {
     setLoading(false) // Use notifications from hook instead
   }, [notifications])
@@ -124,91 +123,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     }
   }
 
-  const loadNotifications = async () => {
-    try {
-      setLoading(true)
-      const firebaseNotifications = await notificationService.getNotifications(
-        (user as any)?.id, 
-        userRole
-      )
-      
-      // Transform Firebase notifications to match our interface
-      const transformedNotifications = firebaseNotifications.map(notif => {
-        // Convert technical IDs to readable names and get actual deal creator names
-        const getReadableName = (name: string) => {
-          if (!name || name === 'System') return 'System';
-          // If it's a technical ID (contains random characters), use deal creator name if available
-          if (name.length > 15 && /^[a-zA-Z0-9]+$/.test(name)) {
-            // Try to get the actual creator name from notification data
-            if (notif.salesAgent) return notif.salesAgent;
-            if (notif.createdBy) return notif.createdBy;
-            return 'Sales Agent'; // Fallback
-          }
-          return name;
-        };
-
-        // Create readable deal description instead of showing technical IDs
-        const getDealDescription = () => {
-          if (notif.dealName && notif.dealValue) {
-            return `Deal: ${notif.dealName} ($${notif.dealValue.toLocaleString()})`;
-          }
-          if (notif.dealName) {
-            return `Deal: ${notif.dealName}`;
-          }
-          if (notif.dealId && notif.dealId.startsWith('DEAL-')) {
-            // Extract meaningful info from deal ID format DEAL-timestamp-random
-            const parts = notif.dealId.split('-');
-            if (parts.length >= 2) {
-              const timestamp = parseInt(parts[1]);
-              const date = new Date(timestamp).toLocaleDateString();
-              return `Deal created on ${date}`;
-            }
-          }
-          return notif.dealId || 'Deal';
-        };
-
-        // Enhanced message with readable deal info
-        const enhancedMessage = notif.message?.replace(
-          /DEAL-\d+-\d+|[a-zA-Z0-9]{20,}/g, 
-          getDealDescription()
-        ) || notif.message;
-
-        return {
-          id: notif.id || '',
-          title: notif.title,
-          message: enhancedMessage,
-          type: (notif.type as NotificationType) || 'info',
-          priority: (notif.priority as PriorityType) || 'medium',
-          from: getReadableName(notif.from || 'System'),
-          fromAvatar: notif.fromAvatar,
-          to: notif.to || [currentUser.name],
-          timestamp: safeToDate(notif.created_at) || new Date(),
-          read: notif.isRead || false,
-          dealId: notif.dealId,
-          dealName: notif.dealName,
-          dealStage: notif.dealStage,
-          dealValue: notif.dealValue,
-          salesAgent: notif.salesAgent,
-          salesAgentId: notif.salesAgentId,
-          closingAgent: notif.closingAgent,
-          closingAgentId: notif.closingAgentId,
-          isManagerMessage: notif.isManagerMessage || false,
-          actionRequired: notif.actionRequired || false
-        };
-      }).filter(notif => notif.id !== '')
-      
-      setNotifications(transformedNotifications)
-    } catch (error) {
-      console.error('Error loading notifications:', error)
-      toast({
-        title: "Error",
-        description: "Failed to load notifications",
-        variant: "destructive"
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Note: Notifications are loaded via useNotifications() hook already.
 
 
   // Filter notifications based on active tab and user role
@@ -216,17 +131,21 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     // Role-based filtering for deal notifications
     if (notification.type === "deal") {
       if (userRole === "manager") {
-        // Managers see all deal notifications
-        return true;
+        // Managers see all deals
+        // Optionally allow filtering by team or agent via UI in future
+      } else if (userRole === 'team_leader') {
+        // Team leaders see deals for their team members or deals they made
+        const managedTeam = (authUser as any)?.managedTeam || (authUser as any)?.team
+        const isOwn = notification.salesAgentId === authUser?.id || notification.closingAgentId === authUser?.id
+        const isTeamDeal = (notification as any).teamName === managedTeam
+        // If teamName is not present, fall back to recipients list containing TL id
+        const isAddressed = Array.isArray(notification.to) && (notification.to.includes('all') || notification.to.includes(authUser?.id || ''))
+        if (!(isOwn || isTeamDeal || isAddressed)) return false
       } else {
-        // Non-managers only see notifications where they are involved
-        const isUserInvolved = 
-          notification.to.includes(currentUser.name) ||
-          notification.to.includes(currentUser.username) ||
-          notification.from === currentUser.name ||
-          notification.from === currentUser.username;
-        
-        if (!isUserInvolved) return false;
+        // Salesman: only deals where they are involved or addressed to them
+        const isOwn = notification.salesAgentId === authUser?.id || notification.closingAgentId === authUser?.id
+        const isAddressed = Array.isArray(notification.to) && (notification.to.includes('all') || notification.to.includes(authUser?.id || ''))
+        if (!(isOwn || isAddressed)) return false
       }
     }
 
@@ -234,40 +153,15 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     if (activeTab === "all") return true
     if (activeTab === "unread") return !notification.read
     if (activeTab === "deals") return notification.type === "deal"
+    if (activeTab === "messages") return notification.type === "message"
     return true
   })
 
   const unreadCount = filteredNotifications.filter(notif => !notif.read).length
 
-  // Mark notification as read (using local function to avoid conflicts)
-  const markNotificationAsRead = async (id: string) => {
-    try {
-      await notificationService.markAsRead(id)
-      setNotifications(prevNotifications => 
-        prevNotifications.map(notification => 
-          notification.id === id ? { ...notification, read: true } : notification
-        )
-      )
-      
-      toast({
-        title: "Notification marked as read",
-        description: "The notification has been marked as read.",
-      })
-    } catch (error) {
-      console.error("Error marking notification as read:", error)
-    }
-  }
-
   const markAllNotificationsAsRead = async () => {
     try {
-      const unreadNotifications = notifications.filter(n => !n.read)
-      await Promise.all(unreadNotifications.map(n => notificationService.markAsRead(n.id)))
-      setNotifications(prevNotifications => 
-        prevNotifications.map(notification => ({
-          ...notification,
-          read: true
-        }))
-      )
+      await markAllAsRead()
     } catch (error) {
       console.error('Error marking all notifications as read:', error)
       toast({
@@ -278,83 +172,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     }
   }
 
-  const fetchDealDetails = async (dealId: string): Promise<DealDetails | null> => {
-    if (!dealId) return null;
-    
-    try {
-      setLoadingDeal(true);
-      
-      // Fetch deal details from Firebase
-      const deal = await dealsService.getDealById(dealId);
-      
-      if (!deal) {
-        console.error('Deal not found:', dealId);
-        return null;
-      }
-      
-      // Transform Firebase deal to DealDetails format
-      const dealDetails: DealDetails = {
-        id: deal.id || dealId,
-        customerName: deal.customer_name,
-        salesAgent: deal.sales_agent,
-        salesAgentId: deal.SalesAgentID,
-        closingAgent: deal.closing_agent,
-        closingAgentId: deal.ClosingAgentID,
-        amount: deal.amount_paid,
-        stage: deal.stage,
-        status: deal.status,
-        createdDate: safeToDate(deal.created_at)?.toISOString() || deal.signup_date,
-        lastUpdated: safeToDate(deal.updated_at)?.toISOString() || new Date().toISOString(),
-        notes: deal.notes || `Deal for ${deal.customer_name} - ${deal.product_type} service (${deal.service_tier})`
-      };
-      
-      return dealDetails;
-    } catch (error) {
-      console.error('Error fetching deal details:', error);
-      return null;
-    } finally {
-      setLoadingDeal(false);
-    }
-  };
-
-  const handleViewDetails = async (notification: Notification) => {
-    if (!notification.dealId) {
-      toast({
-        title: "No Deal Details",
-        description: "This notification doesn't have associated deal information",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    // If we already have the deal details in the notification, use that
-    if (notification.dealDetails) {
-      setSelectedDeal(notification.dealDetails as DealDetails);
-      return;
-    }
-    
-    // Otherwise, fetch the deal details
-    const deal = await fetchDealDetails(notification.dealId);
-    
-    if (deal) {
-      // Update the notification with the deal details for future reference
-      setNotifications(prev => 
-        prev.map(n => 
-          n.id === notification.id 
-            ? { ...n, dealDetails: deal }
-            : n
-        )
-      );
-      
-      setSelectedDeal(deal);
-    } else {
-      toast({
-        title: "Error",
-        description: "Could not load deal details. Please try again.",
-        variant: "destructive"
-      });
-    }
-  }
+  // All deal details are handled by NotificationDetailsModal via MySQL services.
 
   const getPriorityColor = (priority: PriorityType) => {
     switch (priority) {

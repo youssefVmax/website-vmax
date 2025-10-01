@@ -88,7 +88,7 @@ class MySQLIntegratedDataService implements IntegratedDataService {
   
   async getLiveMetrics(): Promise<any> {
     try {
-      const analytics = await apiService.getAnalytics();
+      const analytics = await apiService.getCompanyAnalytics();
       
       // Get additional metrics
       const callbacks = await callbacksService.getCallbacks();

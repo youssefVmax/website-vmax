@@ -16,7 +16,7 @@ import { apiService, Deal } from "@/lib/api-service"
 import { useEffect } from "react"
 
 interface MyDealsTableProps {
-  user: { id: string; name: string; username: string; role: 'manager'|'salesman'|'customer-service' }
+  user: { id: string; name: string; username: string; role: 'manager'|'salesman'|'team_leader' }
 }
 
 export default function MyDealsTable({ user }: MyDealsTableProps) {
@@ -34,7 +34,7 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
         
         if (user.role === 'salesman') {
           filters.salesAgentId = user.id
-        } else if (user.role === 'team-leader' && (user as any).managedTeam) {
+        } else if (user.role === 'team_leader' && (user as any).managedTeam) {
           filters.salesTeam = (user as any).managedTeam
         }
         
@@ -81,12 +81,34 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
     const norm = user.name.toLowerCase().trim()
     return sales.map(s => ({
       ...s,
-      role: s.sales_agent_norm?.toLowerCase() === norm || s.SalesAgentID === user.id ? 'Sales Agent' : 'Closing Agent'
+      role: (() => {
+        const agentName = ((s as any).sales_agent_name || (s as any).sales_agent || (s as any).salesAgentName || (s as any).created_by || (s as any).createdByName || '').toLowerCase().trim()
+        const agentId = (s as any).salesAgentId ?? (s as any).SalesAgentID
+        return agentName === norm || agentId === user.id ? 'Sales Agent' : 'Closing Agent'
+      })()
     }))
   }, [sales, user])
 
-  const services = useMemo(() => Array.from(new Set(enriched.map(s => s.type_service).filter(Boolean))), [enriched])
-  const teams = useMemo(() => Array.from(new Set(enriched.map(s => s.team).filter(Boolean))), [enriched])
+  const services = useMemo<string[]>(
+    () => Array.from(
+      new Set(
+        enriched
+          .map(s => s.type_service)
+          .filter((x): x is string => Boolean(x))
+      )
+    ),
+    [enriched]
+  )
+  const teams = useMemo<string[]>(
+    () => Array.from(
+      new Set(
+        enriched
+          .map(s => s.team)
+          .filter((x): x is string => Boolean(x))
+      )
+    ),
+    [enriched]
+  )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -94,7 +116,8 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
       const matchesQuery = !q || r.customer_name?.toLowerCase().includes(q) || r.closing_agent?.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q) || r.phone_number?.toLowerCase().includes(q)
       const matchesService = !serviceFilter || r.type_service === serviceFilter
       const matchesTeam = !teamFilter || r.team === teamFilter
-      const d = new Date(r.date)
+      const rawDate = (r as any).date ?? (r as any).signup_date ?? (r as any).signupDate ?? ''
+      const d = rawDate ? new Date(rawDate) : new Date(0)
       const matchesFrom = !from || d >= new Date(from)
       const matchesTo = !to || d <= new Date(to)
       return matchesQuery && matchesService && matchesTeam && matchesFrom && matchesTo
@@ -106,7 +129,10 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
     arr.sort((a,b) => {
       const get = (x:any) => {
         switch (sortBy) {
-          case 'date': return new Date(x.date).getTime()
+          case 'date': {
+            const raw = x.date ?? x.signup_date ?? x.signupDate
+            return raw ? new Date(raw).getTime() : 0
+          }
           case 'end_date': return new Date(x.end_date || x.date).getTime()
           case 'closing_agent': return String(x.closing_agent || '')
           case 'customer_name': return String(x.customer_name)
@@ -197,7 +223,7 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
   if (error) {
     return (
       <Card className="border-destructive">
-        <CardContent className="p-6 text-destructive">Failed to load your deals: {error.message}</CardContent>
+        <CardContent className="p-6 text-destructive">Failed to load your deals: {error}</CardContent>
       </Card>
     )
   }
@@ -250,7 +276,7 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                 </TableHead>
                 <TableHead>
                   <Button variant="ghost" className="px-0 text-xs" onClick={()=>toggleSort('closing_agent')}>
-                    Closing Agent <ArrowUpDown className="h-3 w-3 ml-1" />
+                    Sales Agent <ArrowUpDown className="h-3 w-3 ml-1" />
                   </Button>
                 </TableHead>
                 <TableHead>
@@ -288,9 +314,18 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
             </TableHeader>
             <TableBody>
               {pageData.map((d) => (
-                <TableRow key={d.DealID}>
-                  <TableCell className="text-sm py-2">{new Date(d.date).toLocaleDateString()}</TableCell>
-                  <TableCell className="font-medium text-sm">{(d as any).closing_agent || 'N/A'}</TableCell>
+                <TableRow key={d.dealId}>
+                  <TableCell className="text-sm py-2">{
+                    (() => {
+                      const raw = (d as any).date ?? (d as any).signup_date ?? (d as any).signupDate
+                      return raw ? new Date(raw).toLocaleDateString() : 'N/A'
+                    })()
+                  }</TableCell>
+                  <TableCell className="font-medium text-sm">{
+                    (d as any).sales_agent_name || d.salesAgentName ||
+                    (d as any).created_by || (d as any).createdByName ||
+                    (d as any).closing_agent || 'N/A'
+                  }</TableCell>
                   <TableCell className="text-sm">{(d as any).end_date ? new Date((d as any).end_date).toLocaleDateString() : 'N/A'}</TableCell>
                   <TableCell className="font-medium text-sm py-2">{d.customer_name}</TableCell>
                   <TableCell className="py-2">

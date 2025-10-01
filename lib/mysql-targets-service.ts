@@ -84,6 +84,18 @@ class MySQLTargetsService implements TargetsService {
           queryFilters.managerId = filtersOrUserId.managerId as string;
         }
         
+        if (filtersOrUserId.teamId) {
+          queryFilters.teamId = filtersOrUserId.teamId as string;
+        }
+        
+        if (filtersOrUserId.salesTeam) {
+          queryFilters.salesTeam = filtersOrUserId.salesTeam as string;
+        }
+        
+        if (filtersOrUserId.type) {
+          queryFilters.type = filtersOrUserId.type as string;
+        }
+        
         console.log('🎯 MySQLTargetsService: Using filters pattern:', filtersOrUserId);
       }
       
@@ -328,7 +340,11 @@ class MySQLTargetsService implements TargetsService {
       );
       
       // Sort by period (most recent first)
-      history.sort((a, b) => b.period.localeCompare(a.period));
+      history.sort((a, b) => {
+        const aPeriod = a.period || '';
+        const bPeriod = b.period || '';
+        return bPeriod.localeCompare(aPeriod);
+      });
       
       return {
         agentId,

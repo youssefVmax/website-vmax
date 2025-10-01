@@ -51,7 +51,7 @@ export interface CallbackFilters {
   dateRange?: 'today' | 'week' | 'month' | 'quarter' | 'year';
   status?: 'pending' | 'contacted' | 'completed' | 'cancelled';
   agent?: string;
-  userRole?: 'manager' | 'salesman' | 'team-leader';
+  userRole?: 'manager' | 'salesman' | 'team_leader';
   userId?: string;
   userName?: string;
   team?: string;
@@ -62,35 +62,90 @@ import { directMySQLService } from './direct-mysql-service';
 export class MySQLAnalyticsService {
   private async fetchAnalytics(endpoint: string, params: Record<string, any> = {}): Promise<any> {
     try {
-      const queryParams = new URLSearchParams({
-        endpoint,
-        ...Object.fromEntries(
-          Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
-        )
-      });
-
       console.log(`🔍 Analytics request: ${endpoint} with params:`, params);
       
+      // Use Next.js analytics API routes instead of PHP
       if (endpoint === 'dashboard-stats') {
         return await directMySQLService.getDashboardStats();
-      } else if (endpoint === 'callback-kpis') {
-        const filters: Record<string, string> = {};
-        Object.entries(params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            filters[key] = String(value);
+      } else if (endpoint === 'sales-kpis' || endpoint === 'callback-kpis') {
+        // Use the analytics-api.php Next.js route
+        const queryParams = new URLSearchParams({
+          endpoint: endpoint,
+          ...Object.fromEntries(
+            Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
+          )
+        });
+        
+        const response = await fetch(`/api/analytics-api.php?${queryParams}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
-        return await directMySQLService.getAnalytics(filters);
+        
+        if (!response.ok) {
+          console.warn(`Analytics API ${endpoint} returned ${response.status}`);
+          return this.getEmptyAnalyticsResponse(endpoint);
+        }
+        
+        const result = await response.json();
+        return result.success ? result : this.getEmptyAnalyticsResponse(endpoint);
       }
       
-      // Fallback to direct MySQL service
-      return await directMySQLService.makeDirectRequest(`analytics-api.php?${queryParams}`, {
-        method: 'GET'
+      // For other endpoints, use the general analytics route
+      const filters: Record<string, string> = {};
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          filters[key] = String(value);
+        }
       });
+      return await directMySQLService.getAnalytics(filters);
     } catch (error) {
       console.error(`Analytics fetch error for ${endpoint}:`, error);
-      throw error;
+      return this.getEmptyAnalyticsResponse(endpoint);
     }
+  }
+
+  private getEmptyAnalyticsResponse(endpoint: string): any {
+    if (endpoint === 'sales-kpis') {
+      return {
+        totals: {
+          total_deals: 0,
+          total_revenue: 0,
+          avg_deal_size: 0,
+          closed_deals: 0,
+          active_deals: 0,
+          today_deals: 0,
+          today_revenue: 0
+        },
+        salesByAgent: [],
+        dailyTrend: [],
+        monthlyTrend: [],
+        salesByService: [],
+        salesByProgram: [],
+        recentDeals: []
+      };
+    } else if (endpoint === 'callback-kpis') {
+      return {
+        total_callbacks: 0,
+        pending_callbacks: 0,
+        contacted_callbacks: 0,
+        completed_callbacks: 0,
+        cancelled_callbacks: 0,
+        conversion_rate: 0,
+        avg_response_hours: 0,
+        callbacksByAgent: [],
+        statusDistribution: [],
+        dailyTrend: [],
+        recentCallbacks: [],
+        responseMetrics: {
+          avg_hours: 0,
+          fastest_hours: 0,
+          slowest_hours: 0
+        }
+      };
+    }
+    return {};
   }
 
   async getSalesKPIs(filters: CallbackFilters = {}): Promise<SalesKPIs> {

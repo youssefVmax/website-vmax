@@ -68,12 +68,12 @@ export default function NewCallbackPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-      toast({ title: "Not authenticated", description: "Please login first.", variant: "destructive" });
+      showError("Not authenticated", "Please login first.");
       return;
     }
 
     if (!form.customer_name || !form.phone_number || !form.email) {
-      toast({ title: "Validation error", description: "Customer name, phone, and email are required.", variant: "destructive" });
+      showError("Validation error", "Customer name, phone, and email are required.");
       return;
     }
 
@@ -85,7 +85,7 @@ export default function NewCallbackPage() {
         email: form.email,
         salesAgentId: user.id || "",
         salesAgentName: user.name,
-        salesTeam: user.team || "Unknown",
+        salesTeam: (user as any).managedTeam || user.team || "Unknown",
         firstCallDate: form.first_call_date,
         firstCallTime: form.first_call_time,
         callbackReason: form.callback_reason,
@@ -102,19 +102,12 @@ export default function NewCallbackPage() {
       const id = await callbacksService.addCallback(payload);
       console.log('Callback created with ID:', id, 'Payload:', payload);
       
-      // Show enhanced SweetAlert notification
-      await showCallbackAdded(
+      // Show SweetAlert notification (no await)
+      showCallbackAdded(
         form.customer_name,
         `${form.first_call_date} ${form.first_call_time}`,
         'Callback scheduled successfully!'
       );
-      
-      // Also show toast for additional details
-      toast({ 
-        title: "✅ Callback Created Successfully!",
-        description: `Customer: ${form.customer_name} | Phone: ${form.phone_number}`,
-        duration: 3000
-      });
       
       // Don't navigate - stay on the form to allow creating more callbacks
       
@@ -134,7 +127,7 @@ export default function NewCallbackPage() {
       });
     } catch (err) {
       console.error("Error creating callback", err);
-      toast({ title: "Error", description: "Failed to create callback", variant: "destructive" });
+      showError("Error", "Failed to create callback");
     } finally {
       setLoading(false);
     }

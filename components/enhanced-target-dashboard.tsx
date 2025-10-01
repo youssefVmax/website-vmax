@@ -1,40 +1,137 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Target, TrendingUp, BarChart3, RefreshCw, Award, Search, Filter, Calendar, AlertCircle } from "lucide-react"
+import { 
+  Target, TrendingUp, BarChart3, Calendar, AlertCircle, RefreshCw, 
+  CheckCircle, Filter, Search, Award, DollarSign, Users
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useUnifiedData } from "@/hooks/useUnifiedData"
+import { targetsService } from "@/lib/mysql-targets-service"
+import { Progress } from "@radix-ui/react-progress"
 
 interface EnhancedTargetDashboardProps {
-  userRole: 'manager' | 'salesman' | 'team-leader'
-  user: { name: string; username: string; id: string; team?: string }
+  userRole: 'manager' | 'salesman' | 'team_leader'
+  user: { name: string; username: string; id: string; team?: string; managedTeam?: string }
 }
 
 export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashboardProps) {
   const { toast } = useToast()
   
-  // Use unified data service with manual refresh
-  const {
-    data,
-    kpis,
-    loading,
-    error,
-    lastUpdated,
-    refresh
-  } = useUnifiedData({
-    userRole,
-    userId: user.id,
-    userName: user.name,
-    managedTeam: user.team,
-    autoLoad: true
-  })
+  // State for targets data
+  const [targets, setTargets] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Load targets data
+  const loadTargets = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      let targetsData: any[] = []
+
+      if (userRole === 'manager') {
+        // Managers see all targets they created
+        targetsData = await targetsService.getTargets({ managerId: user.id })
+      } else if (userRole === 'team_leader') {
+        // Team leaders see their own targets plus all targets (we'll filter on frontend)
+        const [personalTargets, allTargets] = await Promise.all([
+          targetsService.getTargets({ agentId: user.id }),
+          targetsService.getTargets({}) // Get all targets, filter on frontend
+        ])
+        // Combine personal targets with all targets, then filter on frontend
+        targetsData = [...personalTargets, ...allTargets.filter(target => target.agentId !== user.id)]
+        // Filter to only show personal targets and targets for team members
+        targetsData = targetsData.filter(target => target.agentId === user.id || target.salesTeam === user.managedTeam)
+      } else {
+        // Salesmen see only their own individual targets
+        targetsData = await targetsService.getTargets({ agentId: user.id })
+      }
+
+      // For now, just set targets without progress to avoid timeouts
+      // Progress will be shown as 0 until we implement a more efficient progress loading
+      const targetsWithDefaultProgress = targetsData.map((target: any) => ({
+        ...target,
+        currentAmount: 0, // Will be calculated later
+        currentDeals: 0,
+        currentRevenue: 0,
+        progress: 0,
+        dealsProgress: 0,
+        month: target.period?.split(' ')[0] || '',
+        year: target.period?.split(' ')[1] || '',
+        salesAgentName: target.agentName || target.salesAgentName
+      }))
+
+      setTargets(targetsWithDefaultProgress)
+
+      // Load progress data in background (non-blocking)
+      loadProgressData(targetsData)
+    } catch (err) {
+      console.error('Error loading targets:', err)
+      setError('Failed to load targets')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Separate function to load progress data without blocking UI
+  const loadProgressData = async (targetsData: any[]) => {
+    try {
+      // Load progress for each target with a delay to avoid overwhelming the API
+      const targetsWithProgress = await Promise.all(
+        targetsData.map(async (target: any, index: number) => {
+          try {
+            // Add small delay between requests to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, index * 100))
+
+            const progress = await targetsService.getTargetProgress(target.id)
+            return {
+              ...target,
+              currentAmount: progress.currentRevenue || 0,
+              currentDeals: progress.currentDeals || 0,
+              currentRevenue: progress.currentRevenue || 0,
+              progress: progress.revenueProgress || 0,
+              dealsProgress: progress.dealsProgress || 0,
+              month: target.period?.split(' ')[0] || '',
+              year: target.period?.split(' ')[1] || '',
+              salesAgentName: target.agentName || target.salesAgentName
+            }
+          } catch (error) {
+            console.error('Error fetching progress for target:', target.id, error)
+            // Return target with default progress values
+            return {
+              ...target,
+              currentAmount: 0,
+              currentDeals: 0,
+              currentRevenue: 0,
+              progress: 0,
+              dealsProgress: 0,
+              month: target.period?.split(' ')[0] || '',
+              year: target.period?.split(' ')[1] || '',
+              salesAgentName: target.agentName || target.salesAgentName
+            }
+          }
+        })
+      )
+
+      // Update targets with progress data
+      setTargets(targetsWithProgress)
+    } catch (error) {
+      console.error('Error loading progress data:', error)
+      // Keep existing targets data even if progress loading fails
+    }
+  }
+
+  // Load data on component mount
+  useEffect(() => {
+    loadTargets()
+  }, [user.id, userRole, user.managedTeam])
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState("")
@@ -44,16 +141,15 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
   // Manual refresh handler
   const handleRefresh = async () => {
     try {
-      await refresh()
+      await loadTargets()
       toast({
         title: "Success",
-        description: "Target data refreshed successfully!",
-        variant: "default"
+        description: "Targets data refreshed successfully"
       })
     } catch (error) {
       toast({
-        title: "Error", 
-        description: "Failed to refresh target data",
+        title: "Error",
+        description: "Failed to refresh targets data",
         variant: "destructive"
       })
     }
@@ -61,44 +157,31 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
 
   // Calculate target statistics with safe number conversion
   const targetStats = useMemo(() => {
-    const targets = data.targets || [];
+    const targetsData = targets || [];
     
-    const totalTargets = targets.length;
-    const totalTargetRevenue = targets.reduce((sum: number, target: any) => {
-      const amount = typeof target.targetAmount === 'string' 
-        ? parseFloat(target.targetAmount) || 0 
-        : Number(target.targetAmount) || 0;
+    const totalTargets = targetsData.length;
+    const totalTargetRevenue = targetsData.reduce((sum: number, target: any) => {
+      const amount = typeof target.monthlyTarget === 'string' 
+        ? parseFloat(target.monthlyTarget) || 0 
+        : Number(target.monthlyTarget) || 0;
       return sum + amount;
     }, 0);
+    // For current revenue, we'd need to calculate from actual deals
+    // For now, we'll show 0 as a placeholder
+    const currentRevenue = 0;
     
-    const currentRevenue = targets.reduce((sum: number, target: any) => {
-      const amount = typeof target.currentAmount === 'string' 
-        ? parseFloat(target.currentAmount) || 0 
-        : Number(target.currentAmount) || 0;
-      return sum + amount;
-    }, 0);
-    
-    const avgProgress = totalTargets > 0 ? targets.reduce((sum: number, target: any) => {
-      const targetAmount = typeof target.targetAmount === 'string' 
-        ? parseFloat(target.targetAmount) || 0 
-        : Number(target.targetAmount) || 0;
-      const currentAmount = typeof target.currentAmount === 'string' 
-        ? parseFloat(target.currentAmount) || 0 
-        : Number(target.currentAmount) || 0;
-      const progress = targetAmount > 0 ? (currentAmount / targetAmount) * 100 : 0;
+    // Calculate average progress
+    const totalProgress = targetsData.reduce((sum: number, target: any) => {
+      const progress = typeof target.progress === 'string' 
+        ? parseFloat(target.progress) || 0 
+        : Number(target.progress) || 0;
       return sum + progress;
-    }, 0) / totalTargets : 0;
+    }, 0);
+    const avgProgress = totalProgress / targetsData.length || 0;
     
-    const exceededTargets = targets.filter((target: any) => {
-      const targetAmount = typeof target.targetAmount === 'string' 
-        ? parseFloat(target.targetAmount) || 0 
-        : Number(target.targetAmount) || 0;
-      const currentAmount = typeof target.currentAmount === 'string' 
-        ? parseFloat(target.currentAmount) || 0 
-        : Number(target.currentAmount) || 0;
-      return currentAmount >= targetAmount;
-    }).length;
-
+    // Calculate exceeded targets
+    const exceededTargets = targetsData.filter(target => target.progress >= 100).length;
+    
     return {
       totalTargets,
       totalTargetRevenue: Math.round(totalTargetRevenue),
@@ -106,41 +189,27 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
       avgProgress: Math.round(avgProgress * 10) / 10,
       exceededTargets
     };
-  }, [data.targets]);
+  }, [targets]);
 
   // Filter targets
   const filteredTargets = useMemo(() => {
-    return (data.targets || []).filter((target: any) => {
-      const matchesSearch = target.salesAgentName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           target.id?.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesPeriod = periodFilter === "all" || `${target.month} ${target.year}` === periodFilter
+    return (targets || []).filter((target: any) => {
+      const matchesSearch = target.agentName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                             target.id?.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesPeriod = periodFilter === "all" || target.period === periodFilter
       
-      // Calculate status for filtering
-      const targetAmount = typeof target.targetAmount === 'string' 
-        ? parseFloat(target.targetAmount) || 0 
-        : Number(target.targetAmount) || 0;
-      const currentAmount = typeof target.currentAmount === 'string' 
-        ? parseFloat(target.currentAmount) || 0 
-        : Number(target.currentAmount) || 0;
-      const progress = targetAmount > 0 ? (currentAmount / targetAmount) * 100 : 0;
-      
-      let status = 'on-track';
-      if (progress >= 100) {
-        status = 'exceeded';
-      } else if (progress < 70) {
-        status = 'behind';
-      }
-      
+      // For now, assume all targets are active
+      const status = 'active';
       const matchesStatus = statusFilter === "all" || status === statusFilter;
       
       return matchesSearch && matchesStatus && matchesPeriod;
     })
-  }, [data.targets, searchQuery, statusFilter, periodFilter]);
+  }, [targets, searchQuery, statusFilter, periodFilter]);
 
   // Get unique periods for filters
   const availablePeriods = useMemo(() => {
-    return Array.from(new Set((data.targets || []).map((t: any) => `${t.month} ${t.year}`))).sort()
-  }, [data.targets]);
+    return Array.from(new Set((targets || []).map((t: any) => t.period))).filter(Boolean).sort()
+  }, [targets]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -189,13 +258,10 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
           <p className="text-muted-foreground">
             {userRole === 'manager' 
               ? 'Comprehensive target management with real-time progress tracking'
+              : userRole === 'team_leader'
+              ? 'Track your individual targets and team performance'
               : 'Track your personal sales targets and performance'}
           </p>
-          {lastUpdated && (
-            <p className="text-xs text-muted-foreground">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </p>
-          )}
         </div>
 
         <Button onClick={handleRefresh} variant="outline">
@@ -319,14 +385,13 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
           </div>
         </CardContent>
       </Card>
-
       {/* Targets Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTargets.map((target: any, index: number) => {
           // Calculate progress and status
-          const targetAmount = typeof target.targetAmount === 'string' 
-            ? parseFloat(target.targetAmount) || 0 
-            : Number(target.targetAmount) || 0;
+          const targetAmount = typeof target.monthlyTarget === 'string' 
+            ? parseFloat(target.monthlyTarget) || 0 
+            : Number(target.monthlyTarget) || 0;
           const currentAmount = typeof target.currentAmount === 'string' 
             ? parseFloat(target.currentAmount) || 0 
             : Number(target.currentAmount) || 0;
@@ -339,12 +404,27 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
             status = 'behind';
           }
 
+          const isTeamTarget = target.salesTeam === user.managedTeam && target.agentId !== user.id;
+          const isOwnTarget = target.agentId === user.id;
+
           return (
             <Card key={target.id || index} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">{target.salesAgentName || target.agentName || 'Unknown Agent'}</CardTitle>
+                    {isTeamTarget && (
+                      <div className="flex items-center gap-1 text-sm text-blue-600">
+                        <Users className="h-4 w-4" />
+                        Team Member Target
+                      </div>
+                    )}
+                    {isOwnTarget && (
+                      <div className="flex items-center gap-1 text-sm text-green-600">
+                        <Target className="h-4 w-4" />
+                        Your Personal Target
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Calendar className="h-4 w-4" />
                       {target.month} {target.year}
@@ -418,7 +498,9 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
             <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">No targets found</h3>
             <p className="text-muted-foreground mb-4">
-              {data.targets.length === 0 
+              {userRole === 'team_leader'
+                ? "No personal or team member targets have been created yet."
+                : targets.length === 0 
                 ? "No targets have been created yet." 
                 : "No targets match your current filters."}
             </p>

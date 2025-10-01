@@ -1,7 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { dealsService } from '@/lib/mysql-deals-service'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Deal } from '@/lib/api-service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,102 +8,165 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Download, Filter, Eye, Calendar, DollarSign, Users, TrendingUp } from 'lucide-react'
+import { ServerPagination } from '@/components/ui/server-pagination'
+import { useServerPagination } from '@/hooks/useServerPagination'
+import { useAuth } from '@/hooks/useAuth'
+import { Search, Download, Filter, Eye, Calendar, DollarSign, Users, TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default function DealsTablePage() {
   const [deals, setDeals] = useState<Deal[]>([])
-  const [filteredDeals, setFilteredDeals] = useState<Deal[]>([])
-  const [loading, setLoading] = useState(true)
+  const [totalDeals, setTotalDeals] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [stageFilter, setStageFilter] = useState<string>('all')
   const [teamFilter, setTeamFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
+  // Server pagination hook
+  const [paginationState, paginationActions] = useServerPagination({
+    initialPage: 1,
+    initialItemsPerPage: 25,
+    onPageChange: (page, itemsPerPage) => {
+      fetchDeals(page, itemsPerPage, debouncedSearchTerm, statusFilter, stageFilter, teamFilter);
+    }
+  });
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Reset to first page when search or filter changes
+  useEffect(() => {
+    if (debouncedSearchTerm !== searchTerm) return; // Wait for debounce
+    paginationActions.goToFirstPage();
+  }, [debouncedSearchTerm, statusFilter, stageFilter, teamFilter]);
+
+  // Fetch deals with server-side pagination
+  const fetchDeals = useCallback(async (
+    page: number = paginationState.currentPage,
+    limit: number = paginationState.itemsPerPage,
+    search: string = debouncedSearchTerm,
+    statusFilterParam: string = statusFilter,
+    stageFilterParam: string = stageFilter,
+    teamFilterParam: string = teamFilter
+  ) => {
+    try {
+      paginationActions.setIsLoading(true)
+      setError(null)
+      
+      // Build API parameters
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      })
+
+      // Role-based scoping
+      if (user?.role === 'team_leader') {
+        params.set('userRole', 'team_leader')
+        params.set('userId', String(user.id))
+      } else if (user?.role === 'salesman') {
+        params.set('userRole', 'salesman')
+        params.set('userId', String(user.id))
+      } else {
+        params.set('userRole', 'manager')
+        params.set('userId', String(user?.id || 'manager-001'))
+      }
+      
+      // Add search if provided
+      if (search.trim()) {
+        params.append('search', search.trim())
+      }
+      
+      // Add status filter if not 'all'
+      if (statusFilterParam && statusFilterParam !== 'all') {
+        params.append('status', statusFilterParam)
+      }
+      
+      // Add stage filter if not 'all'
+      if (stageFilterParam && stageFilterParam !== 'all') {
+        params.append('stage', stageFilterParam)
+      }
+      
+      // Add team filter only for manager; team leaders are locked to their managedTeam by API
+      if (user?.role !== 'team_leader') {
+        if (teamFilterParam && teamFilterParam !== 'all') {
+          params.append('salesTeam', teamFilterParam)
+        }
+      }
+      
+      // Fetch from API
+      const response = await fetch(`/api/deals?${params.toString()}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch deals')
+      }
+      
+      // Normalize deals data
+      const normalizedDeals = (result.deals || []).map((deal: any) => ({
+        id: deal.id ?? `deal-${Math.random()}`,
+        customerName: deal.customerName ?? deal.customer_name ?? 'Unknown Customer',
+        email: deal.email ?? '',
+        phoneNumber: deal.phoneNumber ?? deal.phone_number ?? '',
+        country: deal.country ?? '',
+        amountPaid: deal.amountPaid ?? deal.amount_paid ?? 0,
+        serviceTier: deal.serviceTier ?? deal.service_tier ?? 'Silver',
+        salesAgentId: deal.salesAgentId ?? deal.SalesAgentID ?? '',
+        salesAgentName: deal.salesAgentName ?? deal.sales_agent_name ?? 'Unknown Agent',
+        closingAgentId: deal.closingAgentId ?? deal.closing_agent_id ?? '',
+        closingAgentName: deal.closingAgentName ?? deal.closing_agent_name ?? '',
+        salesTeam: deal.salesTeam ?? deal.sales_team ?? 'Unknown Team',
+        stage: deal.stage ?? 'prospect',
+        status: deal.status ?? 'active',
+        priority: deal.priority ?? 'medium',
+        signupDate: deal.signupDate ?? deal.signup_date ?? '',
+        durationYears: deal.durationYears ?? deal.duration_years ?? 1,
+        durationMonths: deal.durationMonths ?? deal.duration_months ?? 12,
+        numberOfUsers: deal.numberOfUsers ?? deal.number_of_users ?? 1,
+        notes: deal.notes ?? '',
+        createdBy: deal.createdBy ?? deal.created_by ?? '',
+        createdAt: deal.createdAt ?? deal.created_at ?? '',
+        updatedAt: deal.updatedAt ?? deal.updated_at ?? '',
+      }))
+      
+      setDeals(normalizedDeals)
+      setTotalDeals(result.total || 0)
+      paginationActions.setTotalItems(result.total || 0)
+      
+    } catch (error) {
+      console.error('❌ Error fetching deals:', error)
+      setError(error instanceof Error ? error.message : 'Failed to fetch deals')
+      setDeals([])
+      setTotalDeals(0)
+      paginationActions.setTotalItems(0)
+    } finally {
+      paginationActions.setIsLoading(false)
+    }
+  }, [paginationState.currentPage, paginationState.itemsPerPage, debouncedSearchTerm, statusFilter, stageFilter, teamFilter, paginationActions])
+
   useEffect(() => {
     fetchDeals()
-  }, [])
+  }, [fetchDeals])
 
-  useEffect(() => {
-    filterAndSortDeals()
-  }, [deals, searchTerm, statusFilter, stageFilter, teamFilter, sortBy, sortOrder])
-
-  const fetchDeals = async () => {
-    try {
-      setLoading(true)
-      const allDeals = await dealsService.getDeals()
-      setDeals(allDeals)
-    } catch (error) {
-      console.error('Error fetching deals:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filterAndSortDeals = () => {
-    let filtered = [...deals]
-
-    // Apply search filter
-    if (searchTerm) {
-      filtered = filtered.filter(deal =>
-        deal.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deal.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deal.phoneNumber?.includes(searchTerm) ||
-        deal.salesAgentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deal.closingAgentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deal.country?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(deal => deal.status === statusFilter)
-    }
-
-    // Apply stage filter
-    if (stageFilter !== 'all') {
-      filtered = filtered.filter(deal => deal.stage === stageFilter)
-    }
-
-    // Apply team filter
-    if (teamFilter !== 'all') {
-      filtered = filtered.filter(deal => deal.salesTeam === teamFilter)
-    }
-
-    // Apply sorting
-    filtered.sort((a, b) => {
-      let aValue: any = a[sortBy as keyof Deal]
-      let bValue: any = b[sortBy as keyof Deal]
-
-      // Handle date sorting
-      if (sortBy === 'created_at' || sortBy === 'signup_date') {
-        aValue = new Date(aValue).getTime()
-        bValue = new Date(bValue).getTime()
-      }
-
-      // Handle numeric sorting
-      if (sortBy === 'amount_paid' || sortBy === 'duration_months') {
-        aValue = Number(aValue) || 0
-        bValue = Number(bValue) || 0
-      }
-
-      // Handle string sorting
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase()
-        bValue = bValue.toLowerCase()
-      }
-
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1
-      } else {
-        return aValue < bValue ? 1 : -1
-      }
-    })
-
-    setFilteredDeals(filtered)
-  }
 
   const exportToCSV = () => {
     const headers = [
@@ -113,7 +175,7 @@ export default function DealsTablePage() {
       'Closing Agent', 'Sales Team', 'Status', 'Stage', 'Priority', 'Created At'
     ]
 
-    const csvData = filteredDeals.map(deal => [
+    const csvData = deals.map(deal => [
       deal.dealId || '',
       deal.customerName,
       deal.email,
@@ -176,13 +238,13 @@ export default function DealsTablePage() {
     }
   }
 
-  // Calculate summary statistics
-  const totalDeals = filteredDeals.length
-  const totalRevenue = filteredDeals.reduce((sum, deal) => sum + deal.amountPaid, 0)
-  const averageDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0
-  const uniqueAgents = new Set(filteredDeals.map(deal => deal.salesAgentName)).size
+  // Calculate summary statistics (current page only)
+  const pageDealsCount = deals.length
+  const totalRevenue = deals.reduce((sum, deal) => sum + (Number(deal.amountPaid) || 0), 0)
+  const averageDealSize = pageDealsCount > 0 ? totalRevenue / pageDealsCount : 0
+  const uniqueAgents = new Set(deals.map(deal => deal.salesAgentName)).size
 
-  if (loading) {
+  if (paginationState.isLoading && deals.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -217,10 +279,8 @@ export default function DealsTablePage() {
             <Eye className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalDeals}</div>
-            <p className="text-xs text-muted-foreground">
-              {deals.length} total in database
-            </p>
+            <div className="text-2xl font-bold">{paginationState.totalItems.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Total in system</p>
           </CardContent>
         </Card>
         <Card>
@@ -344,7 +404,7 @@ export default function DealsTablePage() {
       {/* Deals Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Deals ({filteredDeals.length})</CardTitle>
+          <CardTitle>Deals ({totalDeals.toLocaleString()})</CardTitle>
           <CardDescription>
             All deals from salesmen with complete information
           </CardDescription>
@@ -368,7 +428,7 @@ export default function DealsTablePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredDeals.map((deal) => (
+                {deals.map((deal) => (
                   <TableRow key={deal.id}>
                     <TableCell className="font-mono text-xs">
                       {deal.dealId || deal.id?.slice(-8)}
@@ -427,7 +487,24 @@ export default function DealsTablePage() {
               </TableBody>
             </Table>
           </div>
-          {filteredDeals.length === 0 && (
+
+          {/* Pagination */}
+          {!paginationState.isLoading && deals.length > 0 && (
+            <div className="mt-6">
+              <ServerPagination
+                currentPage={paginationState.currentPage}
+                totalPages={Math.max(1, Math.ceil(totalDeals / paginationState.itemsPerPage))}
+                totalItems={totalDeals}
+                itemsPerPage={paginationState.itemsPerPage}
+                onPageChange={paginationActions.goToPage}
+                onItemsPerPageChange={paginationActions.setItemsPerPage}
+                isLoading={paginationState.isLoading}
+                className="justify-center"
+              />
+            </div>
+          )}
+
+          {deals.length === 0 && !paginationState.isLoading && (
             <div className="text-center py-8">
               <p className="text-muted-foreground">No deals found matching your criteria.</p>
             </div>

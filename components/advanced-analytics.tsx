@@ -1,70 +1,299 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts'
-import { TrendingUp, DollarSign, Users, Target, Calendar, Download, Filter, BarChart3, PieChart as PieChartIcon, Activity, Award } from "lucide-react"
-import { useUnifiedData } from '@/hooks/useUnifiedData'
-import { Deal } from "@/lib/api-service"
-import { addDays, format } from "date-fns"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis 
+} from 'recharts'
+import { 
+  TrendingUp, DollarSign, Target, Download, BarChart3, Activity, RefreshCw,
+  ChevronLeft, ChevronRight, Users, Phone
+} from "lucide-react"
+import { format as formatDate } from "date-fns"
+import { unifiedAnalyticsService } from "@/lib/unified-analytics-service"
+import { mysqlAnalyticsService } from "@/lib/mysql-analytics-service"
 
 interface AdvancedAnalyticsProps {
-  userRole: 'manager' | 'salesman' | 'team-leader'
-  user: { name: string; username: string; id: string; managedTeam?: string }
+  userRole: 'manager' | 'salesman' | 'team_leader'
+  user: { full_name?: string; username?: string; id: string; managedTeam?: string }
 }
 
 export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
-  // Use unified data hook for consistent data fetching
-  const {
-    data,
-    kpis,
-    loading,
-    error,
-    lastUpdated: dataLastUpdated,
-    refresh
-  } = useUnifiedData({
-    userRole,
-    userId: user.id,
-    userName: user.name,
-    managedTeam: user.managedTeam,
-    autoLoad: true
-  });
-
-  const deals = data.deals || []
-
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [dateRange, setDateRange] = useState({
-    from: addDays(new Date(), -30),
-    to: new Date()
-  })
+  const [dashboardStats, setDashboardStats] = useState<any>({})
+  const [chartsData, setChartsData] = useState<any>({ salesTrend: [], salesByAgent: [], salesByTeam: [], serviceTier: [] })
+  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [teamSalesComparison, setTeamSalesComparison] = useState<any[]>([])
+  const [callbacksComparison, setCallbacksComparison] = useState<any[]>([])
+  
+  // Pagination states for team leader tables
+  const [salesPage, setSalesPage] = useState(1)
+  const [callbacksPage, setCallbacksPage] = useState(1)
+  const itemsPerPage = 5
+  const [dateRange, setDateRange] = useState('30') // days
   const [selectedTeam, setSelectedTeam] = useState("all")
   const [selectedService, setSelectedService] = useState("all")
   const [viewType, setViewType] = useState<'revenue' | 'deals' | 'performance'>('revenue')
 
-  // Update last updated timestamp whenever deals stream changes
-  useEffect(() => {
-    if (Array.isArray(deals) && deals.length >= 0) {
-      setLastUpdated(new Date())
+  // Fetch team leader analytics directly from APIs
+  const fetchTeamLeaderAnalytics = async () => {
+    try {
+      if (userRole !== 'team_leader' || !user.managedTeam) {
+        console.log('⚠️ Not a team leader or no managed team')
+        return null
+      }
+
+      console.log('🔄 Fetching team leader analytics from direct APIs')
+
+      // Get analytics data
+      const analyticsParams = new URLSearchParams({
+        endpoint: 'dashboard-stats',
+        user_role: userRole,
+        user_id: user.id,
+        managed_team: user.managedTeam || '',
+        date_range: dateRange === '30' ? 'month' : dateRange === '7' ? 'week' : dateRange === '90' ? 'quarter' : 'all'
+      })
+
+      const analyticsUrl = `/api/analytics-api.php?${analyticsParams.toString()}`
+      console.log('➡️ Calling analytics API:', analyticsUrl)
+      const analyticsResponse = await fetch(analyticsUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store'
+      })
+      if (!analyticsResponse.ok) {
+        throw new Error(`Analytics API failed: ${analyticsResponse.status}`)
+      }
+
+      const analyticsData = await analyticsResponse.json()
+      if (!analyticsData.success) {
+        throw new Error(`Analytics API error: ${analyticsData.error}`)
+      }
+
+      // Get charts data
+      const chartsParams = new URLSearchParams({
+        userRole,
+        userId: user.id,
+        managedTeam: user.managedTeam || '',
+        chartType: 'all',
+        dateRange
+      })
+
+      const chartsUrl = `/api/charts?${chartsParams.toString()}`
+      console.log('➡️ Calling charts API:', chartsUrl)
+      const chartsResponse = await fetch(chartsUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store'
+      })
+
+      let chartsData = { success: false, data: {} }
+      if (chartsResponse.ok) {
+        chartsData = await chartsResponse.json()
+      } else {
+        console.warn('⚠️ Charts API response not OK:', chartsResponse.status)
+      }
+
+      return {
+        analytics: analyticsData,
+        charts: chartsData.success ? chartsData.data : {}
+      }
+    } catch (error) {
+      console.error('❌ Error fetching team leader analytics:', error)
+      return null
     }
-  }, [deals])
+  }
+  
+  // Set analytics data from direct API response
+  const setAnalyticsFromDirectAPI = (result: any) => {
+    const { analytics: analyticsData, charts: chartsData } = result
+    
+    console.log('🔍 Charts data received:', {
+      salesByAgent: chartsData.salesByAgent,
+      salesByAgentLength: chartsData.salesByAgent?.length || 0,
+      serviceTier: chartsData.serviceTier,
+      serviceTierLength: chartsData.serviceTier?.length || 0
+    })
+    
+    // Set dashboard stats
+    setDashboardStats({
+      total_revenue: analyticsData.total_revenue || 0,
+      total_deals: analyticsData.total_deals || 0,
+      avg_deal_size: analyticsData.avg_deal_size || 0,
+      today_revenue: analyticsData.today_revenue || 0,
+      total_callbacks: analyticsData.total_callbacks || 0,
+      pending_callbacks: analyticsData.pending_callbacks || 0,
+      completed_callbacks: analyticsData.completed_callbacks || 0,
+    })
+    
+    // Set charts data
+    setChartsData({
+      salesTrend: (chartsData.salesTrend || []).map((d: any) => ({
+        // charts API already returns a display-safe date string (e.g., 'Oct 1')
+        date: d.date || '',
+        revenue: Number(d.revenue || 0),
+        deals: Number(d.deals || 0)
+      })),
+      salesByAgent: chartsData.salesByAgent || [],
+      salesByTeam: chartsData.salesByTeam || [],
+      serviceTier: chartsData.serviceTier || []
+    })
+
+    // Also keep a normalized analyticsData structure for useMemo consumers
+    setAnalyticsData({
+      overview: {
+        totalDeals: Number(analyticsData.total_deals || 0),
+        totalRevenue: Number(analyticsData.total_revenue || 0),
+        averageDealSize: Number(analyticsData.avg_deal_size || 0),
+        totalCallbacks: Number(analyticsData.total_callbacks || 0),
+        pendingCallbacks: Number(analyticsData.pending_callbacks || 0),
+        completedCallbacks: Number(analyticsData.completed_callbacks || 0),
+        conversionRate: Number(analyticsData.conversion_rate || 0)
+      },
+      charts: {
+        dailyTrend: (chartsData.salesTrend || []).map((d: any) => ({
+          // Preserve API-provided date label to avoid invalid parsing
+          date: d.date || '',
+          sales: Number(d.revenue || 0)
+        })),
+        topAgents: (chartsData.salesByAgent || []).map((a: any) => ({ agent: a.agent, sales: Number(a.revenue || 0), deals: Number(a.deals || 0) })),
+        teamDistribution: (chartsData.salesByTeam || []).map((t: any) => ({ team: t.team, sales: Number(t.revenue || 0) })),
+        serviceDistribution: (chartsData.serviceTier || []).map((s: any) => ({ service: s.service, sales: Number(s.revenue || 0) }))
+      }
+    })
+    
+    // Set team sales comparison for team leader specific view
+    if (chartsData.salesByAgent && chartsData.salesByAgent.length > 0) {
+      console.log('📊 Setting team sales comparison from:', chartsData.salesByAgent)
+      setTeamSalesComparison(chartsData.salesByAgent.map((item: any) => ({
+        agent: item.agent || 'Unknown Agent',
+        revenue: Number(item.revenue || 0),
+        deals: Number(item.deals || 0),
+        agent_revenue: Number(item.revenue || 0),
+        agent_deals: Number(item.deals || 0)
+      })))
+    } else {
+      console.warn('⚠️ No salesByAgent data available for team comparison')
+      setTeamSalesComparison([])
+    }
+    
+    setLastUpdated(new Date())
+  }
+  
+  // Set analytics data from unified service response
+  const setAnalyticsFromUnified = (analyticsResult: any) => {
+    // Set dashboard stats
+    setDashboardStats({
+      total_revenue: analyticsResult.overview.totalRevenue,
+      total_deals: analyticsResult.overview.totalDeals,
+      avg_deal_size: analyticsResult.overview.averageDealSize,
+      today_revenue: analyticsResult.overview.todayRevenue || 0,
+      total_callbacks: analyticsResult.overview.totalCallbacks,
+      pending_callbacks: analyticsResult.overview.pendingCallbacks,
+      completed_callbacks: analyticsResult.overview.completedCallbacks,
+      conversion_rate: analyticsResult.overview.conversionRate
+    })
+
+    // Set charts data - use charts API for detailed trend data
+    setChartsData({
+      salesTrend: analyticsResult.charts.dailyTrend.map((item: any) => ({
+        date: item.date,
+        revenue: item.sales,
+        deals: 0 // Monthly trends don't have daily deal counts
+      })),
+      salesByAgent: analyticsResult.charts.topAgents.map((item: any) => ({
+        agent: item.agent,
+        revenue: item.sales,
+        deals: item.deals,
+        avgDealSize: item.deals > 0 ? item.sales / item.deals : 0,
+        totalRevenue: item.sales
+      })),
+      salesByTeam: analyticsResult.charts.teamDistribution.map((item: any) => ({
+        team: item.team,
+        revenue: item.sales,
+        deals: 0 // Team data doesn't include deal counts from this API
+      })),
+      serviceTier: analyticsResult.charts.serviceDistribution.map((item: any) => ({
+        service: item.service,
+        revenue: item.sales,
+        deals: 0 // Service data not provided by analytics API
+      }))
+    })
+
+    console.log('📊 Charts data set:', {
+      salesTrend: analyticsResult.charts.dailyTrend.length,
+      salesByAgent: analyticsResult.charts.topAgents.length,
+      salesByTeam: analyticsResult.charts.teamDistribution.length
+    })
+    
+    setLastUpdated(new Date())
+  }
+
+  // Fetch data using unified analytics service
+  const fetchAnalyticsData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      console.log('🔄 Fetching analytics data for team leader', {
+        userId: user.id,
+        userRole,
+        managedTeam: user.managedTeam,
+        dateRange
+      })
+
+      // Use direct API calls for team leader analytics
+      const analyticsResult = await fetchTeamLeaderAnalytics()
+      
+      if (!analyticsResult) {
+        // Fallback to unified service
+        const userContext = {
+          id: user.id,
+          name: user.full_name || user.username || '',
+          username: user.username || '',
+          role: userRole,
+          managedTeam: user.managedTeam
+        }
+        
+        const fallbackResult = await unifiedAnalyticsService.getAnalytics(userContext, dateRange === '30' ? 'month' : dateRange === '7' ? 'week' : dateRange === '90' ? 'quarter' : 'all')
+        if (fallbackResult) {
+          setAnalyticsFromUnified(fallbackResult)
+          return
+        }
+      }
+
+      if (analyticsResult) {
+        console.log('✅ Team leader analytics loaded successfully:', analyticsResult)
+        setAnalyticsFromDirectAPI(analyticsResult)
+
+      } else {
+        throw new Error('No analytics data received')
+      }
+
+    } catch (err) {
+      console.error('Error fetching analytics data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load analytics data')
+    } finally {
+      setLoading(false)
+    }
+  }
+  // Load data on mount and when parameters change
+  useEffect(() => {
+    fetchAnalyticsData()
+  }, [userRole, user.id, user.managedTeam, dateRange])
+
+  // Refresh function
+  const refresh = () => {
+    fetchAnalyticsData()
+  }
 
   const analytics = useMemo(() => {
-    console.log('🚀 AdvancedAnalytics: Processing deals data:', { 
-      dealsCount: deals?.length || 0, 
-      sampleDeal: deals?.[0],
-      dateRange,
-      selectedTeam,
-      selectedService
-    });
-    
-    if (!Array.isArray(deals) || deals.length === 0) {
-      console.log('🚀 AdvancedAnalytics: No deals data available');
+    if (!dashboardStats && !analyticsData && !chartsData) {
       return {
         totalRevenue: 0,
         totalDeals: 0,
@@ -78,195 +307,77 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         teamPerformance: [],
         servicePerformance: [],
         performanceCorrelation: [],
-        filteredDeals: []
+        filteredDeals: [],
+        totalCallbacks: 0,
+        pendingCallbacks: 0,
+        completedCallbacks: 0,
+        conversionRate: 0
       };
     }
 
-    // Filter by date range
-    const filteredDeals = deals.filter(deal => {
-      const dealDate = new Date(deal.created_at || deal.signupDate || deal.createdAt || new Date())
-      return dealDate >= dateRange.from && dealDate <= dateRange.to
+    // Combine data from different sources
+    const stats = dashboardStats || {}
+    const charts = chartsData || {}
+    const overview = analyticsData?.overview || {}
+
+    console.log('🔍 Analytics useMemo - charts data:', {
+      salesTrend: charts.salesTrend?.length || 0,
+      salesByAgent: charts.salesByAgent?.length || 0,
+      serviceTier: charts.serviceTier?.length || 0,
+      salesByTeam: charts.salesByTeam?.length || 0
     })
 
-    // Further filter by team and service
-    const finalFilteredDeals = filteredDeals.filter(deal => {
-      const teamMatch = selectedTeam === "all" || deal.sales_team === selectedTeam || deal.salesTeam === selectedTeam
-      const serviceMatch = selectedService === "all" || deal.service_tier === selectedService || deal.serviceTier === selectedService
-      return teamMatch && serviceMatch
-    })
-
-    // Calculate metrics
-    const totalRevenue = finalFilteredDeals.reduce((sum, deal) => {
-      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
-      return sum + amount
-    }, 0)
-    const totalDeals = finalFilteredDeals.length
-    const averageDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0
-
-    // Time-based KPIs
-    const todayStr = format(new Date(), 'yyyy-MM-dd')
-    const startOfWeek = (() => {
-      const d = new Date()
-      const day = d.getDay() || 7 // Monday=1..Sunday=7
-      d.setHours(0,0,0,0)
-      d.setDate(d.getDate() - (day - 1))
-      return d
-    })()
-
-    let revenueToday = 0, dealsToday = 0
-    let revenueThisWeek = 0, dealsThisWeek = 0
-    for (const deal of deals) { // Use all deals for time-based metrics
-      const dealDate = new Date(deal.created_at || deal.signupDate || deal.createdAt || new Date())
-      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
-      if (format(dealDate, 'yyyy-MM-dd') === todayStr) {
-        revenueToday += amount
-        dealsToday++
-      }
-      if (dealDate >= startOfWeek) {
-        revenueThisWeek += amount
-        dealsThisWeek++
-      }
+    return {
+      totalRevenue: stats.total_revenue || overview.totalRevenue || 0,
+      totalDeals: stats.total_deals || overview.totalDeals || 0,
+      averageDealSize: stats.avg_deal_size || overview.averageDealSize || 0,
+      revenueToday: stats.today_revenue || 0,
+      dealsToday: stats.today_deals || 0,
+      revenueThisWeek: 0, // Can be calculated from charts data if needed
+      dealsThisWeek: 0,
+      dailyTrend: charts.salesTrend || [],
+      topAgents: charts.salesByAgent || [],
+      teamPerformance: charts.salesByTeam || [],
+      servicePerformance: charts.serviceTier || [],
+      performanceCorrelation: (charts.salesByAgent || []).map((item: any) => ({
+        deals: item.deals || 0,
+        avgDealSize: item.avgDealSize || (item.deals > 0 ? item.revenue / item.deals : 0),
+        totalRevenue: item.totalRevenue || item.revenue || 0,
+        agent: item.agent // Include agent name for tooltips
+      })),
+      filteredDeals: [],
+      totalCallbacks: stats.total_callbacks || overview.totalCallbacks || 0,
+      pendingCallbacks: stats.pending_callbacks || overview.pendingCallbacks || 0,
+      completedCallbacks: stats.completed_callbacks || overview.completedCallbacks || 0,
+      conversionRate: stats.conversion_rate || overview.conversionRate || 0
     }
+  }, [dashboardStats, analyticsData, chartsData, dateRange, selectedTeam, selectedService])
 
-    // Daily trend
-    const dailyData = finalFilteredDeals.reduce((acc, deal) => {
-      const date = format(new Date(deal.created_at || deal.signupDate || deal.createdAt || new Date()), 'yyyy-MM-dd')
-      if (!acc[date]) {
-        acc[date] = { date, revenue: 0, deals: 0 }
-      }
-      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
-      acc[date].revenue += amount
-      acc[date].deals += 1
-      return acc
-    }, {} as Record<string, { date: string; revenue: number; deals: number }>)
-
-    const dailyTrend = Object.values(dailyData).sort((a: any, b: any) => 
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    )
-
-    // Revenue by agent
-    const revenueByAgent = finalFilteredDeals.reduce((acc, deal) => {
-      const agent = deal.sales_agent || deal.salesAgentName || 'Unknown'
-      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
-      acc[agent] = (acc[agent] || 0) + amount
-      return acc
-    }, {} as Record<string, number>)
-
-    // Revenue by team
-    const teamData = finalFilteredDeals.reduce((acc, deal) => {
-      const team = deal.sales_team || deal.salesTeam || 'Unknown'
-      if (!acc[team]) {
-        acc[team] = { team, revenue: 0, deals: 0 }
-      }
-      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
-      acc[team].revenue += amount
-      acc[team].deals += 1
-      return acc
-    }, {} as Record<string, { team: string; revenue: number; deals: number }>)
-
-    const teamPerformance = Object.values(teamData).sort((a: any, b: any) => b.revenue - a.revenue)
-
-    // Revenue by service
-    const revenueByService = finalFilteredDeals.reduce((acc, deal) => {
-      const service = deal.service_tier || deal.serviceTier || 'Other'
-      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
-      acc[service] = (acc[service] || 0) + amount
-      return acc
-    }, {} as Record<string, number>)
-
-    const serviceData = finalFilteredDeals.reduce((acc, deal) => {
-      const service = deal.service_tier || deal.serviceTier || 'Other'
-      if (!acc[service]) {
-        acc[service] = { service, revenue: 0, deals: 0 }
-      }
-      const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || deal.amountPaid || 0)
-      acc[service].revenue += amount
-      acc[service].deals += 1
-      return acc
-    }, {} as Record<string, { service: string; revenue: number; deals: number }>)
-
-    const servicePerformance = Object.values(serviceData).sort((a: any, b: any) => b.revenue - a.revenue)
-
-    // Top agents
-    const topAgents = Object.entries(revenueByAgent)
-      .map(([agent, revenue]: [string, any]) => ({
-        agent,
-        revenue,
-        deals: finalFilteredDeals.filter(deal => 
-          (deal.sales_agent || deal.salesAgentName) === agent
-        ).length,
-        avgDealSize: revenue / Math.max(1, finalFilteredDeals.filter(deal => 
-          (deal.sales_agent || deal.salesAgentName) === agent
-        ).length)
-      }))
-      .sort((a: any, b: any) => b.revenue - a.revenue)
-      .slice(0, 10)
-
-    // Performance correlation (deal size vs deals count)
-    const performanceCorrelation = topAgents.map(agent => ({
-      agent: agent.agent,
-      deals: agent.deals,
-      avgDealSize: agent.avgDealSize,
-      totalRevenue: agent.revenue
-    }))
-
-    const result = {
-      totalRevenue,
-      totalDeals,
-      averageDealSize,
-      dailyTrend,
-      topAgents,
-      teamPerformance,
-      servicePerformance,
-      performanceCorrelation,
-      filteredDeals: finalFilteredDeals,
-      revenueToday,
-      dealsToday,
-      revenueThisWeek,
-      dealsThisWeek,
-    };
-    
-    console.log('✅ AdvancedAnalytics: Calculated KPIs:', {
-      revenueToday,
-      dealsToday,
-      revenueThisWeek,
-      dealsThisWeek,
-      totalRevenue,
-      totalDeals
-    });
-    
-    return result;
-  }, [deals, dateRange, selectedTeam, selectedService])
-
-  // Export filtered detailed rows as CSV (Excel-compatible)
+  // Export function
   const handleExport = () => {
     if (!analytics) return
-    const rows = analytics.filteredDeals
-    const headers = [
-      'signupDate','customerName','amountPaid','salesAgentName','closingAgentName','salesTeam','serviceTier','dealId'
+    
+    const csvData = [
+      ['Metric', 'Value'],
+      ['Total Revenue', `$${analytics.totalRevenue.toLocaleString()}`],
+      ['Total Deals', analytics.totalDeals.toString()],
+      ['Average Deal Size', `$${Math.round(analytics.averageDealSize).toLocaleString()}`],
+      ['Today Revenue', `$${analytics.revenueToday.toLocaleString()}`],
+      ['Today Deals', analytics.dealsToday.toString()]
     ]
-    const csv = [headers.join(',')]
-    for (const deal of rows) {
-      const line = [
-        deal.signupDate || deal.createdAt || '',
-        deal.customerName?.replaceAll('"', '""') ?? '',
-        String(deal.amountPaid ?? ''),
-        deal.salesAgentName ?? '',
-        deal.closingAgentName ?? '',
-        deal.salesTeam ?? '',
-        deal.serviceTier ?? '',
-        deal.dealId ?? ''
-      ].map(v => /[",\n]/.test(String(v)) ? `"${String(v)}"` : String(v)).join(',')
-      csv.push(line)
-    }
-    const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    
+    const csv = csvData.map(row => row.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `analytics_${format(dateRange.from, 'yyyyMMdd')}_${format(dateRange.to, 'yyyyMMdd')}.csv`
+    a.download = `analytics_${formatDate(new Date(), 'yyyyMMdd')}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  // Chart colors
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D']
 
   if (loading) {
     return (
@@ -285,14 +396,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         <CardContent className="p-6 text-destructive">
           Error loading analytics: {error || 'Unknown error'}
           <div className="mt-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                refresh();
-                window.location.reload();
-              }}
-            >
+            <Button variant="outline" size="sm" onClick={refresh}>
               Retry
             </Button>
           </div>
@@ -312,9 +416,6 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       </Card>
     )
   }
-
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D']
-
   return (
     <div className="space-y-6">
       {/* Header with Filters */}
@@ -326,6 +427,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           <p className="text-muted-foreground">
             {userRole === 'manager' 
               ? 'Comprehensive analytics across all teams and agents'
+              : userRole === 'team_leader'
+              ? 'Your personal performance and team analytics'  
               : 'Detailed analysis of your sales performance'}
           </p>
         </div>
@@ -333,12 +436,18 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="flex items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            Real-time Data{lastUpdated ? ` • ${format(lastUpdated, 'HH:mm:ss')}` : ''}
+            Real-time Data{lastUpdated ? ` • ${formatDate(lastUpdated, 'HH:mm:ss')}` : ''}
           </Badge>
-          <Button variant="outline" size="sm">
-            <Filter className="h-4 w-4 mr-2" />
-            Advanced Filters
+          <Button variant="outline" size="sm" onClick={refresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
           </Button>
+          {userRole === 'manager' && (
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          )}
         </div>
       </div>
 
@@ -346,12 +455,19 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
+            <div>
               <Label className="text-sm font-medium mb-2 block">Date Range</Label>
-              <DatePickerWithRange
-                date={dateRange}
-                onDateChange={setDateRange}
-              />
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                  <SelectItem value="90">Last 90 days</SelectItem>
+                  <SelectItem value="365">Last year</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             
             {userRole === 'manager' && (
@@ -364,9 +480,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Teams</SelectItem>
-                      {Array.from(new Set(deals.map(d => d.salesTeam).filter(Boolean))).map(team => (
-                        <SelectItem key={team} value={team!}>{team}</SelectItem>
-                      ))}
+                      <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
+                      <SelectItem value="CS TEAM">CS TEAM</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -379,9 +494,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Services</SelectItem>
-                      {Array.from(new Set(deals.map(d => d.serviceTier).filter(Boolean))).map(svc => (
-                        <SelectItem key={svc} value={svc}>{svc}</SelectItem>
-                      ))}
+                      <SelectItem value="Premium">Premium</SelectItem>
+                      <SelectItem value="Standard">Standard</SelectItem>
+                      <SelectItem value="Basic">Basic</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -404,6 +519,210 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           </div>
         </CardContent>
       </Card>
+
+      {userRole === 'team_leader' && (
+        <div className="space-y-6">
+          <div className="text-center">
+            <h3 className="text-xl font-semibold text-foreground mb-2">Team Performance Analysis</h3>
+            <p className="text-muted-foreground">Detailed comparison of your team members' performance</p>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Team Members Sales Comparison */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-blue-500" />
+                  Team Sales Performance
+                </CardTitle>
+                <CardDescription>Revenue and deals comparison by team member</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!teamSalesComparison || teamSalesComparison.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No team sales data available</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Debug: Length = {teamSalesComparison?.length || 0}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {teamSalesComparison
+                        .slice((salesPage - 1) * itemsPerPage, salesPage * itemsPerPage)
+                        .map((row: any, idx: number) => {
+                          const agent = row.agent || row.SalesAgentID || 'Unknown'
+                          const revenue = row.revenue || row.agent_revenue || 0
+                          const deals = row.deals || row.agent_deals || 0
+                          const avg = deals > 0 ? revenue / deals : 0
+                          const maxRevenue = Math.max(...teamSalesComparison.map(r => r.revenue || r.agent_revenue || 0))
+                          const performance = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0
+                          
+                          return (
+                            <div key={idx} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center text-white font-semibold">
+                                    {agent.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-medium capitalize">{agent}</h4>
+                                    <p className="text-sm text-muted-foreground">{deals} deals closed</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-green-600">${Number(revenue).toLocaleString()}</p>
+                                  <p className="text-sm text-muted-foreground">Avg: ${Math.round(avg).toLocaleString()}</p>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                  <span>Performance</span>
+                                  <span className="font-medium">{performance.toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-muted rounded-full h-2">
+                                  <div 
+                                    className="bg-gradient-to-r from-blue-500 to-cyan-500 h-2 rounded-full transition-all duration-300" 
+                                    style={{ width: `${Math.min(performance, 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                    
+                    {/* Sales Pagination */}
+                    {teamSalesComparison.length > itemsPerPage && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <p className="text-sm text-muted-foreground">
+                          Showing {((salesPage - 1) * itemsPerPage) + 1} to {Math.min(salesPage * itemsPerPage, teamSalesComparison.length)} of {teamSalesComparison.length} members
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSalesPage(p => Math.max(1, p - 1))}
+                            disabled={salesPage === 1}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-sm font-medium">
+                            {salesPage} of {Math.ceil(teamSalesComparison.length / itemsPerPage)}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSalesPage(p => Math.min(Math.ceil(teamSalesComparison.length / itemsPerPage), p + 1))}
+                            disabled={salesPage >= Math.ceil(teamSalesComparison.length / itemsPerPage)}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Callbacks Comparison */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Phone className="h-5 w-5 text-purple-500" />
+                  Callbacks Performance
+                </CardTitle>
+                <CardDescription>Callback activity and conversion rates by team member</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {callbacksComparison.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Phone className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No callback data available</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {callbacksComparison
+                        .slice((callbacksPage - 1) * itemsPerPage, callbacksPage * itemsPerPage)
+                        .map((row: any, idx: number) => {
+                          const agent = row.agent || 'Unknown'
+                          const callbacks = row.count || row.callbacks || 0
+                          const conversions = row.conversions || 0
+                          const conversionRate = callbacks > 0 ? (conversions / callbacks) * 100 : 0
+                          
+                          return (
+                            <div key={idx} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold">
+                                    {agent.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <h4 className="font-medium capitalize">{agent}</h4>
+                                    <p className="text-sm text-muted-foreground">{callbacks} total callbacks</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-purple-600">{conversions}</p>
+                                  <p className="text-sm text-muted-foreground">conversions</p>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                  <span>Conversion Rate</span>
+                                  <span className="font-medium">{conversionRate.toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-muted rounded-full h-2">
+                                  <div 
+                                    className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300" 
+                                    style={{ width: `${Math.min(conversionRate, 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                    
+                    {/* Callbacks Pagination */}
+                    {callbacksComparison.length > itemsPerPage && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <p className="text-sm text-muted-foreground">
+                          Showing {((callbacksPage - 1) * itemsPerPage) + 1} to {Math.min(callbacksPage * itemsPerPage, callbacksComparison.length)} of {callbacksComparison.length} members
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCallbacksPage(p => Math.max(1, p - 1))}
+                            disabled={callbacksPage === 1}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-sm font-medium">
+                            {callbacksPage} of {Math.ceil(callbacksComparison.length / itemsPerPage)}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCallbacksPage(p => Math.min(Math.ceil(callbacksComparison.length / itemsPerPage), p + 1))}
+                            disabled={callbacksPage >= Math.ceil(callbacksComparison.length / itemsPerPage)}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -450,76 +769,17 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Top Performer</p>
-                <p className="text-lg font-bold capitalize">
-                  {analytics?.topAgents?.[0]?.agent || 'N/A'}
-                </p>
-                <p className="text-xs text-orange-600">
-                  ${(analytics?.topAgents?.[0]?.revenue || 0).toLocaleString()}
-                </p>
+                <p className="text-sm font-medium text-muted-foreground">Today's Revenue</p>
+                <p className="text-2xl font-bold">${analytics.revenueToday.toLocaleString()}</p>
+                <p className="text-xs text-orange-600">Live updates</p>
               </div>
-              <Award className="h-8 w-8 text-orange-600" />
+              <Activity className="h-8 w-8 text-orange-600" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Live KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Revenue Today</p>
-                <p className="text-2xl font-bold">${(analytics?.revenueToday || 0).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Live from stream</p>
-              </div>
-              <Activity className="h-8 w-8 text-cyan-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Deals Today</p>
-                <p className="text-2xl font-bold">{analytics?.dealsToday || 0}</p>
-                <p className="text-xs text-muted-foreground">Live from stream</p>
-              </div>
-              <Users className="h-8 w-8 text-cyan-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Revenue This Week</p>
-                <p className="text-2xl font-bold">${(analytics?.revenueThisWeek || 0).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Mon - Today</p>
-              </div>
-              <BarChart3 className="h-8 w-8 text-emerald-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Deals This Week</p>
-                <p className="text-2xl font-bold">{analytics?.dealsThisWeek || 0}</p>
-                <p className="text-xs text-muted-foreground">Mon - Today</p>
-              </div>
-              <Users className="h-8 w-8 text-emerald-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Charts */}
+      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Trend Chart */}
         <Card>
@@ -579,11 +839,31 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {(() => {
+              const pieData = userRole === 'manager' ? analytics.teamPerformance : analytics.servicePerformance;
+              console.log('🔍 Pie Chart Data:', {
+                userRole,
+                pieDataLength: pieData?.length || 0,
+                pieData: pieData
+              });
+              return null;
+            })()}
             <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={userRole === 'manager' ? analytics.teamPerformance : analytics.servicePerformance}
+              {(userRole === 'manager' ? analytics.teamPerformance : analytics.servicePerformance).length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No service data available</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Debug: Length = {(userRole === 'manager' ? analytics.teamPerformance : analytics.servicePerformance).length}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={userRole === 'manager' ? analytics.teamPerformance : analytics.servicePerformance}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -591,22 +871,23 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     fill="#8884d8"
                     dataKey="revenue"
                     nameKey={userRole === 'manager' ? 'team' : 'service'}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(2)}%`}
                   >
-                    {(userRole === 'manager' ? analytics.teamPerformance : analytics.servicePerformance).map((_, index) => (
+                    {(userRole === 'manager' ? analytics.teamPerformance : analytics.servicePerformance).map((_: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value) => [`$${value}`, 'Revenue']} />
                 </PieChart>
               </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Performance Analysis */}
-      {userRole === 'manager' && (
+      {userRole === 'manager' && analytics.topAgents.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Top Performers */}
           <Card>
@@ -684,18 +965,18 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
               </thead>
               <tbody>
                 {userRole === 'manager' ? (
-                  analytics.topAgents.map((item, index) => {
-                    const name = item.agent
-                    const revenue = item.revenue
-                    const deals = item.deals
-                    const avgDeal = revenue / deals
-                    const maxRevenue = analytics.topAgents[0]?.revenue || 1
-                    const performance = (revenue / maxRevenue) * 100
+                  analytics.topAgents.map((item: any, index: number) => {
+                    const name = item.agent || item.SalesAgentID || 'Unknown'
+                    const revenue = item.revenue || item.agent_revenue || 0
+                    const deals = item.deals || item.agent_deals || 0
+                    const avgDeal = deals > 0 ? revenue / deals : 0
+                    const maxRevenue = analytics.topAgents[0]?.revenue || analytics.topAgents[0]?.agent_revenue || 1
+                    const performance = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0
 
                     return (
                       <tr key={index} className="border-b hover:bg-muted/50">
-                        <td className="py-3 font-medium capitalize text-cyan-700 hover:underline">
-                          <Link href={`/agents/${encodeURIComponent(name)}`}>{name}</Link>
+                        <td className="py-3 font-medium capitalize text-cyan-700">
+                          {name}
                         </td>
                         <td className="py-3 font-semibold">${revenue.toLocaleString()}</td>
                         <td className="py-3">{deals}</td>
@@ -705,7 +986,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                             <div className="w-20 bg-muted rounded-full h-2">
                               <div 
                                 className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full" 
-                                style={{ width: `${performance}%` }}
+                                style={{ width: `${Math.min(performance, 100)}%` }}
                               />
                             </div>
                             <span className="text-xs font-medium">
@@ -717,13 +998,13 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                     )
                   })
                 ) : (
-                  analytics.servicePerformance.map((item, index) => {
-                    const name = item.service
-                    const revenue = item.revenue
-                    const deals = item.deals
-                    const avgDeal = revenue / deals
+                  analytics.servicePerformance.map((item: any, index: number) => {
+                    const name = item.service || 'Unknown'
+                    const revenue = item.revenue || 0
+                    const deals = item.deals || 0
+                    const avgDeal = deals > 0 ? revenue / deals : 0
                     const maxRevenue = analytics.servicePerformance[0]?.revenue || 1
-                    const performance = (revenue / maxRevenue) * 100
+                    const performance = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0
 
                     return (
                       <tr key={index} className="border-b hover:bg-muted/50">
@@ -736,7 +1017,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
                             <div className="w-20 bg-muted rounded-full h-2">
                               <div 
                                 className="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full" 
-                                style={{ width: `${performance}%` }}
+                                style={{ width: `${Math.min(performance, 100)}%` }}
                               />
                             </div>
                             <span className="text-xs font-medium">
@@ -753,31 +1034,6 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           </div>
         </CardContent>
       </Card>
-    </div>
-  )
-}
-
-// Simple date range picker component
-function DatePickerWithRange({ 
-  date, 
-  onDateChange 
-}: { 
-  date: { from: Date; to: Date }; 
-  onDateChange: (range: { from: Date; to: Date }) => void 
-}) {
-  return (
-    <div className="flex gap-2">
-      <Input
-        type="date"
-        value={format(date.from, 'yyyy-MM-dd')}
-        onChange={(e) => onDateChange({ ...date, from: new Date(e.target.value) })}
-      />
-      <span className="flex items-center text-muted-foreground">to</span>
-      <Input
-        type="date"
-        value={format(date.to, 'yyyy-MM-dd')}
-        onChange={(e) => onDateChange({ ...date, to: new Date(e.target.value) })}
-      />
     </div>
   )
 }

@@ -43,10 +43,10 @@ export async function GET(request: NextRequest) {
         if (status) { where.push('`status` = ?'); params.push(status); }
         const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
         const [rows] = await query<any>(
-          `SELECT * FROM \`deals\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          `SELECT * FROM  deals  ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
           [...params, limit, offset]
         );
-        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`deals\` ${whereSql}`, params);
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM  deals  ${whereSql}`, params);
         payload = { deals: rows, total: totals[0]?.c || 0, page, limit };
         break;
       }
@@ -61,10 +61,10 @@ export async function GET(request: NextRequest) {
         if (status) { where.push('`status` = ?'); params.push(status); }
         const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
         const [rows] = await query<any>(
-          `SELECT * FROM \`callbacks\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          `SELECT * FROM  callbacks  ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
           [...params, limit, offset]
         );
-        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`callbacks\` ${whereSql}`, params);
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM  callbacks  ${whereSql}`, params);
         payload = { callbacks: rows, total: totals[0]?.c || 0, page, limit };
         break;
       }
@@ -75,10 +75,10 @@ export async function GET(request: NextRequest) {
         if (agentId) { where.push('`agentId` = ?'); params.push(agentId); }
         const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
         const [rows] = await query<any>(
-          `SELECT * FROM \`targets\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          `SELECT * FROM  targets  ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
           [...params, limit, offset]
         );
-        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`targets\` ${whereSql}`, params);
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM  targets  ${whereSql}`, params);
         payload = { targets: rows, total: totals[0]?.c || 0, page, limit };
         break;
       }
@@ -92,10 +92,10 @@ export async function GET(request: NextRequest) {
         if (userRole) { where.push('`userRole` = ?'); params.push(userRole); }
         const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
         const [rows] = await query<any>(
-          `SELECT * FROM \`notifications\` ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          `SELECT * FROM  notifications  ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
           [...params, limit, offset]
         );
-        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`notifications\` ${whereSql}`, params);
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM  notifications  ${whereSql}`, params);
         payload = { notifications: rows, total: totals[0]?.c || 0, page, limit };
         break;
       }
@@ -110,10 +110,10 @@ export async function GET(request: NextRequest) {
         if (team) { where.push('`team` = ?'); params.push(team); }
         const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
         const [rows] = await query<any>(
-          `SELECT * FROM \`users\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
+          `SELECT * FROM  users  ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
           [...params, limit, offset]
         );
-        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`users\` ${whereSql}`, params);
+        const [totals] = await query<any>(`SELECT COUNT(*) as c FROM  users  ${whereSql}`, params);
         payload = { users: rows, total: totals[0]?.c || 0, page, limit };
         break;
       }

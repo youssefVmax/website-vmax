@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     
     await query<any>(
-      `INSERT INTO \`activity_log\` (id, user_id, action, entity_type, entity_id, new_values, created_at) 
+      `INSERT INTO  activity_log  (id, user_id, action, entity_type, entity_id, new_values, created_at) 
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         logId,
@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
     }
 
     const [rows] = await query<any>(
-      `SELECT * FROM \`${tableName}\` ${whereClause} ORDER BY created_at DESC`,
+      `SELECT * FROM  ${tableName}  ${whereClause} ORDER BY created_at DESC`,
       params
     );
 
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     
     await query<any>(
-      `INSERT INTO \`activity_log\` (id, user_id, action, entity_type, entity_id, new_values, created_at) 
+      `INSERT INTO  activity_log  (id, user_id, action, entity_type, entity_id, new_values, created_at) 
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         logId,

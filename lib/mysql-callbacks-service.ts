@@ -170,7 +170,7 @@ class MySQLCallbacksService implements CallbacksService {
       
       if (userRole === 'salesman' && userId) {
         filters.salesAgentId = userId;
-      } else if (userRole === 'team-leader' && managedTeam) {
+      } else if (userRole === 'team_leader' && managedTeam) {
         filters.salesTeam = managedTeam;
       }
       // Managers can see all callbacks (no filters)

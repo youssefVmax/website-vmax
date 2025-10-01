@@ -70,20 +70,24 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ Auth API: Could not update last login:', updateError);
     }
 
-    // Return user data (excluding password)
+    // Return user data (excluding password) with proper field mapping
     const userData = {
       id: user.id,
       username: user.username,
       email: user.email,
-      full_name: user.full_name || user.name || user.display_name,
+      name: user.name || user.full_name || user.display_name || user.username,
       phone: user.phone,
       role: user.role || user.user_role || 'salesman',
-      team_id: user.team_id,
-      team_name: user.team_name,
+      team: user.team || user.team_name,
+      managedTeam: user.managedTeam,
+      created_by: user.created_by,
       is_active: user.is_active !== false && user.status !== 'inactive',
-      last_login: user.last_login,
       created_at: user.created_at,
-      updated_at: user.updated_at
+      updated_at: user.updated_at,
+      // Backward compatibility fields
+      full_name: user.name || user.full_name || user.display_name || user.username,
+      team_name: user.team || user.team_name,
+      team_id: user.team_id
     };
 
     console.log('✅ Auth API: Authentication successful for:', username);

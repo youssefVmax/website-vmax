@@ -16,7 +16,7 @@ export default function NotificationMenu() {
   const visible = useMemo(() => {
     if (!user) return []
     if (user.role === 'manager') return notifications
-    return notifications.filter(n => Array.isArray(n.to) && (n.to.includes('ALL') || n.to.includes(user.id)))
+    return notifications.filter(n => Array.isArray(n.to) && (n.to.includes('all') || n.to.includes(user.id)))
   }, [notifications, user])
 
   const latest = visible.slice(0, 8)

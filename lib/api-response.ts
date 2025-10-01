@@ -26,6 +26,7 @@ interface ResponseOptions {
     page?: number;
     limit?: number;
     total?: number;
+    totalPages?: number;
   };
   logInfo?: {
     action: string;
@@ -257,9 +258,6 @@ class ApiResponseHandler {
     res.status(401).json(response);
   }
 
-  /**
-   * Send a forbidden response
-   */
   public static sendForbidden(
     res: Response,
     message: string = 'Forbidden',
@@ -269,6 +267,7 @@ class ApiResponseHandler {
         userId?: string | number;
         resourceId?: string | number;
         ip?: string;
+        metadata?: any;
       };
     } = {}
   ): void {
@@ -297,4 +296,5 @@ class ApiResponseHandler {
   }
 }
 
-export { ApiResponse, ApiResponseHandler };
+export type { ApiResponse };
+export { ApiResponseHandler };

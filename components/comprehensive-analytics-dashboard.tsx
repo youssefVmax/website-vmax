@@ -22,7 +22,7 @@ const CHART_COLORS = {
 }
 
 interface DashboardProps {
-  userRole: 'manager' | 'team-leader' | 'salesman'
+  userRole: 'manager' | 'team_leader' | 'salesman'
   userId?: string
   userName?: string
   userTeam?: string
@@ -158,7 +158,7 @@ export default function ComprehensiveAnalyticsDashboard({ userRole, userId, user
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
           <p className="text-muted-foreground">
-            Comprehensive analytics and KPIs for {userRole === 'manager' ? 'all teams' : userRole === 'team-leader' ? `${managedTeam} team` : 'your performance'}
+            Comprehensive analytics and KPIs for {userRole === 'manager' ? 'all teams' : userRole === 'team_leader' ? `${managedTeam} team` : 'your performance'}
           </p>
         </div>
         

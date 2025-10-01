@@ -1,18 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/server/db';
 
+// Force dynamic rendering - NO CACHING
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 interface AnalyticsFilters {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   userId?: string;
   userName?: string;
   managedTeam?: string;
   dateRange?: string;
 }
 
+function addCorsHeaders(res: NextResponse) {
+  res.headers.set('Access-Control-Allow-Origin', '*');
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  // CRITICAL: No caching headers
+  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.headers.set('Pragma', 'no-cache');
+  res.headers.set('Expires', '0');
+  res.headers.set('X-Accel-Expires', '0');
+  return res;
+}
+
+export async function OPTIONS() {
+  return addCorsHeaders(new NextResponse(null, { status: 200 }));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team-leader';
+    const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team_leader';
     const userId = searchParams.get('userId');
     const userName = searchParams.get('userName');
     const managedTeam = searchParams.get('managedTeam');
@@ -34,7 +56,7 @@ export async function GET(request: NextRequest) {
       callbacksQuery += ' AND SalesAgentID = ?';
       targetsQuery += ' AND agentId = ?';
       queryParams.push(userId, userId, userId, userId);
-    } else if (userRole === 'team-leader' && managedTeam) {
+    } else if (userRole === 'team_leader' && managedTeam) {
       dealsQuery += ' AND (sales_team = ? OR SalesAgentID = ?)';
       callbacksQuery += ' AND (sales_team = ? OR SalesAgentID = ?)';
       targetsQuery += ' AND (managerId = ? OR agentId = ?)';
@@ -85,7 +107,7 @@ export async function GET(request: NextRequest) {
     // Calculate analytics
     const analytics = calculateAnalytics(deals, callbacks, targets, userRole);
 
-    return NextResponse.json({
+    return addCorsHeaders(NextResponse.json({
       success: true,
       data: {
         deals,
@@ -100,19 +122,21 @@ export async function GET(request: NextRequest) {
           dateRange
         }
       },
-      timestamp: new Date().toISOString()
-    });
+      timestamp: new Date().toISOString(),
+      fresh: true // Indicator that this is fresh data
+    }));
 
   } catch (error) {
     console.error('Analytics API error:', error);
-    return NextResponse.json(
+    return addCorsHeaders(NextResponse.json(
       { 
         success: false, 
         error: 'Failed to fetch analytics data',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
       },
       { status: 500 }
-    );
+    ));
   }
 }
 
@@ -127,7 +151,7 @@ function getQueryParams(userRole: string, userId?: string | null, managedTeam?: 
     } else if (queryType === 'targets') {
       params.push(userId); // agentId
     }
-  } else if (userRole === 'team-leader' && managedTeam && userId) {
+  } else if (userRole === 'team_leader' && managedTeam && userId) {
     if (queryType === 'deals') {
       params.push(managedTeam, userId); // sales_team, SalesAgentID
     } else if (queryType === 'callbacks') {

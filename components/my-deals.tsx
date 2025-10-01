@@ -15,30 +15,33 @@ export default function MyDeals() {
   const userId = user?.id
   const { deals, loading, error, refreshData } = useMySQLSalesData({ 
     userRole: role as any, 
-    userId, 
-    userName: user?.name 
+    userId: userId?.toString(), 
+    userName: user?.username || user?.name || '' 
   })
   const [filter, setFilter] = useState("")
   const [refreshing, setRefreshing] = useState(false)
 
   const myDeals = useMemo(() => {
     const rows = (deals || [])
-      .filter((r: any) => r && r.customer_name && r.DealID)
+      .filter((r: any) => r && (r.customerName || r.customer_name) && (r.dealId || r.DealID || r.id))
       .filter((r: any) => {
         if (!filter) return true
         const f = filter.toLowerCase()
         return (
-          r.customer_name?.toLowerCase?.().includes(f) ||
-          r.DealID?.toLowerCase?.().includes(f) ||
-          r.sales_agent?.toLowerCase?.().includes(f) ||
-          r.closing_agent?.toLowerCase?.().includes(f)
+          (r.customerName || r.customer_name)?.toLowerCase?.().includes(f) ||
+          (r.dealId || r.DealID || r.id)?.toLowerCase?.().includes(f) ||
+          (r.salesAgentName || r.sales_agent)?.toLowerCase?.().includes(f) ||
+          (r.closingAgentName || r.closing_agent)?.toLowerCase?.().includes(f)
         )
       })
     return rows
-  }, [sales, filter])
+  }, [deals, filter])
 
   const totals = useMemo(() => {
-    const sum = myDeals.reduce((acc: number, r: any) => acc + (typeof r.amount === 'number' ? r.amount : parseFloat(String(r.amount)) || 0), 0)
+    const sum = myDeals.reduce((acc: number, r: any) => {
+      const amount = r.amountPaid || r.amount_paid || r.amount || 0
+      return acc + (typeof amount === 'number' ? amount : parseFloat(String(amount)) || 0)
+    }, 0)
     const count = myDeals.length
     return { sum, count }
   }, [myDeals])
@@ -47,12 +50,15 @@ export default function MyDeals() {
   const userTarget = role === 'salesman' ? 20000 : 0
   const systemTarget = 200000
   const userRemaining = Math.max(userTarget - totals.sum, 0)
-  const systemRemaining = Math.max(systemTarget - (sales || []).reduce((acc: number, r: any) => acc + (typeof r.amount === 'number' ? r.amount : parseFloat(String(r.amount)) || 0), 0), 0)
+  const systemRemaining = Math.max(systemTarget - (deals || []).reduce((acc: number, r: any) => {
+    const amount = r.amountPaid || r.amount_paid || r.amount || 0
+    return acc + (typeof amount === 'number' ? amount : parseFloat(String(amount)) || 0)
+  }, 0), 0)
 
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await refresh()
+      await refreshData?.()
     } finally {
       setRefreshing(false)
     }
@@ -124,14 +130,14 @@ export default function MyDeals() {
               </TableHeader>
               <TableBody>
                 {myDeals.map((d: any) => (
-                  <TableRow key={d.DealID}>
-                    <TableCell className="font-medium">{d.DealID}</TableCell>
-                    <TableCell>{d.date}</TableCell>
-                    <TableCell>{d.customer_name}</TableCell>
-                    <TableCell>{d.type_service || d.service_tier}</TableCell>
-                    <TableCell>{d.sales_agent}</TableCell>
-                    <TableCell>{d.closing_agent}</TableCell>
-                    <TableCell className="text-right">${(typeof d.amount === 'number' ? d.amount : parseFloat(String(d.amount)) || 0).toLocaleString()}</TableCell>
+                  <TableRow key={d.dealId || d.DealID || d.id}>
+                    <TableCell className="font-medium">{d.dealId || d.DealID || d.id}</TableCell>
+                    <TableCell>{d.signupDate || d.date || d.createdAt}</TableCell>
+                    <TableCell>{d.customerName || d.customer_name}</TableCell>
+                    <TableCell>{d.serviceTier || d.type_service || d.service_tier}</TableCell>
+                    <TableCell>{d.salesAgentName || d.sales_agent}</TableCell>
+                    <TableCell>{d.closingAgentName || d.closing_agent}</TableCell>
+                    <TableCell className="text-right">${((d.amountPaid || d.amount_paid || d.amount || 0)).toLocaleString()}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

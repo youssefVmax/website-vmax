@@ -43,13 +43,11 @@ interface NumberAssignment {
 }
 
 interface DataCenterProps {
-  userRole: 'manager' | 'salesman' | 'team-leader'
+  userRole: 'manager' | 'salesman' | 'team_leader'
   user: { name: string; username: string; id: string }
 }
 
-export { EnhancedDataCenter as DataCenter } from './enhanced-data-center'
-
-export function DataCenterOld({ userRole, user }: DataCenterProps) {
+export function DataCenter({ userRole, user }: DataCenterProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [users, setUsers] = useState<any[]>([])

@@ -26,7 +26,7 @@ import {
 } from "lucide-react"
 import { ManagerApiService } from "@/lib/api-service"
 import { mysqlAnalyticsService } from "@/lib/mysql-analytics-service"
-import { User } from "@/lib/auth"
+import { User } from '@/types/user'
 
 interface TeamLeaderDashboardProps {
   user: User
@@ -83,7 +83,7 @@ export default function TeamLeaderPaginatedDashboard({ user, userRole }: TeamLea
   const apiService = new ManagerApiService()
 
   useEffect(() => {
-    if (userRole === 'team-leader' && managedTeam) {
+    if (userRole === 'team_leader' && managedTeam) {
       loadInitialData()
     }
   }, [userRole, managedTeam])
@@ -337,7 +337,7 @@ export default function TeamLeaderPaginatedDashboard({ user, userRole }: TeamLea
     </div>
   )
 
-  if (userRole !== 'team-leader') {
+  if (userRole !== 'team_leader') {
     return (
       <Card className="w-full max-w-2xl mx-auto mt-8">
         <CardHeader>

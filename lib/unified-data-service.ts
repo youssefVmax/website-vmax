@@ -1,7 +1,7 @@
 import { requestManager } from './request-manager';
 
 export interface UnifiedDataOptions {
-  userRole: 'manager' | 'team-leader' | 'salesman';
+  userRole: 'manager' | 'team_leader' | 'salesman';
   userId?: string;
   userName?: string;
   managedTeam?: string;

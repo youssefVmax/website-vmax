@@ -64,13 +64,12 @@ export async function GET(request: NextRequest) {
         dataQuery = `
           SELECT 
             d.*,
-            u1.name as sent_to_name,
-            u1.username as sent_to_username,
-            u2.name as sent_by_name,
+            u_by.name AS sent_by_name,
+            u_to.name AS sent_to_name,
             (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id) as feedback_count
           FROM data_center d
-          LEFT JOIN users u1 ON d.sent_to_id = u1.id
-          LEFT JOIN users u2 ON d.sent_by_id = u2.id
+          LEFT JOIN users u_by ON u_by.id = d.sent_by_id
+          LEFT JOIN users u_to ON u_to.id = d.sent_to_id
           WHERE d.sent_by_id = ?
           ORDER BY d.created_at DESC
           LIMIT ? OFFSET ?
@@ -83,13 +82,12 @@ export async function GET(request: NextRequest) {
         dataQuery = `
           SELECT 
             d.*,
-            u1.name as sent_to_name,
-            u1.username as sent_to_username,
-            u2.name as sent_by_name,
+            u_by.name AS sent_by_name,
+            u_to.name AS sent_to_name,
             (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id) as feedback_count
           FROM data_center d
-          LEFT JOIN users u1 ON d.sent_to_id = u1.id
-          LEFT JOIN users u2 ON d.sent_by_id = u2.id
+          LEFT JOIN users u_by ON u_by.id = d.sent_by_id
+          LEFT JOIN users u_to ON u_to.id = d.sent_to_id
           ORDER BY d.created_at DESC
           LIMIT ? OFFSET ?
         `;
@@ -102,40 +100,55 @@ export async function GET(request: NextRequest) {
       dataQuery = `
         SELECT 
           d.*,
-          u1.name as sent_to_name,
-          u1.username as sent_to_username,
-          u2.name as sent_by_name,
+          u_by.name AS sent_by_name,
+          u_to.name AS sent_to_name,
           (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id) as feedback_count,
           (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id AND df.user_id = ?) as my_feedback_count
         FROM data_center d
-        LEFT JOIN users u1 ON d.sent_to_id = u1.id
-        LEFT JOIN users u2 ON d.sent_by_id = u2.id
-        WHERE d.sent_to_id = ? OR d.sent_to_team = (SELECT team FROM users WHERE id = ?)
+        LEFT JOIN users u_by ON u_by.id = d.sent_by_id
+        LEFT JOIN users u_to ON u_to.id = d.sent_to_id
+        WHERE d.sent_to_id = ? OR d.sent_to_team IN ('ALI ASHRAF', 'CS TEAM', 'SALES', 'SUPPORT')
         ORDER BY d.created_at DESC
         LIMIT ? OFFSET ?
       `;
       countQuery = `
         SELECT COUNT(*) as total FROM data_center d
-        WHERE d.sent_to_id = ? OR d.sent_to_team = (SELECT team FROM users WHERE id = ?)
+        WHERE d.sent_to_id = ? OR d.sent_to_team IN ('ALI ASHRAF', 'CS TEAM', 'SALES', 'SUPPORT')
       `;
-      params = [userId, userId, userId, limit, offset];
-      countParams = [userId, userId];
+      params = [userId, userId, limit, offset];
+      countParams = [userId];
     }
 
     console.log('🔍 Executing query:', dataQuery);
     console.log('🔍 Query params:', params);
 
-    // Execute queries
-    const [data, countResult] = await Promise.all([
-      query<any>(dataQuery, params),
-      query<any>(countQuery, countParams)
-    ]);
+    // Execute queries with graceful handling for missing tables
+    let dataRows: any[] = [];
+    let countRows: any[] = [{ total: 0 }];
+    try {
+      const [[qDataRows], [qCountRows]] = await Promise.all([
+        query<any>(dataQuery, params),
+        query<any>(countQuery, countParams)
+      ]);
+      dataRows = qDataRows as any[];
+      countRows = qCountRows as any[];
+    } catch (e: any) {
+      const msg = (e && (e.code || e.message || '')) as string;
+      const isMissingTable = msg.includes("ER_NO_SUCH_TABLE") || msg.toLowerCase().includes("doesn't exist") || msg.toLowerCase().includes('does not exist');
+      if (isMissingTable) {
+        console.warn('⚠️ data_center or data_feedback table missing. Returning empty result.');
+        dataRows = [];
+        countRows = [{ total: 0 } as any];
+      } else {
+        throw e;
+      }
+    }
 
-    const total = countResult[0]?.total || 0;
+    const total = (countRows as any)[0]?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
     // Format the data
-    const formattedData = data.map((item: any) => ({
+    const formattedData = dataRows.map((item: any) => ({
       ...item,
       created_at: item.created_at ? new Date(item.created_at).toISOString() : null,
       updated_at: item.updated_at ? new Date(item.updated_at).toISOString() : null
@@ -159,12 +172,21 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ Data Center API Error:', error);
-    const response = NextResponse.json({
+    const errorResponse = NextResponse.json({
       success: false,
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Internal server error',
+      data: [],
+      pagination: {
+        page: 1,
+        limit: 50,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false
+      },
+      timestamp: new Date().toISOString()
     }, { status: 500 });
-    return addCorsHeaders(response);
+    return addCorsHeaders(errorResponse);
   }
 }
 
@@ -275,7 +297,7 @@ export async function PUT(request: NextRequest) {
       WHERE id = ? AND (sent_by_id = ? OR ? = 'manager')
     `;
     
-    const existingData = await query<any>(checkQuery, [dataId, userId, userRole]);
+    const [existingData] = await query<any>(checkQuery, [dataId, userId, userRole]);
     
     if (existingData.length === 0) {
       const response = NextResponse.json({
@@ -325,9 +347,9 @@ export async function PUT(request: NextRequest) {
     
     console.log('🔄 Executing update:', updateQuery, params);
 
-    const result = await query(updateQuery, params);
+    const [updateResult]: any = await query(updateQuery, params);
     
-    if ((result as any).affectedRows === 0) {
+    if ((updateResult as any).affectedRows === 0) {
       const response = NextResponse.json({
         success: false,
         error: 'No rows updated'
@@ -385,9 +407,9 @@ export async function DELETE(request: NextRequest) {
     
     // Delete the data entry
     const deleteQuery = 'DELETE FROM data_center WHERE id = ? AND sent_by_id = ?';
-    const result = await query(deleteQuery, [dataId, userId]);
+    const [deleteResult]: any = await query(deleteQuery, [dataId, userId]);
     
-    if ((result as any).affectedRows === 0) {
+    if ((deleteResult as any).affectedRows === 0) {
       const response = NextResponse.json({
         success: false,
         error: 'Data not found or you do not have permission to delete it'

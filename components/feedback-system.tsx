@@ -20,7 +20,7 @@ import {
   Filter,
   Plus
 } from "lucide-react"
-import { User as AuthUser } from "@/lib/auth"
+import { User as AuthUser } from "@/types/user"
 
 interface FeedbackSystemProps {
   user: AuthUser
@@ -63,9 +63,17 @@ export default function FeedbackSystem({ user }: FeedbackSystemProps) {
     priority: 'medium' as const
   })
 
+  const isManager = user?.role === 'manager'
+
   useEffect(() => {
-    loadFeedbacks()
-  }, [user, filter])
+    if (isManager) {
+      loadFeedbacks()
+    } else {
+      // Non-managers do not load list view
+      setFeedbacks([])
+      setLoading(false)
+    }
+  }, [user, filter, isManager])
 
   const loadFeedbacks = async () => {
     try {
@@ -261,141 +269,145 @@ export default function FeedbackSystem({ user }: FeedbackSystemProps) {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Filter className="h-4 w-4 mr-2" />
-            Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <Label>Status</Label>
-              <Select value={filter.status || ''} onValueChange={(value) => setFilter(prev => ({ ...prev, status: value || undefined }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Type</Label>
-              <Select value={filter.feedbackType || ''} onValueChange={(value) => setFilter(prev => ({ ...prev, feedbackType: value || undefined }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All Types</SelectItem>
-                  <SelectItem value="general">General</SelectItem>
-                  <SelectItem value="bug_report">Bug Report</SelectItem>
-                  <SelectItem value="feature_request">Feature Request</SelectItem>
-                  <SelectItem value="data_issue">Data Issue</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Priority</Label>
-              <Select value={filter.priority || ''} onValueChange={(value) => setFilter(prev => ({ ...prev, priority: value || undefined }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All priorities" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All Priorities</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Feedback List */}
-      <div className="space-y-4">
-        {loading ? (
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center">Loading feedback...</div>
-            </CardContent>
-          </Card>
-        ) : feedbacks.length === 0 ? (
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center text-muted-foreground">
-                No feedback found. Submit your first feedback to get started!
+      {isManager && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>Status</Label>
+                <Select value={filter.status || ''} onValueChange={(value) => setFilter(prev => ({ ...prev, status: value || undefined }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Statuses</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
-        ) : (
-          feedbacks.map((feedback) => (
-            <Card key={feedback.id}>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <CardTitle className="flex items-center space-x-2">
-                      {getTypeIcon(feedback.feedback_type)}
-                      <span>{feedback.subject}</span>
-                    </CardTitle>
-                    <CardDescription className="flex items-center space-x-2">
-                      <User className="h-3 w-3" />
-                      <span>{feedback.user_name} ({feedback.user_role})</span>
-                      <span>•</span>
-                      <span>{new Date(feedback.created_at).toLocaleDateString()}</span>
-                    </CardDescription>
-                  </div>
-                  <div className="flex space-x-2">
-                    <Badge className={getStatusColor(feedback.status)}>
-                      {feedback.status.replace('_', ' ')}
-                    </Badge>
-                    <Badge className={getPriorityColor(feedback.priority)}>
-                      {feedback.priority}
-                    </Badge>
-                    <Badge variant="outline">
-                      {feedback.feedback_type.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {feedback.message}
-                </p>
-                {feedback.response && (
-                  <div className="border-t pt-4">
-                    <div className="bg-muted p-3 rounded">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                        <span className="font-medium text-sm">Response from Data Center</span>
-                        {feedback.response_by && (
-                          <span className="text-xs text-muted-foreground">
-                            by {feedback.response_by}
-                          </span>
-                        )}
-                        {feedback.response_at && (
-                          <span className="text-xs text-muted-foreground">
-                            on {new Date(feedback.response_at).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm">{feedback.response}</p>
-                    </div>
-                  </div>
-                )}
+              <div>
+                <Label>Type</Label>
+                <Select value={filter.feedbackType || ''} onValueChange={(value) => setFilter(prev => ({ ...prev, feedbackType: value || undefined }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Types</SelectItem>
+                    <SelectItem value="general">General</SelectItem>
+                    <SelectItem value="bug_report">Bug Report</SelectItem>
+                    <SelectItem value="feature_request">Feature Request</SelectItem>
+                    <SelectItem value="data_issue">Data Issue</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Priority</Label>
+                <Select value={filter.priority || ''} onValueChange={(value) => setFilter(prev => ({ ...prev, priority: value || undefined }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All priorities" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Priorities</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Feedback List - Managers only */}
+      {isManager && (
+        <div className="space-y-4">
+          {loading ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center">Loading feedback...</div>
               </CardContent>
             </Card>
-          ))
-        )}
-      </div>
+          ) : feedbacks.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center text-muted-foreground">
+                  No feedback found.
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            feedbacks.map((feedback) => (
+              <Card key={feedback.id}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <CardTitle className="flex items-center space-x-2">
+                        {getTypeIcon(feedback.feedback_type)}
+                        <span>{feedback.subject}</span>
+                      </CardTitle>
+                      <CardDescription className="flex items-center space-x-2">
+                        <User className="h-3 w-3" />
+                        <span>{feedback.user_name} ({feedback.user_role})</span>
+                        <span>•</span>
+                        <span>{new Date(feedback.created_at).toLocaleDateString()}</span>
+                      </CardDescription>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Badge className={getStatusColor(feedback.status)}>
+                        {feedback.status.replace('_', ' ')}
+                      </Badge>
+                      <Badge className={getPriorityColor(feedback.priority)}>
+                        {feedback.priority}
+                      </Badge>
+                      <Badge variant="outline">
+                        {feedback.feedback_type.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {feedback.message}
+                  </p>
+                  {feedback.response && (
+                    <div className="border-t pt-4">
+                      <div className="bg-muted p-3 rounded">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <span className="font-medium text-sm">Response from Data Center</span>
+                          {feedback.response_by && (
+                            <span className="text-xs text-muted-foreground">
+                              by {feedback.response_by}
+                            </span>
+                          )}
+                          {feedback.response_at && (
+                            <span className="text-xs text-muted-foreground">
+                              on {new Date(feedback.response_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm">{feedback.response}</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

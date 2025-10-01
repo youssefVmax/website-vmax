@@ -4,7 +4,7 @@ import { query } from '@/lib/server/db';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team-leader';
+    const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team_leader';
     const dataTypes = (searchParams.get('dataTypes') || 'deals').split(',');
     
     console.log('🔄 Debug Unified API: Starting with params:', { userRole, dataTypes });

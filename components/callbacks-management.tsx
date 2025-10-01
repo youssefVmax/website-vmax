@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ServerPagination } from "@/components/ui/server-pagination";
+import { useServerPagination } from "@/hooks/useServerPagination";
 import { showSuccess, showError, showCallbackAdded, showDealAdded } from "@/lib/sweetalert";
-import { Phone, Calendar, Clock, User, MessageSquare, CheckCircle, XCircle, Edit } from "lucide-react";
+import { Phone, Calendar, Clock, User, MessageSquare, CheckCircle, XCircle, Edit, Search, Loader2 } from "lucide-react";
 import { apiService, Callback as APICallback } from "@/lib/api-service";
 
 // View model we will use consistently with camelCase fields
@@ -44,27 +46,85 @@ interface CallbacksManagementProps {
 
 export function CallbacksManagement({ userRole, user }: CallbacksManagementProps) {
   const [callbacks, setCallbacks] = useState<Callback[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [totalCallbacks, setTotalCallbacks] = useState(0);
   const [selectedCallback, setSelectedCallback] = useState<Callback | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [filter, setFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
-  // Fetch callbacks using API service
-  const fetchCallbacks = async () => {
+  // Server pagination hook
+  const [paginationState, paginationActions] = useServerPagination({
+    initialPage: 1,
+    initialItemsPerPage: 25,
+    onPageChange: (page, itemsPerPage) => {
+      fetchCallbacks(page, itemsPerPage, debouncedSearchTerm, filter);
+    }
+  });
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Reset to first page when search or filter changes
+  useEffect(() => {
+    if (debouncedSearchTerm !== searchTerm) return; // Wait for debounce
+    paginationActions.goToFirstPage();
+  }, [debouncedSearchTerm, filter]);
+
+  // Fetch callbacks with pagination
+  const fetchCallbacks = useCallback(async (
+    page: number = paginationState.currentPage,
+    limit: number = paginationState.itemsPerPage,
+    search: string = debouncedSearchTerm,
+    statusFilter: string = filter
+  ) => {
     try {
-      setLoading(true);
-      let filters: Record<string, string> = {};
+      paginationActions.setIsLoading(true);
       
-      if (userRole === 'salesman') {
-        filters.salesAgentId = user?.id;
-      } else if (userRole === 'team-leader' && user?.managedTeam) {
-        filters.salesTeam = user.managedTeam;
+      // Build API parameters
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        userRole,
+        userId: user?.id || ''
+      });
+      
+      // Add search if provided
+      if (search.trim()) {
+        params.append('search', search.trim());
       }
       
-      const data = await apiService.getCallbacks(filters);
+      // Add status filter if not 'all'
+      if (statusFilter && statusFilter !== 'all') {
+        params.append('status', statusFilter);
+      }
+      
+      // Role-based filtering
+      if (userRole === 'salesman') {
+        params.append('salesAgentId', user?.id);
+      } else if (userRole === 'team_leader' && user?.managedTeam) {
+        params.append('salesTeam', user.managedTeam);
+      }
+      
+      // Fetch from API
+      const response = await fetch(`/api/callbacks?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch callbacks');
+      }
+      
       // Normalize to camelCase view model
-      const convertedData: Callback[] = data.map((cb: any) => ({
+      const convertedData: Callback[] = (result.callbacks || []).map((cb: any) => ({
         id: cb.id,
         customerName: cb.customerName ?? cb.customer_name ?? '',
         phoneNumber: cb.phoneNumber ?? cb.phone_number ?? '',
@@ -85,26 +145,26 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
         convertedAt: cb.converted_at ?? cb.convertedAt ?? undefined,
         convertedBy: cb.converted_by ?? cb.convertedBy ?? undefined,
       }));
+      
       setCallbacks(convertedData);
+      setTotalCallbacks(result.total || 0);
+      paginationActions.setTotalItems(result.total || 0);
+      
     } catch (error) {
       console.error('Error fetching callbacks:', error);
       showError('Error', 'Failed to load callbacks');
+      setCallbacks([]);
+      setTotalCallbacks(0);
+      paginationActions.setTotalItems(0);
     } finally {
-      setLoading(false);
+      paginationActions.setIsLoading(false);
     }
-  };
+  }, [userRole, user?.id, user?.managedTeam, paginationState.currentPage, paginationState.itemsPerPage, debouncedSearchTerm, filter, paginationActions]);
 
   useEffect(() => {
     if (!user) return;
-    
-    // Initial load
     fetchCallbacks();
-    
-    // Set up periodic refresh
-    const interval = setInterval(fetchCallbacks, 30000); // Refresh every 30 seconds
-    
-    return () => clearInterval(interval);
-  }, [userRole, user]);
+  }, [fetchCallbacks]);
 
 
   // Update callback status using API service
@@ -196,7 +256,19 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
           </p>
         </div>
         
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search callbacks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          
+          {/* Status Filter */}
           <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Filter by status" />
@@ -210,8 +282,17 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
             </SelectContent>
           </Select>
           
-          <Button onClick={fetchCallbacks} variant="outline">
-            Refresh
+          {/* Refresh Button */}
+          <Button 
+            onClick={() => fetchCallbacks()} 
+            variant="outline"
+            disabled={paginationState.isLoading}
+          >
+            {paginationState.isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Refresh"
+            )}
           </Button>
         </div>
       </div>
@@ -220,11 +301,16 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Phone className="h-5 w-5" />
-            <span>Callbacks ({filteredCallbacks.length})</span>
+            <span>Callbacks ({totalCallbacks.toLocaleString()})</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredCallbacks.length === 0 ? (
+          {paginationState.isLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading callbacks...</p>
+            </div>
+          ) : callbacks.length === 0 ? (
             <div className="text-center py-8">
               <Phone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">No callbacks found</h3>
@@ -246,7 +332,7 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCallbacks.map((callback) => (
+                {callbacks.map((callback) => (
                   <TableRow key={callback.id}>
                     <TableCell>
                       <div>
@@ -343,6 +429,22 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
                 ))}
               </TableBody>
             </Table>
+          )}
+          
+          {/* Pagination */}
+          {!paginationState.isLoading && callbacks.length > 0 && (
+            <div className="mt-6">
+              <ServerPagination
+                currentPage={paginationState.currentPage}
+                totalPages={paginationState.totalPages}
+                totalItems={paginationState.totalItems}
+                itemsPerPage={paginationState.itemsPerPage}
+                onPageChange={paginationActions.goToPage}
+                onItemsPerPageChange={paginationActions.setItemsPerPage}
+                isLoading={paginationState.isLoading}
+                className="justify-center"
+              />
+            </div>
           )}
         </CardContent>
       </Card>

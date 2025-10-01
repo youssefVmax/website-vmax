@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useUnifiedData } from "@/hooks/useUnifiedData"
 
 interface EnhancedTargetDashboardProps {
-  userRole: 'manager' | 'salesman' | 'team-leader'
+  userRole: 'manager' | 'salesman' | 'team_leader'
   user: { name: string; username: string; id: string; team?: string }
 }
 

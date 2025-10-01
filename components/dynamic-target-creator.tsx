@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch"
 import { Target, Users, Plus, Edit, Trash2, BarChart3, TrendingUp, Calendar, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiService } from "@/lib/api-service"
+import { targetsService } from "@/lib/mysql-targets-service"
 
 interface DynamicTargetCreatorProps {
   userRole: 'manager' | 'salesman' | 'customer-service'
@@ -77,45 +78,66 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
   useEffect(() => {
     const loadData = async () => {
       if (!isManager || !isOpen) return
-      
       try {
         setLoadingData(true)
-        
-        // Get all salesmen
-        const salesmen = await apiService.getUsers({ role: 'salesman' })
-        const members: TeamMember[] = salesmen.map((user: any) => ({
-          id: user.id,
-          name: user.name || user.username,
-          username: user.username,
-          team: user.team || 'Unknown',
-          role: user.role
-        }))
-        
+
+        // Fetch all users directly from Next.js API (same source as Users page)
+        const res = await fetch(`/api/users?limit=1000`, {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store'
+        })
+        const json = await res.json()
+        const users = json?.users || []
+
+        // Filter to sales-facing roles and to the two known teams
+        const allowedTeams = new Set(['ALI ASHRAF', 'CS TEAM'])
+        const members: TeamMember[] = (users || [])
+          .filter((u: any) => u && (u.role === 'salesman' || u.role === 'team_leader'))
+          .map((u: any) => ({
+            id: (u.id ?? '').toString() || (u.username ?? u.email ?? 'unknown'),
+            name: u.name || u.username || u.email || 'Unknown User',
+            username: u.username || u.email || u.name || (u.id ?? '').toString(),
+            team: allowedTeams.has(u.team) ? u.team : (u.team ? u.team : 'Unknown'),
+            role: u.role || 'salesman'
+          }))
+
         setAllMembers(members)
-        
+
         // Group members by team
         const teamsMap = new Map<string, TeamMember[]>()
         members.forEach(member => {
-          if (!teamsMap.has(member.team)) {
-            teamsMap.set(member.team, [])
-          }
-          teamsMap.get(member.team)!.push(member)
+          const teamName = allowedTeams.has(member.team) ? member.team : 'Unknown'
+          if (!teamsMap.has(teamName)) teamsMap.set(teamName, [])
+          teamsMap.get(teamName)!.push(member)
         })
-        
-        const teamsData: Team[] = Array.from(teamsMap.entries()).map(([teamName, teamMembers]) => ({
-          id: teamName.toLowerCase().replace(/\s+/g, '-'),
-          name: teamName,
-          members: teamMembers
-        }))
-        
+
+        // Only show the two supported teams explicitly; group others under 'Unknown'
+        let teamsData: Team[] = Array.from(teamsMap.entries())
+          .filter(([teamName]) => teamName === 'ALI ASHRAF' || teamName === 'CS TEAM' || teamName === 'Unknown')
+          .map(([teamName, teamMembers]) => ({
+            id: (teamName || 'unknown').toLowerCase().replace(/\s+/g, '-'),
+            name: teamName || 'Unknown',
+            members: teamMembers
+          }))
+
+        // Ensure the two known teams are always present even if empty, to allow selection
+        const ensureTeam = (name: string) => {
+          if (!teamsData.find(t => t.name === name)) {
+            teamsData.push({ id: name.toLowerCase().replace(/\s+/g, '-'), name, members: [] })
+          }
+        }
+        ensureTeam('ALI ASHRAF')
+        ensureTeam('CS TEAM')
+        // Keep Unknown last
+        teamsData = [
+          ...teamsData.filter(t => t.name === 'ALI ASHRAF' || t.name === 'CS TEAM'),
+          ...teamsData.filter(t => t.name !== 'ALI ASHRAF' && t.name !== 'CS TEAM')
+        ]
+
         setTeams(teamsData)
       } catch (error) {
         console.error('Error loading data:', error)
-        toast({
-          title: "Error",
-          description: "Failed to load team data",
-          variant: "destructive"
-        })
+        toast({ title: 'Error', description: 'Failed to load team data', variant: 'destructive' })
       } finally {
         setLoadingData(false)
       }
@@ -124,23 +146,32 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
     loadData()
   }, [isManager, isOpen, toast])
 
-  // Generate period options
+  // Generate period options (current month and future months only)
   const generatePeriodOptions = () => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() // 0-based
+
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ]
-    const currentYear = new Date().getFullYear()
-    const years = [currentYear, currentYear + 1]
-    
-    const options: string[] = []
+
+    const periods: string[] = []
+    const years = [currentYear, currentYear + 1, currentYear + 2] // Current year + 2 future years
+
     years.forEach(year => {
-      months.forEach(month => {
-        options.push(`${month} ${year}`)
+      months.forEach((month, monthIndex) => {
+        // For current year, only include current month and future months
+        if (year === currentYear && monthIndex < currentMonth) {
+          return // Skip past months in current year
+        }
+        // For future years, include all months
+        periods.push(`${month} ${year}`)
       })
     })
-    
-    return options
+
+    return periods
   }
 
   const resetForm = () => {
@@ -164,6 +195,8 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
   }
 
   const handleMemberSelect = (memberId: string) => {
+    // Ignore header rows injected into SelectContent
+    if (memberId.startsWith('__header_')) return;
     const member = allMembers.find(m => m.id === memberId)
     if (member) {
       setFormData(prev => ({
@@ -227,7 +260,15 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
       if (targetType === 'individual') {
         // Create individual target
         const targetData = {
-          type: 'individual' as const,
+          salesAgentId: formData.selectedMemberId,
+          salesAgentName: formData.selectedMemberName,
+          salesTeam: '', // Will be filled based on agent
+          targetAmount: parseInt(formData.monthlyTarget),
+          targetDeals: parseInt(formData.dealsTarget),
+          currentAmount: 0,
+          currentDeals: 0,
+          month: formData.period.split(' ')[0],
+          year: parseInt(formData.period.split(' ')[1]),
           agentId: formData.selectedMemberId,
           agentName: formData.selectedMemberName,
           monthlyTarget: parseInt(formData.monthlyTarget),
@@ -235,10 +276,11 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
           period: formData.period,
           description: formData.description,
           managerId: user.id,
-          managerName: user.name
+          managerName: user.name,
+          type: 'individual' as const
         }
 
-        await apiService.createTarget(targetData)
+        await targetsService.createTarget(targetData)
         
         toast({
           title: "Individual Target Created",
@@ -247,27 +289,58 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
       } else {
         // Create team target
         const teamTargetData = {
-          teamId: formData.selectedTeamId,
-          teamName: formData.selectedTeamName,
+          salesAgentId: user.id,
+          salesAgentName: `Team: ${formData.selectedTeamName}`,
+          salesTeam: formData.selectedTeamName,
+          targetAmount: parseInt(formData.monthlyTarget),
+          targetDeals: parseInt(formData.dealsTarget),
+          currentAmount: 0,
+          currentDeals: 0,
+          month: formData.period.split(' ')[0],
+          year: parseInt(formData.period.split(' ')[1]),
+          agentId: user.id,
+          agentName: `Team: ${formData.selectedTeamName}`,
           monthlyTarget: parseInt(formData.monthlyTarget),
           dealsTarget: parseInt(formData.dealsTarget),
           period: formData.period,
-          description: formData.description,
+          description: `Team target: ${formData.description}`,
           managerId: user.id,
           managerName: user.name,
-          members: formData.teamMembers
+          members: formData.teamMembers,
+          type: 'team' as const
         }
 
-        const createdTeamTarget = await apiService.createTeamTarget(teamTargetData)
-        
-        // Optionally create individual targets for team members
-        if (formData.autoDistribute) {
-          await apiService.createIndividualTargetsFromTeamTarget(createdTeamTarget)
-        }
+        // For team targets, we need to create individual targets for each member
+        const individualTargets = formData.teamMembers.map(memberId => {
+          const member = allMembers.find(m => m.id === memberId)
+          return {
+            salesAgentId: memberId,
+            salesAgentName: member?.name || 'Unknown',
+            salesTeam: formData.selectedTeamName,
+            targetAmount: Math.floor(parseInt(formData.monthlyTarget) / formData.teamMembers.length),
+            targetDeals: Math.floor(parseInt(formData.dealsTarget) / formData.teamMembers.length),
+            currentAmount: 0,
+            currentDeals: 0,
+            month: formData.period.split(' ')[0],
+            year: parseInt(formData.period.split(' ')[1]),
+            agentId: memberId,
+            agentName: member?.name || 'Unknown',
+            monthlyTarget: Math.floor(parseInt(formData.monthlyTarget) / formData.teamMembers.length),
+            dealsTarget: Math.floor(parseInt(formData.dealsTarget) / formData.teamMembers.length),
+            period: formData.period,
+            description: `Team target: ${formData.description}`,
+            managerId: user.id,
+            managerName: user.name,
+            type: 'individual' as const
+          }
+        })
+
+        // Create all individual targets
+        await Promise.all(individualTargets.map(target => targetsService.createTarget(target)))
 
         toast({
           title: "Team Target Created",
-          description: `Team target created for ${formData.selectedTeamName}${formData.autoDistribute ? ' with individual targets distributed' : ''}`
+          description: `Team target created for ${formData.selectedTeamName} with ${individualTargets.length} individual targets.`
         })
       }
 
@@ -303,13 +376,13 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
         </Button>
       </DialogTrigger>
       
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent aria-describedby="target-dialog-description" className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
             Create Sales Target
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription id="target-dialog-description">
             Set targets for individual team members or entire teams with automatic distribution
           </DialogDescription>
         </DialogHeader>
@@ -353,23 +426,25 @@ export function DynamicTargetCreator({ userRole, user, onTargetCreated }: Dynami
                   <SelectValue placeholder={loadingData ? "Loading team members..." : "Select team member"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams.map(team => (
-                    <div key={team.id}>
-                      <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground bg-muted/50">
-                        {team.name} Team
-                      </div>
-                      {team.members.map(member => (
-                        <SelectItem key={member.id} value={member.id}>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              {member.team}
-                            </Badge>
-                            {member.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </div>
-                  ))}
+                  {teams.flatMap(team => [
+                    (
+                      <SelectItem key={`${team.id}-header`} value={`__header_${team.id}`} disabled>
+                        <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground w-full text-left">
+                          {team.name} Team
+                        </div>
+                      </SelectItem>
+                    ),
+                    ...team.members.map(member => (
+                      <SelectItem key={member.id} value={member.id}>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {member.team}
+                          </Badge>
+                          {member.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  ])}
                 </SelectContent>
               </Select>
               {formData.selectedMemberName && (

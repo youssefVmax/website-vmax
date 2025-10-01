@@ -75,7 +75,7 @@ export default function ManagerDealsDashboard() {
   // Get unique values for filters
   const teams = [...new Set(deals.map(deal => deal.salesTeam))].filter(Boolean)
   const services = [...new Set(deals.map(deal => deal.serviceTier))].filter(Boolean)
-  const closers = [...new Set(deals.map(deal => deal.closingAgentName))].filter(Boolean)
+  const closers = [...new Set(deals.map(deal => deal.closingAgentName))].filter(Boolean) as string[]
 
   // Sales by team data for chart
   const salesByTeam = teams.map(team => ({

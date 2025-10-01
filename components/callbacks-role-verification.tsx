@@ -20,7 +20,7 @@ interface CallbacksRoleVerificationProps {
   user: {
     id: string;
     name: string;
-    role: 'manager' | 'team-leader' | 'salesman';
+    role: 'manager' | 'team_leader' | 'salesman';
     managedTeam?: string;
     team?: string;
   };
@@ -63,7 +63,7 @@ export default function CallbacksRoleVerification({ user }: CallbacksRoleVerific
     }
 
     // Test 2: Team Leader Access (should see managed team + personal)
-    if (user.role === 'team-leader') {
+    if (user.role === 'team_leader') {
       try {
         // Test team access
         if (user.managedTeam) {

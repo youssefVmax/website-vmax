@@ -15,13 +15,15 @@ import { Target, Users, Plus, Edit, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { targetsService } from "@/lib/mysql-targets-service"
 import { SalesTarget as TargetType, TeamTarget } from "@/lib/api-service"
+import { unifiedApiService } from "@/lib/unified-api-service"
+import { DynamicTargetCreator } from "./dynamic-target-creator"
 
 interface EnhancedTargetsProps {
-  userRole: 'manager' | 'salesman' | 'customer-service'
-  user: { name: string; username: string; id: string }
+  userRole: 'manager' | 'salesman' | 'team_leader'
+  user: { full_name?: string; username?: string; name?: string; id: string; managedTeam?: string }
 }
 
-export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsProps) {
+export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsProps): JSX.Element {
   const { toast } = useToast()
   const [targets, setTargets] = useState<TargetType[]>([])
   const [teamTargets, setTeamTargets] = useState<TeamTarget[]>([])
@@ -31,26 +33,39 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
   const [targetProgress, setTargetProgress] = useState<Record<string, {currentSales: number, currentDeals: number}>>({})
   const [editingTarget, setEditingTarget] = useState<TargetType | null>(null)
 
-  // Generate dynamic periods (months and years)
+  // Generate dynamic periods (current month and future months only)
   const generatePeriods = () => {
-    const currentYear = new Date().getFullYear()
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() // 0-based
+
     const months = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ]
+
+    const periods: string[] = []
     const years = [currentYear, currentYear + 1, currentYear + 2] // Current year + 2 future years
-    
-    const periods = []
-    for (const year of years) {
-      for (const month of months) {
+
+    years.forEach(year => {
+      months.forEach((month, monthIndex) => {
+        // For current year, only include current month and future months
+        if (year === currentYear && monthIndex < currentMonth) {
+          return // Skip past months in current year
+        }
+        // For future years, include all months
         periods.push(`${month} ${year}`)
-      }
-    }
+      })
+    })
+
     return periods
   }
 
   const availablePeriods = generatePeriods()
-  const currentPeriod = `${new Date().toLocaleString('default', { month: 'long' })} ${new Date().getFullYear()}`
+  // Set currentPeriod to the current month/year, or the first available period if current month is not available
+  const now = new Date()
+  const currentMonthYear = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`
+  const currentPeriod = availablePeriods.includes(currentMonthYear) ? currentMonthYear : (availablePeriods[0] || currentMonthYear)
 
   const [newIndividualTarget, setNewIndividualTarget] = useState({
     agentId: '',
@@ -80,49 +95,115 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
         setLoading(true)
         
         if (isManager) {
-          const [targetsData, teamTargetsData] = await Promise.all([
+          // Load real users and organize them into teams
+          const allUsers = await unifiedApiService.getUsers({ 
+            limit: '1000',
+            userRole: 'manager' // Required for unified-data API
+          })
+          console.log('🎯 EnhancedTargetsManagement: Loaded users:', allUsers.length)
+          
+          // Group users by team (using sales_team or managedTeam for team leaders)
+          const teamGroups: { [key: string]: Array<{id: string, name: string}> } = {}
+          
+          allUsers.forEach((user: any) => {
+            if (user.role === 'salesman' || user.role === 'team_leader') {
+              const teamName = user.sales_team || user.team_name || 'Unassigned'
+              if (!teamGroups[teamName]) {
+                teamGroups[teamName] = []
+              }
+              teamGroups[teamName].push({
+                id: user.id,
+                name: user.full_name || user.username || user.name || 'Unknown'
+              })
+            }
+          })
+          
+          // Convert to teams array
+          const teamsData = Object.entries(teamGroups).map(([teamName, members]) => ({
+            id: teamName.toLowerCase().replace(/\s+/g, '_'),
+            name: teamName,
+            members: members
+          }))
+          
+          console.log('🎯 EnhancedTargetsManagement: Organized teams:', teamsData)
+          setTeams(teamsData || [])
+
+          // Load targets for manager
+          const [individualTargetsData, teamTargetsData] = await Promise.all([
             targetsService.getTargets({ managerId: user.id }),
             targetsService.getTargets({ managerId: user.id, type: 'team' })
           ])
           
-          // Get teams data from user service or hardcode known teams
-          const teamsData = [
-            { id: 'ali_ashraf', name: 'ALI ASHRAF', members: [{ id: 'agent1', name: 'Agent 1' }] },
-            { id: 'cs_team', name: 'CS TEAM', members: [{ id: 'agent2', name: 'Agent 2' }] }
-          ]
+          console.log('🎯 EnhancedTargetsManagement: Loaded targets:', {
+            individual: individualTargetsData.length,
+            team: teamTargetsData.length
+          })
           
-          setTargets(targetsData)
-          setTeamTargets(teamTargetsData)
-          setTeams(teamsData)
+          setTargets(individualTargetsData)
+          
+          // Convert team targets data
+          setTeamTargets(teamTargetsData.map(target => ({
+            id: target.id,
+            teamName: target.agentName || target.salesTeam || 'Unknown Team',
+            targetAmount: target.targetAmount || target.monthlyTarget || 0,
+            targetDeals: target.targetDeals || target.dealsTarget || 0,
+            currentAmount: target.currentAmount || 0,
+            currentDeals: target.currentDeals || 0,
+            month: target.month || '',
+            year: target.year || new Date().getFullYear(),
+            managerId: target.managerId || user.id,
+            managerName: target.managerName || user.full_name || user.username || user.name || 'System Manager',
+            period: target.period || '',
+            monthlyTarget: target.monthlyTarget || target.targetAmount || 0,
+            dealsTarget: target.dealsTarget || target.targetDeals || 0,
+            teamId: target.salesTeam || '',
+            members: [], // Will be populated from teamsData
+            description: target.description || '',
+            createdAt: target.createdAt || '',
+            updatedAt: target.updatedAt || ''
+          })))
 
           // Load progress for all targets
           const progressData: Record<string, {currentSales: number, currentDeals: number}> = {}
-          for (const target of targetsData) {
+          for (const target of individualTargetsData) {
             if (target.agentId) {
-              const progress = await targetsService.getTargetProgress(target.agentId, target.period)
-              progressData[target.id!] = {
-                currentSales: progress.currentSales,
-                currentDeals: progress.currentDeals
+              try {
+                const progress = await targetsService.getTargetProgress(target.agentId, target.period)
+                progressData[target.id!] = {
+                  currentSales: progress.currentSales || progress.currentRevenue || 0,
+                  currentDeals: progress.currentDeals || 0
+                }
+              } catch (error) {
+                console.warn('Error loading progress for target:', target.id, error)
+                progressData[target.id!] = { currentSales: 0, currentDeals: 0 }
               }
             }
           }
           setTargetProgress(progressData)
         } else {
+          // Load personal targets for non-managers
           const targetsData = await targetsService.getTargets({ agentId: user.id })
+          console.log('🎯 EnhancedTargetsManagement: Loaded personal targets:', targetsData.length)
           setTargets(targetsData)
 
           // Load progress for user's targets
           const progressData: Record<string, {currentSales: number, currentDeals: number}> = {}
           for (const target of targetsData) {
-            const progress = await targetsService.getTargetProgress(user.id, target.period)
-            progressData[target.id!] = {
-              currentSales: progress.currentSales,
-              currentDeals: progress.currentDeals
+            try {
+              const progress = await targetsService.getTargetProgress(user.id, target.period)
+              progressData[target.id!] = {
+                currentSales: progress.currentSales || progress.currentRevenue || 0,
+                currentDeals: progress.currentDeals || 0
+              }
+            } catch (error) {
+              console.warn('Error loading progress for target:', target.id, error)
+              progressData[target.id!] = { currentSales: 0, currentDeals: 0 }
             }
           }
           setTargetProgress(progressData)
         }
       } catch (error) {
+        console.error('❌ EnhancedTargetsManagement: Error loading data:', error)
         toast({
           title: "Error",
           description: "Failed to load targets data",
@@ -177,16 +258,16 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
     if (!editingTarget) return
 
     try {
-      const updatedTarget = await targetsService.updateTarget(editingTarget.id!, {
+      await targetsService.updateTarget(editingTarget.id!, {
         monthlyTarget: editingTarget.monthlyTarget,
         dealsTarget: editingTarget.dealsTarget,
         period: editingTarget.period,
         description: editingTarget.description
       })
-      
-      setTargets(prev => prev.map(t => t.id === editingTarget.id ? updatedTarget : t))
+
+      setTargets(prev => prev.map(t => t.id === editingTarget.id ? editingTarget : t))
       setEditingTarget(null)
-      
+
       toast({
         title: "Target Updated",
         description: "Target has been successfully updated."
@@ -213,7 +294,15 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
     try {
       const targetData = {
-        type: 'individual' as const,
+        salesAgentId: newIndividualTarget.agentId,
+        salesAgentName: newIndividualTarget.agentName,
+        salesTeam: '', // Will be filled based on agent
+        targetAmount: parseInt(newIndividualTarget.monthlyTarget),
+        targetDeals: parseInt(newIndividualTarget.dealsTarget),
+        currentAmount: 0,
+        currentDeals: 0,
+        month: newIndividualTarget.period.split(' ')[0],
+        year: parseInt(newIndividualTarget.period.split(' ')[1]),
         agentId: newIndividualTarget.agentId,
         agentName: newIndividualTarget.agentName,
         monthlyTarget: parseInt(newIndividualTarget.monthlyTarget),
@@ -221,7 +310,8 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
         period: newIndividualTarget.period,
         description: newIndividualTarget.description,
         managerId: user.id,
-        managerName: user.name
+        managerName: user.full_name || user.username || user.name || 'System Manager',
+        type: 'individual' as const
       }
 
       const createdTargetId = await targetsService.createTarget(targetData)
@@ -229,7 +319,24 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
       // Create the full target object for state update
       const createdTarget: TargetType = {
         id: createdTargetId,
-        ...targetData,
+        salesAgentId: newIndividualTarget.agentId,
+        salesAgentName: newIndividualTarget.agentName,
+        salesTeam: '', // Will be filled based on agent
+        targetAmount: parseInt(newIndividualTarget.monthlyTarget),
+        targetDeals: parseInt(newIndividualTarget.dealsTarget),
+        currentAmount: 0,
+        currentDeals: 0,
+        month: newIndividualTarget.period.split(' ')[0],
+        year: parseInt(newIndividualTarget.period.split(' ')[1]),
+        agentId: newIndividualTarget.agentId,
+        agentName: newIndividualTarget.agentName,
+        monthlyTarget: parseInt(newIndividualTarget.monthlyTarget),
+        dealsTarget: parseInt(newIndividualTarget.dealsTarget),
+        period: newIndividualTarget.period,
+        description: newIndividualTarget.description,
+        managerId: user.id,
+        managerName: user.full_name || user.username || user.name || 'System Manager',
+        type: 'individual',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -272,22 +379,24 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
       const selectedTeam = teams.find(t => t.id === newTeamTarget.teamId)
       if (!selectedTeam) return
 
-      const teamTargetData = {
-        teamId: newTeamTarget.teamId,
-        teamName: selectedTeam.name,
-        monthlyTarget: parseInt(newTeamTarget.monthlyTarget),
-        dealsTarget: parseInt(newTeamTarget.dealsTarget),
-        period: newTeamTarget.period,
-        description: newTeamTarget.description,
+      const teamTargetFormData = {
         managerId: user.id,
-        managerName: user.name,
+        managerName: user.full_name || user.username || user.name || 'System Manager',
         members: selectedTeam.members.map(m => m.id)
       }
 
       // Create team target using regular createTarget method
       // For now, create a representative target for the team leader
-      const teamTargetId = await targetsService.createTarget({
-        type: 'individual',
+      const teamTargetData = {
+        salesAgentId: user.id,
+        salesAgentName: `Team: ${selectedTeam.name}`,
+        salesTeam: selectedTeam.name,
+        targetAmount: parseInt(newTeamTarget.monthlyTarget),
+        targetDeals: parseInt(newTeamTarget.dealsTarget),
+        currentAmount: 0,
+        currentDeals: 0,
+        month: newTeamTarget.period.split(' ')[0],
+        year: parseInt(newTeamTarget.period.split(' ')[1]),
         agentId: user.id,
         agentName: `Team: ${selectedTeam.name}`,
         monthlyTarget: parseInt(newTeamTarget.monthlyTarget),
@@ -295,12 +404,29 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
         period: newTeamTarget.period,
         description: `Team target for ${selectedTeam.name}: ${newTeamTarget.description}`,
         managerId: user.id,
-        managerName: user.name
-      })
+        managerName: user.full_name || user.username || user.name || 'System Manager',
+        type: 'team' as const
+      }
+
+      const teamTargetId = await targetsService.createTarget(teamTargetData)
       
-      const createdTeamTarget = {
+      const createdTeamTarget: TeamTarget = {
         id: teamTargetId,
-        ...teamTargetData,
+        teamName: selectedTeam.name,
+        targetAmount: parseInt(newTeamTarget.monthlyTarget),
+        targetDeals: parseInt(newTeamTarget.dealsTarget),
+        currentAmount: 0,
+        currentDeals: 0,
+        month: newTeamTarget.period.split(' ')[0],
+        year: parseInt(newTeamTarget.period.split(' ')[1]),
+        managerId: user.id,
+        managerName: user.full_name || user.username || user.name || 'System Manager',
+        period: newTeamTarget.period,
+        monthlyTarget: parseInt(newTeamTarget.monthlyTarget),
+        dealsTarget: parseInt(newTeamTarget.dealsTarget),
+        teamId: selectedTeam.id,
+        members: selectedTeam.members.map(m => m.id),
+        description: newTeamTarget.description,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -311,15 +437,24 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
       const individualTargets: TargetType[] = []
       for (const member of selectedTeam.members) {
         const individualTargetData = {
-          type: 'individual' as const,
+          salesAgentId: member.id,
+          salesAgentName: member.name,
+          salesTeam: selectedTeam.name,
+          targetAmount: Math.floor(parseInt(newTeamTarget.monthlyTarget) / selectedTeam.members.length),
+          targetDeals: Math.floor(parseInt(newTeamTarget.dealsTarget) / selectedTeam.members.length),
+          currentAmount: 0,
+          currentDeals: 0,
+          month: newTeamTarget.period.split(' ')[0],
+          year: parseInt(newTeamTarget.period.split(' ')[1]),
           agentId: member.id,
           agentName: member.name,
-          monthlyTarget: Math.floor(parseInt(newTeamTarget.monthlyTarget) / selectedTeam.members.length),
-          dealsTarget: Math.floor(parseInt(newTeamTarget.dealsTarget) / selectedTeam.members.length),
+          monthlyTarget: parseInt(newTeamTarget.monthlyTarget) / selectedTeam.members.length,
+          dealsTarget: parseInt(newTeamTarget.dealsTarget) / selectedTeam.members.length,
           period: newTeamTarget.period,
           description: `Individual target from team: ${selectedTeam.name}`,
           managerId: user.id,
-          managerName: user.name
+          managerName: user.full_name || user.username || user.name || 'System Manager',
+          type: 'individual' as const
         }
         
         const individualTargetId = await targetsService.createTarget(individualTargetData)
@@ -692,16 +827,18 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
                     <div>
                       <Label>Period</Label>
-                      <Select value={newIndividualTarget.period} onValueChange={(value) => 
+                      <Select value={newIndividualTarget.period} onValueChange={(value) =>
                         setNewIndividualTarget(prev => ({ ...prev, period: value }))
                       }>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="January 2025">January 2025</SelectItem>
-                          <SelectItem value="February 2025">February 2025</SelectItem>
-                          <SelectItem value="March 2025">March 2025</SelectItem>
+                          {availablePeriods.map(period => (
+                            <SelectItem key={period} value={period}>
+                              {period}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -729,10 +866,21 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
             {/* Individual Targets Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {targets.filter(t => t.type === 'individual').map((target) => {
+              {targets.filter(t => !t.type || t.type === 'individual' || t.type === 'team').map((target) => {
                 const progress = targetProgress[target.id!] || { currentSales: 0, currentDeals: 0 }
-                const salesProgress = target.monthlyTarget > 0 ? (progress.currentSales / target.monthlyTarget) * 100 : 0
-                const dealsProgress = target.dealsTarget > 0 ? (progress.currentDeals / target.dealsTarget) * 100 : 0
+                const monthlyTarget = target.monthlyTarget || target.targetAmount || 0
+                const dealsTarget = target.dealsTarget || target.targetDeals || 0
+                const salesProgress = monthlyTarget > 0 ? (progress.currentSales / monthlyTarget) * 100 : 0
+                const dealsProgress = dealsTarget > 0 ? (progress.currentDeals / dealsTarget) * 100 : 0
+                
+                console.log('🎯 Target progress for', target.agentName, ':', {
+                  targetId: target.id,
+                  progress,
+                  monthlyTarget,
+                  dealsTarget,
+                  salesProgress,
+                  dealsProgress
+                })
                 
                 return (
                   <Card key={target.id} className="hover:shadow-md transition-shadow">
@@ -769,7 +917,7 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
                       <div>
                         <div className="flex justify-between text-sm mb-1">
                           <span>Revenue Target</span>
-                          <span>${progress.currentSales.toLocaleString()} / ${target.monthlyTarget.toLocaleString()}</span>
+                          <span>${progress.currentSales.toLocaleString()} / ${monthlyTarget.toLocaleString()}</span>
                         </div>
                         <Progress value={Math.min(salesProgress, 100)} className="h-2" />
                         <p className="text-xs text-muted-foreground mt-1">
@@ -779,7 +927,7 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
                       <div>
                         <div className="flex justify-between text-sm mb-1">
                           <span>Deals Target</span>
-                          <span>{progress.currentDeals} / {target.dealsTarget}</span>
+                          <span>{progress.currentDeals} / {dealsTarget}</span>
                         </div>
                         <Progress value={Math.min(dealsProgress, 100)} className="h-2" />
                         <p className="text-xs text-muted-foreground mt-1">
@@ -867,9 +1015,11 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="January 2025">January 2025</SelectItem>
-                          <SelectItem value="February 2025">February 2025</SelectItem>
-                          <SelectItem value="March 2025">March 2025</SelectItem>
+                          {availablePeriods.map(period => (
+                            <SelectItem key={period} value={period}>
+                              {period}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -910,62 +1060,115 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
             {/* Team Targets Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {teamTargets.map((teamTarget) => (
-                <Card key={teamTarget.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
+              {teamTargets.map((teamTarget) => {
+                // Calculate team progress by aggregating individual member progress
+                const teamMembers = teams.find(t => t.id === teamTarget.teamId)?.members || []
+                const teamProgress = teamMembers.reduce((acc, member) => {
+                  // Find the individual target for this team member
+                  const memberTarget = targets.find(t => t.agentId === member.id && t.type === 'individual')
+                  if (memberTarget && memberTarget.id) {
+                    const memberProgress = targetProgress[memberTarget.id] || { currentSales: 0, currentDeals: 0 }
+                    return {
+                      currentSales: acc.currentSales + memberProgress.currentSales,
+                      currentDeals: acc.currentDeals + memberProgress.currentDeals
+                    }
+                  }
+                  return acc
+                }, { currentSales: 0, currentDeals: 0 })
+
+                const monthlyTarget = teamTarget.monthlyTarget || teamTarget.targetAmount || 0
+                const dealsTarget = teamTarget.dealsTarget || teamTarget.targetDeals || 0
+                const salesProgress = monthlyTarget > 0 ? (teamProgress.currentSales / monthlyTarget) * 100 : 0
+                const dealsProgress = dealsTarget > 0 ? (teamProgress.currentDeals / dealsTarget) * 100 : 0
+
+                console.log('🎯 Team target progress for', teamTarget.teamName, ':', {
+                  teamId: teamTarget.teamId,
+                  teamProgress,
+                  monthlyTarget,
+                  dealsTarget,
+                  salesProgress,
+                  dealsProgress
+                })
+
+                return (
+                  <Card key={teamTarget.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="text-lg">{teamTarget.teamName}</CardTitle>
+                          <CardDescription>{teamTarget.period}</CardDescription>
+                        </div>
+                        <Badge className="bg-purple-100 text-purple-800">Team</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
                       <div>
-                        <CardTitle className="text-lg">{teamTarget.teamName}</CardTitle>
-                        <CardDescription>{teamTarget.period}</CardDescription>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Team Revenue Target</span>
+                          <span>${teamProgress.currentSales.toLocaleString()} / ${monthlyTarget.toLocaleString()}</span>
+                        </div>
+                        <Progress value={Math.min(salesProgress, 100)} className="h-2" />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {salesProgress.toFixed(1)}% complete
+                        </p>
                       </div>
-                      <Badge className="bg-purple-100 text-purple-800">Team</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Team Revenue Target</span>
-                        <span>${teamTarget.monthlyTarget.toLocaleString()}</span>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Team Deals Target</span>
+                          <span>{teamProgress.currentDeals} / {dealsTarget}</span>
+                        </div>
+                        <Progress value={Math.min(dealsProgress, 100)} className="h-2" />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {dealsProgress.toFixed(1)}% complete
+                        </p>
                       </div>
-                      <Progress value={0} className="h-2" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>Team Deals Target</span>
-                        <span>{teamTarget.dealsTarget}</span>
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Team Members ({(teamTarget.members || []).length})
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {teams.find(t => t.id === teamTarget.teamId)?.members.slice(0, 3).map(member => (
+                            <Badge key={member.id} variant="outline" className="text-xs">
+                              {member.name}
+                            </Badge>
+                          ))}
+                          {(teamTarget.members || []).length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{(teamTarget.members || []).length - 3} more
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <Progress value={0} className="h-2" />
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-2">
-                        Team Members ({teamTarget.members.length})
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {teams.find(t => t.id === teamTarget.teamId)?.members.slice(0, 3).map(member => (
-                          <Badge key={member.id} variant="outline" className="text-xs">
-                            {member.name}
-                          </Badge>
-                        ))}
-                        {teamTarget.members.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{teamTarget.members.length - 3} more
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    {teamTarget.description && (
-                      <p className="text-sm text-muted-foreground">{teamTarget.description}</p>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      {teamTarget.description && (
+                        <p className="text-sm text-muted-foreground">{teamTarget.description}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           </TabsContent>
         </Tabs>
       ) : (
         // Salesman view - show only their targets
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {targets.map((target) => (
+          {targets.map((target) => {
+            const progress = targetProgress[target.id!] || { currentSales: 0, currentDeals: 0 }
+            const monthlyTarget = target.monthlyTarget || target.targetAmount || 0
+            const dealsTarget = target.dealsTarget || target.targetDeals || 0
+            const salesProgress = monthlyTarget > 0 ? (progress.currentSales / monthlyTarget) * 100 : 0
+            const dealsProgress = dealsTarget > 0 ? (progress.currentDeals / dealsTarget) * 100 : 0
+
+            console.log('🎯 Salesman target progress for', target.agentName, ':', {
+              targetId: target.id,
+              progress,
+              monthlyTarget,
+              dealsTarget,
+              salesProgress,
+              dealsProgress
+            })
+            
+            return (
             <Card key={target.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
@@ -982,23 +1185,30 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Revenue Target</span>
-                    <span>${target.monthlyTarget.toLocaleString()}</span>
+                    <span>${progress.currentSales.toLocaleString()} / ${monthlyTarget.toLocaleString()}</span>
                   </div>
-                  <Progress value={0} className="h-2" />
+                  <Progress value={Math.min(salesProgress, 100)} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {salesProgress.toFixed(1)}% complete
+                  </p>
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Deals Target</span>
-                    <span>{target.dealsTarget}</span>
+                    <span>{progress.currentDeals} / {dealsTarget}</span>
                   </div>
-                  <Progress value={0} className="h-2" />
+                  <Progress value={Math.min(dealsProgress, 100)} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {dealsProgress.toFixed(1)}% complete
+                  </p>
                 </div>
                 {target.description && (
                   <p className="text-sm text-muted-foreground">{target.description}</p>
                 )}
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -1036,9 +1246,11 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="January 2025">January 2025</SelectItem>
-                    <SelectItem value="February 2025">February 2025</SelectItem>
-                    <SelectItem value="March 2025">March 2025</SelectItem>
+                    {availablePeriods.map(period => (
+                      <SelectItem key={period} value={period}>
+                        {period}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

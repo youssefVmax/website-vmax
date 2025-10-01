@@ -1,5 +1,5 @@
 interface AnalyticsFilters {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   userId?: string;
   userName?: string;
   managedTeam?: string;
@@ -137,7 +137,7 @@ class AnalyticsApiService {
 
   async getTeamLeaderAnalytics(userId: string, userName: string, managedTeam: string, dateRange: string = 'all'): Promise<AnalyticsResponse> {
     return this.getAnalytics({
-      userRole: 'team-leader',
+      userRole: 'team_leader',
       userId,
       userName,
       managedTeam,

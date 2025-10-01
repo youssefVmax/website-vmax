@@ -1,119 +1,133 @@
 import { apiService, User } from './api-service';
 
-// Manager credentials - hardcoded as requested
-const MANAGER_CREDENTIALS = {
-  username: 'manager',
-  password: 'manage@Vmax'
-};
-
-// Manager user object
-export const MANAGER_USER: User = {
+// Manager user object - will be fetched from database, but keeping as fallback
+const MANAGER_USER: User = {
   id: 'manager-001',
   username: 'manager',
-  password: 'manage@Vmax',
   name: 'System Manager',
   role: 'manager',
   email: 'manager@vmax.com',
   phone: '+1234567890',
   team: 'MANAGEMENT',
-  isActive: true,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  createdBy: 'system'
+  created_by: 'system',
+  is_active: true,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
 };
 
-// Manager-only authentication
-export function authenticateManager(username: string, password: string): User | null {
-  if (username === MANAGER_CREDENTIALS.username && password === MANAGER_CREDENTIALS.password) {
-    return MANAGER_USER;
+// Get manager user - try to fetch from database first, fallback to hardcoded
+async function getManagerUser(): Promise<User> {
+  try {
+    const managers = await apiService.getUsers({ role: 'manager' });
+    if (managers.length > 0) {
+      return { ...managers[0], is_active: true };
+    }
+  } catch (error) {
+    console.warn('Could not fetch manager from database, using fallback:', error);
   }
-  return null;
+
+  // Fallback to hardcoded manager
+  return MANAGER_USER;
+}
+
+// Manager-only authentication - use API authentication
+export async function authenticateManager(username: string, password: string): Promise<User | null> {
+  try {
+    // Try to authenticate manager through API
+    const authResponse = await fetch('/api/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password
+      })
+    });
+
+    if (authResponse.ok) {
+      const authData = await authResponse.json();
+      if (authData.success && authData.user) {
+        console.log('Manager authenticated successfully via API');
+        return {
+          ...authData.user,
+          is_active: true
+        };
+      }
+    }
+
+    // Fallback to hardcoded manager for development
+    if (username === 'manager' && password === 'manage@Vmax') {
+      console.log('Using fallback manager authentication');
+      return await getManagerUser();
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error authenticating manager:', error);
+    // Fallback to hardcoded manager
+    if (username === 'manager' && password === 'manage@Vmax') {
+      return await getManagerUser();
+    }
+    return null;
+  }
 }
 
 // Authenticate any user (manager or from MySQL database)
 export async function authenticateUser(username: string, password: string): Promise<User | null> {
   console.log('Authenticating user:', username);
-  
+
   // First check if it's the manager
-  const manager = authenticateManager(username, password);
+  const manager = await authenticateManager(username, password);
   if (manager) {
     console.log('Manager authenticated successfully');
     return manager;
   }
-  
-  // For other users, check MySQL database
+
+  // For other users, use API authentication
   try {
-    console.log('Checking MySQL database for user:', username);
-    const users = await apiService.getUsers({ username });
-    
-    if (users.length === 0) {
-      console.log('User not found in database:', username);
-      return null;
+    console.log('Authenticating user through API:', username);
+    const authResponse = await fetch('/api/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password
+      })
+    });
+
+    if (authResponse.ok) {
+      const authData = await authResponse.json();
+      if (authData.success && authData.user) {
+        console.log('User authenticated successfully via API:', authData.user.name);
+        return {
+          ...authData.user,
+          is_active: true
+        };
+      }
     }
-    
-    const user = users[0];
-    
-    // Verify password (simple comparison for development)
-    // In production, you should use proper password hashing
-    if (user.password !== password) {
-      console.log('Invalid password for user:', username);
-      return null;
-    }
-    
-    console.log('MySQL user authenticated successfully:', user.name);
-    return {
-      ...user,
-      isActive: true
-    };
+
+    console.log('API authentication failed for user:', username);
+    return null;
   } catch (error) {
-    console.error('Error authenticating user:', error);
+    console.error('Error during API authentication:', error);
     return null;
   }
 }
 
-// MySQL-integrated helper functions
 export async function getUserById(id: string): Promise<User | null> {
-  if (id === MANAGER_USER.id) return MANAGER_USER;
-  
+  if (id === 'manager-001') {
+    return await getManagerUser();
+  }
+
   try {
     const users = await apiService.getUsers({ id });
-    return users.length > 0 ? { ...users[0], isActive: true } : null;
+    return users.length > 0 ? { ...users[0], is_active: true } : null;
   } catch (error) {
     console.error('Error fetching user by ID:', error);
     return null;
-  }
-}
-
-export async function getUsersByRole(role: User['role']): Promise<User[]> {
-  if (role === 'manager') return [MANAGER_USER];
-  
-  try {
-    const users = await apiService.getUsers({ role });
-    return users.map(user => ({ ...user, isActive: true }));
-  } catch (error) {
-    console.error('Error fetching users by role:', error);
-    return [];
-  }
-}
-
-export async function getUsersByTeam(team: string): Promise<User[]> {
-  if (team === 'MANAGEMENT') return [MANAGER_USER];
-  
-  try {
-    const users = await apiService.getUsers({ team });
-    return users.map(user => ({ ...user, isActive: true }));
-  } catch (error) {
-    console.error('Error fetching users by team:', error);
-    return [];
-  }
-}
-
-export async function createUser(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ success: boolean; id: string }> {
-  try {
-    return await apiService.createUser(userData);
-  } catch (error) {
-    console.error('Error creating user:', error);
-    throw error;
   }
 }
 
@@ -126,10 +140,41 @@ export async function updateUser(id: string, userData: Partial<User>): Promise<{
   }
 }
 
+export async function getUsersByRole(role: User['role']): Promise<User[]> {
+  if (role === 'manager') {
+    const manager = await getManagerUser();
+    return [manager];
+  }
+
+  try {
+    const users = await apiService.getUsers({ role });
+    return users.map(user => ({ ...user, is_active: true }));
+  } catch (error) {
+    console.error('Error fetching users by role:', error);
+    return [];
+  }
+}
+
+export async function getUsersByTeam(team: string): Promise<User[]> {
+  if (team === 'MANAGEMENT') {
+    const manager = await getManagerUser();
+    return [manager];
+  }
+
+  try {
+    const users = await apiService.getUsers({ team });
+    return users.map(user => ({ ...user, is_active: true }));
+  } catch (error) {
+    console.error('Error fetching users by team:', error);
+    return [];
+  }
+}
+
 export async function getAllUsers(): Promise<User[]> {
   try {
+    const manager = await getManagerUser();
     const users = await apiService.getUsers();
-    return [MANAGER_USER, ...users.map(user => ({ ...user, isActive: true }))];
+    return [manager, ...users.map(user => ({ ...user, is_active: true }))];
   } catch (error) {
     console.error('Error fetching all users:', error);
     return [MANAGER_USER];

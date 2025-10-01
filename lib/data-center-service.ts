@@ -24,17 +24,23 @@ export interface DataCenterEntry {
 
 export interface DataFeedback {
   id: string;
-  data_id: string;
+  data_id?: string; // For legacy data_feedback table
   user_id: string;
-  feedback_text: string;
+  feedback_text?: string; // For legacy compatibility
+  message?: string; // For new feedback table
+  subject?: string; // For new feedback table
   rating?: number;
   feedback_type: string;
-  status: 'active' | 'archived' | 'deleted';
+  status: 'active' | 'archived' | 'deleted' | 'pending' | 'in_progress' | 'resolved' | 'closed';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   created_at: string;
   updated_at: string;
   user_name?: string;
   user_username?: string;
   user_role?: string;
+  response?: string;
+  response_by?: string;
+  response_at?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -54,7 +60,7 @@ export interface PaginatedResponse<T> {
 export interface DataCenterFilters {
   page?: number;
   limit?: number;
-  data_type?: 'all' | 'sent' | 'received';
+  data_type?: string;
 }
 
 export interface FeedbackFilters {
@@ -66,47 +72,39 @@ export class DataCenterService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://your-domain.com' 
-      : 'http://localhost:3000';
+    // Use empty base for browser (relative URLs). On server, prefer env override,
+    // otherwise use production domain https://vmaxcom.org, and localhost in development.
+    const envBase = (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_BASE_URL) || '';
+    const isServer = typeof window === 'undefined';
+    const isProd = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production';
+    this.baseUrl = isServer
+      ? (envBase || (isProd ? 'https://vmaxcom.org' : 'http://localhost:3000'))
+      : '';
   }
 
   /**
-   * Initialize data center tables
+   * Initialize data center - verify existing tables
    */
   async initializeTables(): Promise<boolean> {
     try {
-      console.log('🔧 DataCenterService: Initializing tables...');
-
-      const response = await fetch('/api/create-data-center-tables', {
-        method: 'POST',
+      console.log('🔧 DataCenterService: Verifying existing database tables...');
+      // Test API connectivity by fetching a small amount of data
+      const response = await fetch(`${this.baseUrl}/api/data-center?user_id=test&user_role=manager&limit=1`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
-        }
+        },
+        cache: 'no-store'
       });
-
-      if (!response.ok) {
-        throw new Error(`Table creation failed: ${response.status} ${response.statusText}`);
-      }
-
+      if (!response.ok) return false;
       const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create tables');
-      }
-
-      console.log('✅ DataCenterService: Tables initialized successfully');
-      return true;
+      return !!result;
     } catch (error) {
-      console.error('❌ DataCenterService: Table initialization error:', error);
-      throw error;
+      console.error('Error checking table existence:', error);
+      return false;
     }
   }
-
-  /**
-   * Get data center entries
-   */
   async getDataEntries(
     userId: string,
     userRole: string,
@@ -116,14 +114,15 @@ export class DataCenterService {
       const params = new URLSearchParams({
         user_id: userId,
         user_role: userRole,
-        data_type: filters.data_type || 'all',
         page: (filters.page || 1).toString(),
         limit: (filters.limit || 25).toString()
       });
 
+      if (filters.data_type) params.append('data_type', filters.data_type);
+
       console.log('🔄 DataCenterService: Fetching data entries...', { userId, userRole, filters });
 
-      const response = await fetch(`/api/data-center?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-center?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -133,12 +132,20 @@ export class DataCenterService {
       });
 
       if (!response.ok) {
-        throw new Error(`Data API error: ${response.status} ${response.statusText}`);
+        const errorMessage = `Data API error: ${response.status} ${response.statusText}`;
+        console.error('❌ DataCenterService: API error:', errorMessage);
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
 
+      console.log('🔍 DataCenterService: API response:', result);
+      console.log('🔍 DataCenterService: Response success:', result.success);
+      console.log('🔍 DataCenterService: Response data:', result.data);
+      console.log('🔍 DataCenterService: Response data length:', result.data?.length || 0);
+
       if (!result.success) {
+        console.error('❌ DataCenterService: API returned error:', result.error);
         throw new Error(result.error || 'Failed to fetch data entries');
       }
 
@@ -169,7 +176,7 @@ export class DataCenterService {
     try {
       console.log('🔄 DataCenterService: Creating data entry...', data);
 
-      const response = await fetch('/api/data-center', {
+      const response = await fetch(`${this.baseUrl}/api/data-center`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -224,7 +231,7 @@ export class DataCenterService {
 
       console.log('🔄 DataCenterService: Updating data entry...', { dataId, updates });
 
-      const response = await fetch(`/api/data-center?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-center?${params.toString()}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -268,7 +275,7 @@ export class DataCenterService {
 
       console.log('🔄 DataCenterService: Deleting data entry...', { dataId });
 
-      const response = await fetch(`/api/data-center?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-center?${params.toString()}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -314,7 +321,7 @@ export class DataCenterService {
 
       console.log('🔄 DataCenterService: Fetching feedback...', { dataId, filters });
 
-      const response = await fetch(`/api/data-feedback?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-feedback?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -357,7 +364,7 @@ export class DataCenterService {
     try {
       console.log('🔄 DataCenterService: Submitting feedback...', { dataId, feedback });
 
-      const response = await fetch('/api/data-feedback', {
+      const response = await fetch(`${this.baseUrl}/api/data-feedback`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -412,7 +419,7 @@ export class DataCenterService {
 
       console.log('🔄 DataCenterService: Updating feedback...', { feedbackId, updates });
 
-      const response = await fetch(`/api/data-feedback?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-feedback?${params.toString()}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -456,7 +463,7 @@ export class DataCenterService {
 
       console.log('🔄 DataCenterService: Deleting feedback...', { feedbackId });
 
-      const response = await fetch(`/api/data-feedback?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-feedback?${params.toString()}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -510,7 +517,7 @@ export class DataCenterService {
 
       console.log('🔄 DataCenterService: Fetching all feedback...', filters);
 
-      const response = await fetch(`/api/data-feedback-all?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-feedback-all?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -597,12 +604,13 @@ export class DataCenterService {
    */
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch('/api/create-data-center-tables', {
+      const response = await fetch(`${this.baseUrl}/api/data-center?user_id=test&user_role=manager&limit=1`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
-        }
+        },
+        cache: 'no-store'
       });
 
       if (!response.ok) {
@@ -611,14 +619,75 @@ export class DataCenterService {
 
       const result = await response.json();
       console.log('✅ DataCenterService: Connection test successful');
-      return result.success;
+      return !!result;
     } catch (error) {
       console.error('❌ DataCenterService: Connection test failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * Get shared data for user on login (recent shared data)
+   */
+  async getSharedDataForUser(
+    userId: string,
+    userRole: string
+  ): Promise<DataCenterEntry[]> {
+    try {
+      console.log('🔄 DataCenterService: Getting shared data for user login...', { userId, userRole });
+
+      const result = await this.getDataEntries(userId, userRole, {
+        data_type: 'received',
+        page: 1,
+        limit: 10 // Get recent 10 shared items
+      });
+
+      console.log('✅ DataCenterService: Shared data retrieved for user login');
+      return result.data || [];
+    } catch (error) {
+      console.error('❌ DataCenterService: Get shared data for user error:', error);
+      return []; // Return empty array instead of throwing to not break login
+    }
+  }
+
+  /**
+   * Test method to get all data entries (for debugging)
+   */
+  async getAllDataEntries(): Promise<DataCenterEntry[]> {
+    try {
+      console.log('🔄 DataCenterService: Getting ALL data entries for debugging...');
+      
+      const response = await fetch(`${this.baseUrl}/api/data-center?user_id=debug&user_role=manager&data_type=all&limit=100`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        console.error('❌ Debug API error:', response.status, response.statusText);
+        return [];
+      }
+
+      const result = await response.json();
+      console.log('🔍 Debug API response:', result);
+      
+      return result.data || [];
+    } catch (error) {
+      console.error('❌ Debug error:', error);
+      return [];
     }
   }
 }
 
 // Export singleton instance
 export const dataCenterService = new DataCenterService();
+
+// Export function to get shared data on user login
+export async function getSharedDataOnLogin(userId: string, userRole: string): Promise<DataCenterEntry[]> {
+  return dataCenterService.getSharedDataForUser(userId, userRole);
+}
+
 export default dataCenterService;

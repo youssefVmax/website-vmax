@@ -37,10 +37,11 @@ class RequestManager {
       });
     }
 
-    // If request is already in progress, wait for it
+    // If request is already in progress, wait for it and return a clone
+    // so each consumer gets a fresh readable body stream
     if (cached?.promise) {
       console.log(`⏳ RequestManager: Waiting for existing request to ${url}`);
-      return cached.promise;
+      return cached.promise.then((resp) => resp.clone());
     }
 
     // Create new request with timeout and retry logic
@@ -65,7 +66,8 @@ class RequestManager {
         });
       }
       
-      return response;
+      // Always return a fresh clone so the caller can read the body
+      return response.clone();
     } catch (error) {
       // Remove failed request from cache
       this.cache.delete(cacheKey);
@@ -81,7 +83,7 @@ class RequestManager {
         console.log(`🔄 RequestManager: Attempt ${attempt + 1} for ${url}`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout (increased from 15)
 
         const response = await fetch(url, {
           ...options,

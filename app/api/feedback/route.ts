@@ -49,11 +49,16 @@ export async function GET(request: NextRequest) {
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const [rows] = await query<any>(
-      `SELECT * FROM \`feedback\` ${whereSql} ORDER BY \`created_at\` DESC LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
-    const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`feedback\` ${whereSql}`, params);
+    // Build the complete SQL query with proper parameter handling
+    const baseSql = `SELECT * FROM feedback ${whereSql} ORDER BY created_at DESC`;
+    const countSql = `SELECT COUNT(*) as c FROM feedback ${whereSql}`;
+    
+    // For pagination, we need to append LIMIT and OFFSET to the query string
+    // since MySQL has issues with prepared statements for LIMIT/OFFSET
+    const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
+    
+    const [rows] = await query<any>(paginatedSql, params);
+    const [totals] = await query<any>(countSql, params);
 
     return addCorsHeaders(NextResponse.json({
       feedback: rows,
@@ -77,7 +82,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     const [result] = await query<any>(
-      `INSERT INTO \`feedback\` (
+      `INSERT INTO  feedback  (
         id, user_id, user_name, user_role, feedback_type, subject, message, 
         priority, status, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -133,7 +138,7 @@ export async function PUT(request: NextRequest) {
     Object.entries(updates).forEach(([key, value]) => {
       if (key === 'id') return;
       const dbField = fieldMap[key] || key;
-      setClauses.push(`\`${dbField}\` = ?`);
+      setClauses.push(` ${dbField}  = ?`);
       params.push(value);
     });
 
@@ -145,7 +150,7 @@ export async function PUT(request: NextRequest) {
     params.push(now, id);
 
     const [result] = await query<any>(
-      `UPDATE \`feedback\` SET ${setClauses.join(', ')} WHERE \`id\` = ?`,
+      `UPDATE  feedback  SET ${setClauses.join(', ')} WHERE  id  = ?`,
       params
     );
 
@@ -165,7 +170,7 @@ export async function DELETE(request: NextRequest) {
       return addCorsHeaders(NextResponse.json({ success: false, error: 'Feedback ID is required' }, { status: 400 }));
     }
 
-    const [result] = await query<any>(`DELETE FROM \`feedback\` WHERE \`id\` = ?`, [id]);
+    const [result] = await query<any>(`DELETE FROM  feedback  WHERE  id  = ?`, [id]);
     return addCorsHeaders(NextResponse.json({ success: true, affected: (result as any).affectedRows }));
   } catch (error) {
     console.error('Error deleting feedback:', error);

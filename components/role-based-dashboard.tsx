@@ -15,7 +15,7 @@ import {
   Activity
 } from "lucide-react"
 import EditableDataTable from "./editable-data-table"
-import EnhancedTeamLeaderDashboard from "./enhanced-team-leader-dashboard"
+import EnhancedTeamLeaderDashboard from "./enhanced-team_leader-dashboard"
 import { User } from "@/lib/auth"
 import { API_CONFIG } from "@/lib/config"
 
@@ -54,7 +54,7 @@ export default function RoleBasedDashboard({ user }: RoleBasedDashboardProps) {
       if (user.role !== 'manager') {
         params.append('user_id', user.id.toString())
       }
-      if (user.team_name && user.role === 'team-leader') {
+      if (user.team_name && user.role === 'team_leader') {
         params.append('team', user.team_name)
       }
 
@@ -186,8 +186,8 @@ export default function RoleBasedDashboard({ user }: RoleBasedDashboardProps) {
   ]
 
   // Determine permissions based on role
-  const canEditOwnData = user.role === 'salesman' || user.role === 'team-leader'
-  const canViewTeamData = user.role === 'team-leader' || user.role === 'manager'
+  const canEditOwnData = user.role === 'salesman' || user.role === 'team_leader'
+  const canViewTeamData = user.role === 'team_leader' || user.role === 'manager'
   const canViewAllData = user.role === 'manager'
   const canCreateData = true // All roles can create
 
@@ -321,7 +321,7 @@ export default function RoleBasedDashboard({ user }: RoleBasedDashboardProps) {
   }
 
   // Team Leader Dashboard - Personal + Team data
-  if (user.role === 'team-leader') {
+  if (user.role === 'team_leader') {
     return <EnhancedTeamLeaderDashboard user={user} userRole={user.role} />
   }
 

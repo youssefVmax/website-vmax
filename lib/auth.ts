@@ -1,42 +1,31 @@
 import { requestManager } from './request-manager';
+import { 
+  UserRole, 
+  User, 
+  AuthResponse, 
+  USER_ROLES, 
+  isValidRole,
+  hasPermission 
+} from '../types/user';
 
-export type UserRole = 'manager' | 'team-leader' | 'salesman';
-
-export interface User {
-  id: number;
-  username: string;
-  email: string;
-  full_name: string;
-  phone?: string;
-  role: UserRole;
-  team_id?: number;
-  team_name?: string;
-  is_active: boolean;
-  last_login?: Date;
-  created_at: Date;
-  updated_at: Date;
-  password_hash?: string; // For authentication
-}
-
-export interface AuthResponse {
-  success: boolean;
-  user?: User;
-  token?: string;
-  message?: string;
-}
+// Re-export User type for compatibility
+export type { User, UserRole, AuthResponse };
 
 // Manager user object
 export const MANAGER_USER: User = {
-  id: 1,
+  id: 'manager-001',
   username: 'manager',
   email: 'manager@vmax.com',
-  full_name: 'System Manager',
-  role: 'manager',
-  team_id: 1,
-  team_name: 'MANAGEMENT',
+  name: 'System Manager',
+  role: USER_ROLES.MANAGER,
+  team: 'MANAGEMENT',
   is_active: true,
   created_at: new Date(),
   updated_at: new Date(),
+  // Backward compatibility
+  full_name: 'System Manager',
+  team_name: 'MANAGEMENT',
+  team_id: 1,
 };
 
 // Frontend Authentication Service
@@ -175,17 +164,23 @@ export class AuthService {
       if (data.success && data.user) {
         // Convert API user format to our User interface
         const user: User = {
-          id: parseInt(data.user.id),
+          id: data.user.id.toString(), // Ensure string type
           username: data.user.username,
           email: data.user.email,
-          full_name: data.user.name || data.user.full_name,
+          name: data.user.name || data.user.full_name,
           phone: data.user.phone,
           role: data.user.role as UserRole,
-          team_id: data.user.team_id,
-          team_name: data.user.team || data.user.team_name,
+          team: data.user.team || data.user.team_name,
+          managedTeam: data.user.managedTeam,
+          password: data.user.password,
+          created_by: data.user.created_by,
           is_active: data.user.isActive || data.user.is_active,
           created_at: new Date(data.user.createdAt || data.user.created_at),
           updated_at: new Date(data.user.updatedAt || data.user.updated_at),
+          // Backward compatibility
+          full_name: data.user.name || data.user.full_name,
+          team_name: data.user.team || data.user.team_name,
+          team_id: data.user.team_id,
         };
 
         const token = data.token || `user_token_${Date.now()}`;
@@ -219,11 +214,11 @@ export class AuthService {
     
     // Common test credentials for development
     const testCredentials = [
-      { username: 'admin', password: 'admin', role: 'manager' as UserRole },
-      { username: 'manager', password: 'manager', role: 'manager' as UserRole },
-      { username: 'sales', password: 'sales', role: 'salesman' as UserRole },
-      { username: 'team-lead', password: 'team-lead', role: 'team-leader' as UserRole },
-      { username: 'demo', password: 'demo', role: 'salesman' as UserRole }
+      { username: 'admin', password: 'admin', role: USER_ROLES.MANAGER },
+      { username: 'manager', password: 'manager', role: USER_ROLES.MANAGER },
+      { username: 'sales', password: 'sales', role: USER_ROLES.SALESMAN },
+      { username: 'team-lead', password: 'team-lead', role: USER_ROLES.TEAM_LEADER },
+      { username: 'demo', password: 'demo', role: USER_ROLES.SALESMAN }
     ];
     
     const credential = testCredentials.find(cred => 
@@ -233,14 +228,16 @@ export class AuthService {
     
     if (credential) {
       const user: User = {
-        id: Math.floor(Math.random() * 1000) + 100,
+        id: `user-${Math.floor(Math.random() * 1000) + 100}`, // Ensure string type
         username: credential.username,
-        email: `${credential.username}@vmax.com`,
-        full_name: credential.username.charAt(0).toUpperCase() + credential.username.slice(1),
+        email: `${credential.username}@vmaxcom.org`,
+        name: credential.username.charAt(0).toUpperCase() + credential.username.slice(1),
         role: credential.role,
         is_active: true,
         created_at: new Date(),
-        updated_at: new Date()
+        updated_at: new Date(),
+        // Backward compatibility
+        full_name: credential.username.charAt(0).toUpperCase() + credential.username.slice(1)
       };
       
       const token = `fallback_token_${user.id}_${Date.now()}`;
@@ -273,7 +270,7 @@ export class AuthService {
     if (id === '1' || id === 'manager-001') return MANAGER_USER;
     
     try {
-      const response = await requestManager.fetch(`/api/unified-data?userRole=manager&dataTypes=users&userId=${id}`);
+      const response = await requestManager.fetch(`/api/users?userId=${id}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -283,17 +280,23 @@ export class AuthService {
       
       if (data.success && data.user) {
         return {
-          id: parseInt(data.user.id),
+          id: data.user.id.toString(),
           username: data.user.username,
           email: data.user.email,
-          full_name: data.user.name || data.user.full_name,
+          name: data.user.name,
           phone: data.user.phone,
           role: data.user.role as UserRole,
+          team: data.user.team,
+          managedTeam: data.user.managedTeam,
+          password: data.user.password,
+          created_by: data.user.created_by,
+          is_active: data.user.is_active,
+          created_at: new Date(data.user.created_at),
+          updated_at: new Date(data.user.updated_at),
+          // Backward compatibility
+          full_name: data.user.name,
+          team_name: data.user.team,
           team_id: data.user.team_id,
-          team_name: data.user.team || data.user.team_name,
-          is_active: data.user.isActive || data.user.is_active,
-          created_at: new Date(data.user.createdAt || data.user.created_at),
-          updated_at: new Date(data.user.updatedAt || data.user.updated_at),
         };
       }
       
@@ -306,10 +309,10 @@ export class AuthService {
 
   // Fetch users by role from API
   public async getUsersByRole(role: UserRole): Promise<User[]> {
-    if (role === 'manager') return [MANAGER_USER];
+    if (role === USER_ROLES.MANAGER) return [MANAGER_USER];
     
     try {
-      const response = await requestManager.fetch(`/api/unified-data?userRole=manager&dataTypes=users&role=${role}`);
+      const response = await requestManager.fetch(`/api/users?role=${role}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -319,17 +322,23 @@ export class AuthService {
       
       if (data.success && data.users) {
         return data.users.map((user: any) => ({
-          id: parseInt(user.id),
+          id: user.id.toString(),
           username: user.username,
           email: user.email,
-          full_name: user.name || user.full_name,
+          name: user.name,
           phone: user.phone,
           role: user.role as UserRole,
+          team: user.team,
+          managedTeam: user.managedTeam,
+          password: user.password,
+          created_by: user.created_by,
+          is_active: user.is_active,
+          created_at: new Date(user.created_at),
+          updated_at: new Date(user.updated_at),
+          // Backward compatibility
+          full_name: user.name,
+          team_name: user.team,
           team_id: user.team_id,
-          team_name: user.team || user.team_name,
-          is_active: user.isActive || user.is_active,
-          created_at: new Date(user.createdAt || user.created_at),
-          updated_at: new Date(user.updatedAt || user.updated_at),
         }));
       }
       
@@ -341,11 +350,11 @@ export class AuthService {
   }
 
   // Fetch users by team from API
-  public async getUsersByTeam(teamId: string): Promise<User[]> {
-    if (teamId === 'MANAGEMENT') return [MANAGER_USER];
+  public async getUsersByTeam(teamName: string): Promise<User[]> {
+    if (teamName === 'MANAGEMENT') return [MANAGER_USER];
     
     try {
-      const response = await requestManager.fetch(`/api/unified-data?userRole=manager&dataTypes=users&teamId=${teamId}`);
+      const response = await requestManager.fetch(`/api/users?team=${teamName}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -355,17 +364,23 @@ export class AuthService {
       
       if (data.success && data.users) {
         return data.users.map((user: any) => ({
-          id: parseInt(user.id),
+          id: user.id.toString(),
           username: user.username,
           email: user.email,
-          full_name: user.name || user.full_name,
+          name: user.name,
           phone: user.phone,
           role: user.role as UserRole,
-          team_id: user.team_id,
-          team_name: user.team || user.team_name,
-          is_active: user.isActive || user.is_active,
-          created_at: new Date(user.createdAt || user.created_at),
-          updated_at: new Date(user.updatedAt || user.updated_at),
+          team: user.team,
+          managedTeam: user.managedTeam,
+          password: user.password,
+          created_by: user.created_by,
+          is_active: user.is_active,
+          created_at: new Date(user.created_at),
+          updated_at: new Date(user.updated_at),
+          // Backward compatibility
+          full_name: user.name,
+          team_name: user.team,
+          team_id: user.team === 'ALI ASHRAF' ? 1 : user.team === 'CS TEAM' ? 2 : 0,
         }));
       }
       
@@ -379,7 +394,7 @@ export class AuthService {
   // Fetch all users from API
   public async getAllUsers(): Promise<User[]> {
     try {
-      const response = await requestManager.fetch('/api/unified-data?userRole=manager&dataTypes=users');
+      const response = await requestManager.fetch('/api/users');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -388,25 +403,40 @@ export class AuthService {
       const data = await response.json();
       
       if (data.success && data.users) {
-        return data.users.map((user: any) => ({
-          id: parseInt(user.id),
+        // Include the manager user in the list
+        const dbUsers = data.users.map((user: any) => ({
+          id: user.id.toString(),
           username: user.username,
           email: user.email,
-          full_name: user.name || user.full_name,
+          name: user.name,
           phone: user.phone,
           role: user.role as UserRole,
-          team_id: user.team_id,
-          team_name: user.team || user.team_name,
-          is_active: user.isActive || user.is_active,
-          created_at: new Date(user.createdAt || user.created_at),
-          updated_at: new Date(user.updatedAt || user.updated_at),
+          team: user.team,
+          managedTeam: user.managedTeam,
+          password: user.password,
+          created_by: user.created_by,
+          is_active: user.is_active,
+          created_at: new Date(user.created_at),
+          updated_at: new Date(user.updated_at),
+          // Backward compatibility
+          full_name: user.name,
+          team_name: user.team,
+          team_id: user.team === 'ALI ASHRAF' ? 1 : user.team === 'CS TEAM' ? 2 : 0,
         }));
+        
+        // Add manager user if not already in the list
+        const hasManager = dbUsers.some((user: User) => user.role === USER_ROLES.MANAGER);
+        if (!hasManager) {
+          return [MANAGER_USER, ...dbUsers];
+        }
+        
+        return dbUsers;
       }
       
-      return [];
+      return [MANAGER_USER]; // Return at least the manager user
     } catch (error) {
       console.error('Error fetching all users:', error);
-      return [];
+      return [MANAGER_USER]; // Return at least the manager user on error
     }
   }
 }

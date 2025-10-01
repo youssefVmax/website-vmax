@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/server/db';
 
 interface UnifiedDataRequest {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   userId?: string;
   userName?: string;
   managedTeam?: string;
@@ -14,7 +14,7 @@ interface UnifiedDataRequest {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team-leader';
+  const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team_leader';
   const userId = searchParams.get('userId');
   const userName = searchParams.get('userName');
   const managedTeam = searchParams.get('managedTeam');
@@ -88,10 +88,10 @@ export async function GET(request: NextRequest) {
           dealsQuery += ' AND (SalesAgentID = ? OR ClosingAgentID = ?)';
           dealsParams.push(userId, userId);
           console.log('🔄 Unified Data API: Applied salesman filtering');
-        } else if (userRole === 'team-leader' && managedTeam) {
+        } else if (userRole === 'team_leader' && managedTeam) {
           dealsQuery += ' AND (salesTeam = ? OR SalesAgentID = ?)';
           dealsParams.push(managedTeam, userId);
-          console.log('🔄 Unified Data API: Applied team-leader filtering');
+          console.log('🔄 Unified Data API: Applied team_leader filtering');
         }
 
         // Apply date filtering
@@ -145,10 +145,10 @@ export async function GET(request: NextRequest) {
           callbacksQuery += ' AND SalesAgentID = ?';
           callbacksParams.push(userId);
           console.log('🔄 Unified Data API: Applied salesman filtering for callbacks');
-        } else if (userRole === 'team-leader' && managedTeam) {
+        } else if (userRole === 'team_leader' && managedTeam) {
           callbacksQuery += ' AND (sales_team = ? OR SalesAgentID = ?)';
           callbacksParams.push(managedTeam, userId);
-          console.log('🔄 Unified Data API: Applied team-leader filtering for callbacks');
+          console.log('🔄 Unified Data API: Applied team_leader filtering for callbacks');
         }
 
         // Apply date filtering
@@ -194,9 +194,9 @@ export async function GET(request: NextRequest) {
         if (userRole === 'salesman' && userId) {
           targetsQuery += ' AND agentId = ?';
           targetsParams.push(userId);
-        } else if (userRole === 'team-leader' && managedTeam) {
+        } else if (userRole === 'team_leader' && managedTeam) {
           targetsQuery += ' AND (managerId = ? OR agentId = ?)';
-          targetsParams.push(managedTeam, userId);
+          targetsParams.push(userId, userId);
         }
 
         targetsQuery += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
@@ -238,7 +238,7 @@ export async function GET(request: NextRequest) {
           if (userRole === 'salesman' && userId) {
             notificationsQuery += ' AND salesAgentId = ?';
             notificationsParams.push(userId);
-          } else if (userRole === 'team-leader' && managedTeam) {
+          } else if (userRole === 'team_leader' && managedTeam) {
             notificationsQuery += ' AND (teamName = ? OR salesAgentId = ?)';
             notificationsParams.push(managedTeam, userId);
           }

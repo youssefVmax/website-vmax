@@ -117,7 +117,7 @@ export function EnhancedNavbar() {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'manager': return 'bg-purple-100 text-purple-800'
-      case 'team-leader': return 'bg-blue-100 text-blue-800'
+      case 'team_leader': return 'bg-blue-100 text-blue-800'
       case 'salesman': return 'bg-green-100 text-green-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -147,7 +147,7 @@ export function EnhancedNavbar() {
 
         {/* Navigation Links */}
         <nav className="flex items-center space-x-6 mx-6">
-          {navItems.map((item) => (
+          {(user?.role === 'manager' ? managerNavItems : navItems).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -183,26 +183,16 @@ export function EnhancedNavbar() {
               >
                 Callbacks Table
               </Link>
-              <Link
-                href="/admin/backup"
-                className={cn(
-                  "text-sm font-semibold transition-colors hover:text-primary",
-                  pathname.startsWith("/admin") ? "text-primary" : "text-muted-foreground"
-                )}
-                title="Admin Panel"
-              >
-                Admin
-              </Link>
             </>
           )}
           
           {/* Team Leader specific links */}
-          {user?.role === 'team-leader' && (
+          {user?.role === 'team_leader' && (
             <Link
-              href="/team-leader"
+              href="/team_leader"
               className={cn(
                 "text-sm font-semibold transition-colors hover:text-primary",
-                pathname.startsWith("/team-leader") ? "text-primary" : "text-muted-foreground"
+                pathname.startsWith("/team_leader") ? "text-primary" : "text-muted-foreground"
               )}
               title="Team Leader Dashboard"
             >
@@ -214,7 +204,7 @@ export function EnhancedNavbar() {
         {/* Right side actions */}
         <div className="ml-auto flex items-center space-x-4">
           {/* Action buttons */}
-          {(user?.role === 'manager' || user?.role === 'team-leader' || user?.role === 'salesman') && (
+          {(user?.role === 'manager' || user?.role === 'team_leader' || user?.role === 'salesman') && (
             <>
               <Link href="/deals/new">
                 <Button variant="default" size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600">

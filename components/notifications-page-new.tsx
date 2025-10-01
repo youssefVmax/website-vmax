@@ -15,15 +15,15 @@ import { Notification, PriorityType, NotificationType } from "@/types/notificati
 import { useNotifications } from "@/hooks/use-notifications"
 import { userService } from "@/lib/mysql-services"
 
-type UserRole = "manager" | "salesman" | "customer-service"
+type UserRole = "manager" | "salesman" | "team_leader"
 
 interface NotificationsPageProps {
   userRole?: UserRole
-  user?: { name: string; username: string } | null
+  user?: { name: string; username: string; id: string; managedTeam?: string } | null
 }
 
 export default function NotificationsPage({ userRole = 'salesman', user }: NotificationsPageProps) {
-  const currentUser = user || { name: "Mohsen Sayed", username: "mohsen.sayed" }
+  const currentUser = user 
 
   const [activeTab, setActiveTab] = useState("all")
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -41,20 +41,28 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     addNotification 
   } = useNotifications()
   
-  // Load users for manager user selection
+  // Load users for manager and team leader user selection
   useEffect(() => {
     const loadUsers = async () => {
-      if (userRole === 'manager') {
-        try {
-          const allUsers = await userService.getUsers()
+      try {
+        if (userRole === 'manager') {
+          // Managers can select all users
+          const allUsers = await userService.getAllUsers()
           setUsers(allUsers)
-        } catch (error) {
-          console.error('Failed to load users:', error)
+        } else if (userRole === 'team_leader' && user?.managedTeam) {
+          // Team leaders can only select their team members
+          const allUsers = await userService.getAllUsers()
+          const teamMembers = allUsers.filter(u =>
+            u.team === user.managedTeam || u.role === 'manager'
+          )
+          setUsers(teamMembers)
         }
+      } catch (error) {
+        console.error('Failed to load users:', error)
       }
     }
     loadUsers()
-  }, [userRole])
+  }, [userRole, user?.managedTeam])
   
   // No sample data - all notifications come from Firebase
 
@@ -68,7 +76,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
   })
 
   const unreadCount = filteredNotifications.filter((notif: Notification) => !notif.read).length
-  const canCreateNotifications = userRole === "manager" || userRole === "customer-service"
+  const canCreateNotifications = userRole === "manager" || userRole === "team_leader"
 
   // markAsRead and markAllAsRead are now provided by the context
 
@@ -93,10 +101,19 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
   }
 
   const handleCreateMessage = () => {
+    if (!currentUser) return
     if (!newMessage.message.trim()) return
-    if (userRole === 'manager' && selectedUsers.length === 0) return
+    if ((userRole === 'manager' || userRole === 'team_leader') && selectedUsers.length === 0) return
 
-    const recipients = userRole === 'manager' ? selectedUsers : ["Sales Team"]
+    let recipients: string[] = []
+
+    if (userRole === 'manager') {
+      recipients = selectedUsers.length > 0 ? selectedUsers : ["All Users"]
+    } else if (userRole === 'team_leader') {
+      recipients = selectedUsers.length > 0 ? selectedUsers : ["Team Members"]
+    } else {
+      recipients = ["Management"] // For salesmen
+    }
 
     const notification: Notification = {
       id: Date.now().toString(),
@@ -109,7 +126,13 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
       to: recipients,
       timestamp: new Date(),
       read: false,
-      isManagerMessage: userRole === 'manager'
+      isManagerMessage: userRole === 'manager',
+      // Add required fields for MySQL storage
+      salesAgentId: currentUser.id,
+      salesAgent: currentUser.name,
+      userRole: userRole,
+      actionRequired: false,
+      isRead: false
     }
 
     addNotification(notification)
@@ -172,7 +195,14 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>New Message</CardTitle>
-            <CardDescription>Send a message to your team members</CardDescription>
+            <CardDescription>
+              {userRole === 'manager' 
+                ? 'Send a message to any team members or all users'
+                : userRole === 'team_leader'
+                ? 'Send a message to your team members'
+                : 'Send a message to management'
+              }
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -186,7 +216,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
                 />
               </div>
               
-              {userRole === 'manager' && (
+              {(userRole === 'manager' || userRole === 'team_leader') && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-sm font-medium">Recipients</label>
@@ -259,7 +289,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
             </Button>
             <Button
               onClick={handleCreateMessage}
-              disabled={!newMessage.message.trim() || (userRole === 'manager' && selectedUsers.length === 0)}
+              disabled={!currentUser || !newMessage.message.trim() || ((userRole === 'manager' || userRole === 'team_leader') && selectedUsers.length === 0)}
             >
               <Send className="mr-2 h-4 w-4" /> Send Message
             </Button>

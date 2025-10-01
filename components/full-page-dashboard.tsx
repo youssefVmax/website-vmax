@@ -29,17 +29,19 @@ import {
   PieChart,
   DollarSign,
   Phone,
+  RefreshCw,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
-import { dealsService } from "@/lib/mysql-deals-service"
-import { callbacksService, type Callback } from "@/lib/mysql-callbacks-service"
-import { targetsService } from "@/lib/mysql-targets-service"
+import { useDashboardStats, useDeals, useCallbacks, useNotifications } from "@/hooks/useApiData"
+import { apiMethods } from "@/config/api"
+import { UserRole } from "@/types/user"
+import { DateFilter } from "@/components/ui/date-filter"
 import SalesAnalysisDashboard from '@/components/sales-dashboard'
-import NotificationsPage from "@/components/notifications-page"
+import NotificationsPage from "@/components/notifications-page-new"
 import { AddDealPage } from "@/components/add-deal"
 import EnhancedAddDeal from "@/components/enhanced-add-deal"
 import { DataCenter } from "@/components/data-center"
@@ -49,29 +51,32 @@ import { EnhancedTargetDashboard } from "./enhanced-target-dashboard"
 import { ProfileSettings } from "@/components/profile-settings"
 import AdvancedAnalytics from "@/components/advanced-analytics"
 import EnhancedAnalytics from "@/components/enhanced-analytics"
-// Removed: import AnalyticsConnectionTest from "@/components/analytics-connection-test" - component deleted
+import DealsTablePage from "@/components/deals-table"
 import MyDealsTable from "@/components/my-deals-table"
 import { ImportExportControls } from "@/components/import-export-controls"
-import UserManagement from "@/components/user-management"
-// Removed: import { AnimatedMetricCard } from "@/components/animated-metrics" - component deleted
+import UserManagement from "@/components/user-management-new"
 import AccessDenied from "@/components/access-denied"
 import { CallbacksManagement } from "@/components/callbacks-management"
 import ManageCallbacksPage from "@/components/manage-callback"
 import NewCallbackPage from "@/components/new-callback"
-import { apiService, Deal } from '@/lib/api-service'
-import { unifiedApiService } from '@/lib/unified-api-service'
 import { useUnifiedData } from '@/hooks/useUnifiedData'
+import { User } from '@/types/user'
+import apiService, { Deal } from "@/lib/api-service"
 
 export default function FullPageDashboard() {
   const { user, logout } = useAuth()
-  const [activeTab, setActiveTab] = useState("dashboard")
+  const [activeTab, setActiveTab] = useState("Dashboard")
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDark, setIsDark] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-
-  // Debug user object
-  console.log('🔍 FullPageDashboard: User object:', user)
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  
+  // Date filter state
+  const currentDate = new Date()
+  const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'))
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear().toString())
+  const [dateFilterKey, setDateFilterKey] = useState(0)
+  console.log('FullPageDashboard: User object:', user)
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
 
   // Listen for tab changes from dashboard buttons
   useEffect(() => {
@@ -84,8 +89,13 @@ export default function FullPageDashboard() {
 
   // Auto-sync deals with targets on app startup
   useEffect(() => {
-    const initializeTargetSystem = async () => {
+    const initializeApp = async () => {
       try {
+        // Clear any cached data to ensure fresh load
+        if (typeof window !== 'undefined' && (window as any).unifiedApiService) {
+          (window as any).unifiedApiService.clearCache();
+        }
+        
         // Initialize API connection
         await apiService.getUsers({ role: 'salesman' })
         console.log('API service initialized successfully')
@@ -93,7 +103,7 @@ export default function FullPageDashboard() {
         console.error('Failed to initialize API service:', error)
       }
     }
-    initializeTargetSystem()
+    initializeApp()
   }, [])
 
   // Apply theme to document
@@ -176,13 +186,15 @@ export default function FullPageDashboard() {
 
   // Removed auto-redirect. Salesmen now land on Dashboard and stay there unless they choose another tab.
 
-  if (!user) {
-    console.log('FullPageDashboard: No user provided')
+  if (!user || !user.role) {
+    console.log('FullPageDashboard: No user or role provided:', { user, role: user?.role })
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto mb-4"></div>
           <p className="text-slate-300">Loading user...</p>
+          {!user && <p className="text-slate-400 text-sm mt-2">No user data</p>}
+          {user && !user.role && <p className="text-slate-400 text-sm mt-2">Missing user role</p>}
         </div>
       </div>
     )
@@ -208,7 +220,7 @@ export default function FullPageDashboard() {
         { id: "admin-callbacks-table", icon: Phone, label: "All Callbacks Table" } as const,
         { id: "settings", icon: Settings, label: "Settings" } as const,
       ]
-    } else if (user.role === 'team-leader') {
+    } else if (user.role === 'team_leader') {
       return [
         ...baseItems,
         { id: "callbacks-manage", icon: Phone, label: "Team Callbacks" } as const,
@@ -263,7 +275,7 @@ export default function FullPageDashboard() {
 
       <div className="relative z-10 flex h-screen">
         {/* Sidebar */}
-        <div className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 flex-shrink-0`}>
+        <div className={`${isSidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 flex-shrink-0`}>
           <Card className={`h-full backdrop-blur-sm transition-all duration-300 rounded-none border-r ${
             isDark 
               ? 'bg-slate-900/50 border-slate-700/50' 
@@ -273,7 +285,7 @@ export default function FullPageDashboard() {
               isDark ? 'border-slate-700/50' : 'border-blue-200/50'
             }`}>
               <div className="flex items-center justify-between">
-                <div className={`flex items-center space-x-3 ${sidebarOpen ? '' : 'justify-center'}`}>
+                <div className={`flex items-center space-x-3 ${isSidebarOpen ? '' : 'justify-center'}`}>
                   <div className="relative">
                     <img 
                       src="/logo.PNG" 
@@ -281,7 +293,7 @@ export default function FullPageDashboard() {
                       className="h-8 w-8 object-contain rounded-md shadow-sm transition-all duration-300 hover:shadow-md"
                     />
                   </div>
-                  {sidebarOpen && (
+                  {isSidebarOpen && (
                     <span className="font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
                       VMAX Sales
                     </span>
@@ -290,12 +302,12 @@ export default function FullPageDashboard() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                   className={`transition-colors duration-300 ${
                     isDark ? 'text-slate-400 hover:text-slate-100' : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
-                  {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+                  {isSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
                 </Button>
               </div>
             </CardHeader>
@@ -315,7 +327,7 @@ export default function FullPageDashboard() {
                         setActiveTab(item.id)
                       }
                     }}
-                    collapsed={!sidebarOpen}
+                    collapsed={!isSidebarOpen}
                     isDark={isDark}
                   />
                 ))}
@@ -325,8 +337,8 @@ export default function FullPageDashboard() {
             <div className={`p-4 border-t transition-colors duration-300 ${
               isDark ? 'border-slate-700/50' : 'border-blue-200/50'
             }`}>
-              <div className={`flex items-center ${sidebarOpen ? 'justify-between' : 'justify-center'}`}>
-                {sidebarOpen && (
+              <div className={`flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
+                {isSidebarOpen && (
                   <div className={`text-sm transition-colors duration-300 ${
                     isDark ? 'text-slate-300' : 'text-slate-700'
                   }`}>
@@ -547,20 +559,26 @@ function PageContent({
       return <SalesAnalysisDashboard userRole={user.role} user={user} />
     case "analytics":
       return <AdvancedAnalytics userRole={user.role} user={user} />
-    case "analytics-test":
-      return <div className="p-6 text-center text-muted-foreground">Analytics test component has been removed</div>
     case "all-deals":
     case "my-deals":
     case "support-deals":
-      return activeTab === "my-deals" && user.role === 'salesman'
-        ? <MyDealsTable user={user} />
-        : <DealsManagement user={user} />
+      if (activeTab === "my-deals") {
+        // Team leader: show team deals table with server-side filters/pagination
+        if (user.role === 'team_leader') {
+          return <DealsTablePage />
+        }
+        // Salesman: personal deals table
+        if (user.role === 'salesman') {
+          return <MyDealsTable user={user} />
+        }
+      }
+      return <DealsManagement user={user} />
     case "add-deal":
       return <EnhancedAddDeal currentUser={user} />
     case "team-targets":
-      return <EnhancedTargetDashboard userRole={user.role} user={user} />
+      return <EnhancedTargetsManagement userRole={user.role} user={user} />
     case "my-targets":
-      return <SalesTargets userRole={user.role} user={user} />
+      return <EnhancedTargetDashboard userRole={user.role} user={user} />
     case "datacenter":
       return <DataCenter userRole={user.role} user={user} />
     case "notifications":
@@ -587,21 +605,34 @@ function PageContent({
 }
 
 function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
+  // Use the new API data hooks
+  const { data: dashboardStats, loading: statsLoading, error: statsError, refresh: refreshStats } = useDashboardStats({
+    userRole: user.role as UserRole,
+    userId: user.id.toString(),
+    managedTeam: user.managedTeam || user.team_name,
+    autoLoad: true
+  });
+
   // Use unified data service for better performance and data consistency
   const {
     data,
     kpis,
-    loading,
-    error,
+    loading: unifiedLoading,
+    error: unifiedError,
     lastUpdated,
-    refresh
+    refresh: refreshUnified
   } = useUnifiedData({
     userRole: user.role,
-    userId: user.id,
+    userId: user.id.toString(),
     userName: user.full_name,
     managedTeam: user.team_name,
     autoLoad: true
   });
+
+  // Enhanced analytics state
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [chartData, setChartData] = useState<any>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
 
   // Calculate metrics with safe number conversion
   const metrics = useMemo(() => {
@@ -642,9 +673,10 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           console.log('📊 DashboardOverview: Users API response:', usersData);
           
           if (usersData.success && usersData.data && Array.isArray(usersData.data.users)) {
-            const salesmen = usersData.data.users.filter((u: any) => u.role === 'salesman');
-            setTotalAgents(salesmen.length);
-            console.log('✅ DashboardOverview: Found', salesmen.length, 'agents');
+            // Count all users in the system (not just salesmen)
+            const allUsers = usersData.data.users;
+            setTotalAgents(allUsers.length);
+            console.log('✅ DashboardOverview: Found', allUsers.length, 'total users');
           } else {
             console.warn('⚠️ DashboardOverview: Invalid users data structure:', usersData);
             setTotalAgents(0);
@@ -658,7 +690,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     loadAgentCount()
   }, [user.role])
 
-  if (loading) {
+  if ((statsLoading || unifiedLoading) && (!data || data.deals.length === 0)) {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -674,15 +706,16 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     )
   }
 
-  if (error) {
+  if (statsError || unifiedError) {
+    console.log('❌ Dashboard: Error state', { statsError, unifiedError });
     return (
       <div className="space-y-6">
         <Card className="border-red-200">
           <CardContent className="p-6">
             <div className="text-center text-red-600">
               <p className="text-lg font-semibold">Error Loading Dashboard</p>
-              <p className="text-sm mt-2">{error}</p>
-              <Button onClick={refresh} className="mt-4">
+              <p className="text-sm mt-2">{statsError || unifiedError}</p>
+              <Button onClick={refreshStats} className="mt-4">
                 Retry
               </Button>
             </div>
@@ -691,6 +724,8 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
       </div>
     )
   }
+
+  console.log('✅ Dashboard: Rendering success state with metrics:', metrics.totalDeals || 0);
 
   return (
     <div className="space-y-6">
@@ -770,7 +805,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">
-                  {user.role === 'manager' ? "Active Agents" : "Performance Score"}
+                  {user.role === 'manager' ? "Total Users" : "Performance Score"}
                 </p>
                 <p className="text-2xl font-bold">
                   {user.role === 'manager' 
@@ -809,7 +844,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
       
       {/* Import/Export Controls for Managers */}
       {user.role === 'manager' && (
-        <ImportExportControls userRole={user.role} />
+        <ImportExportControls user={user} />
       )}
       
       {/* Quick Actions */}
@@ -1010,8 +1045,8 @@ function TeamManagement({ user }: { user: any }) {
           apiService.getUsers(),
           apiService.getDeals()
         ])
-        setUsers(allUsers)
-        setSales(allDeals)
+        setUsers(allUsers as User[])
+        setSales(allDeals as Deal[])
       } catch (error) {
         console.error('Error loading data:', error)
       } finally {
@@ -1193,30 +1228,6 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
   const getAmountPaid = (deal: DealData) => deal?.amount_paid || deal?.amountPaid || 0;
   const getDealId = (deal: DealData) => deal?.DealID || deal?.dealId || deal?.id || '';
 
-  const createSampleDeals = async () => {
-    try {
-      console.log('🔄 AdminDealsTablePage: Creating sample deals...');
-      const response = await fetch('/api/create-sample-deals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log('✅ AdminDealsTablePage: Sample deals created successfully');
-        // Reload deals after creating samples
-        window.location.reload();
-      } else {
-        throw new Error(result.message || 'Failed to create sample deals');
-      }
-    } catch (error) {
-      console.error('❌ AdminDealsTablePage: Error creating sample deals:', error);
-      setError(`Failed to create sample deals: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
 
   useEffect(() => {
     const fetchDeals = async () => {
@@ -1225,102 +1236,34 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
         setError(null)
         console.log('🔄 AdminDealsTablePage: Fetching all deals...')
         
-        // First, test the API directly
-        const testResponse = await fetch('/api/health-check');
-        const healthData = await testResponse.json();
-        console.log('🔍 AdminDealsTablePage: Health check:', healthData);
-        
-        // Check if database has any deals at all
-        if (healthData.success && healthData.counts) {
-          console.log('🔍 AdminDealsTablePage: Database counts:', healthData.counts);
-          if (healthData.counts.deals === 0) {
-            console.log('⚠️ AdminDealsTablePage: Database has 0 deals - this explains why no data is shown');
+        // Use new API service to get all deals
+        const response = await fetch('/api/deals?limit=1000&userRole=manager&userId=manager-001', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
           }
-        }
-        
-        // Try direct API call first to test if deals exist
-        console.log('🔍 AdminDealsTablePage: Testing direct deals API...');
-        const directDealsResponse = await fetch('/api/deals');
-        const directDealsData = await directDealsResponse.json();
-        console.log('🔍 AdminDealsTablePage: Direct deals API response:', directDealsData);
-        
-        // Use unified data service to get ALL deals (no user filtering for admin view)
-        const allDeals = await unifiedApiService.getDeals({
-          limit: '1000' // Get more deals for admin view
         });
         
-        console.log('🔍 AdminDealsTablePage: Unified API Response:', allDeals);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         
-        // Check if we have deals data in the response
-        let dealsData = null;
-        if (Array.isArray(allDeals) && allDeals.length > 0) {
-          console.log('✅ AdminDealsTablePage: Deals fetched from unified service:', allDeals.length);
-          console.log('🔍 AdminDealsTablePage: Sample deals:', allDeals.slice(0, 2));
-          dealsData = allDeals;
-        } else if (directDealsData.success && Array.isArray(directDealsData.deals)) {
-          console.log('✅ AdminDealsTablePage: Using direct API fallback, deals:', directDealsData.deals.length);
-          console.log('🔍 AdminDealsTablePage: Sample direct deals:', directDealsData.deals.slice(0, 2));
-          dealsData = directDealsData.deals;
-        } else if (directDealsData.deals && Array.isArray(directDealsData.deals)) {
-          // Handle case where deals are in response but success flag might be missing
-          console.log('✅ AdminDealsTablePage: Found deals in response without success flag:', directDealsData.deals.length);
-          console.log('🔍 AdminDealsTablePage: Sample deals from response:', directDealsData.deals.slice(0, 2));
-          dealsData = directDealsData.deals;
-        }
-
-        if (dealsData && dealsData.length > 0) {
-          console.log('📋 AdminDealsTablePage: Setting deals data with', dealsData.length, 'deals');
-          setDeals(dealsData);
-        } else {
-          console.error('❌ AdminDealsTablePage: No deals found in any response:', { allDeals, directDealsData });
-          console.log('🔄 AdminDealsTablePage: APIs failed, but we know deals exist. Setting empty array for now.');
-          setDeals([]); // Set empty array instead of throwing error
-          setError('API Error: 502 Bad Gateway - Unable to fetch deals data. The deals exist but the API is currently unavailable.');
-        }
+        const result = await response.json();
+        const allDeals = result.success ? result.deals || [] : [];
+        
+        console.log('✅ AdminDealsTablePage: Deals fetched:', Array.isArray(allDeals) ? allDeals.length : 0);
+        setDeals(Array.isArray(allDeals) ? allDeals : []);
       } catch (error) {
         console.error('❌ AdminDealsTablePage: Error fetching deals:', error)
         setError(error instanceof Error ? error.message : 'Failed to fetch deals')
-        setDeals([]); // Ensure deals is always an array
+        setDeals([])
       } finally {
         setLoading(false)
       }
     }
     fetchDeals()
-  }, [user.id, user.full_name, user.team_name])
+  }, [user.id, user.name, user.team])
 
-  // Manual data injection for testing (temporary solution)
-  const injectTestData = () => {
-    console.log('🔄 AdminDealsTablePage: Injecting test data...');
-    const testDeals = [
-      {
-        id: "RnpeeiDkCTAhcv41OKbS",
-        customer_name: "elina",
-        sales_agent: "mostafa el shafay",
-        amount_paid: "130",
-        status: "active",
-        email: "mostafa.2222mohamed@gamil.com",
-        phone_number: "7203235689",
-        sales_team: "ALI ASHRAF",
-        service_tier: "Silver",
-        DealID: "DEAL-1758399419134-347"
-      },
-      {
-        id: "0argV9kfPBMYYjOYBJuo",
-        customer_name: "Alaa Amer",
-        sales_agent: "nader galal",
-        amount_paid: "159",
-        status: "active",
-        email: "kemh69@aol.com",
-        phone_number: "2015394075",
-        sales_team: "ALI ASHRAF",
-        service_tier: "Silver",
-        DealID: "DEAL-1758399226546-741"
-      }
-    ];
-    setDeals(testDeals);
-    setError(null);
-    console.log('✅ AdminDealsTablePage: Test data injected successfully');
-  }
 
   const exportToCSV = () => {
     if (!deals || deals.length === 0) return
@@ -1389,17 +1332,6 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button variant="outline" onClick={() => window.open('/admin/deals-table', '_blank')}>
-            <Users className="h-4 w-4 mr-2" />
-            Full Table View
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => window.open('/api/health-check', '_blank')}
-          >
-            <Database className="h-4 w-4 mr-2" />
-            Check Database
-          </Button>
         </div>
       </div>
 
@@ -1412,36 +1344,19 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
             <div className="text-center py-8">
               <div className="text-lg font-medium text-muted-foreground mb-2">No deals found</div>
               <div className="text-sm text-muted-foreground mb-4">
-                <p className="mb-2">The database appears to be empty or there's a connection issue.</p>
-                <p className="mb-2">Possible causes:</p>
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>No deals have been created in the database yet</li>
-                  <li>Database connection or query issues</li>
-                  <li>API endpoint configuration problems</li>
-                </ul>
-                <p className="mt-2 text-xs">
-                  <strong>Solution:</strong> Click "Create Sample Deals" to add test data, or check the console logs for detailed error information.
+                <p className="mb-2">No deals are currently available in the system.</p>
+                <p className="text-xs">
+                  Deals will appear here once they are created through the system.
                 </p>
               </div>
               <div className="space-y-2">
-                <div className="flex gap-2 justify-center">
-                  <Button 
-                    onClick={createSampleDeals}
-                    variant="default"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Sample Deals
-                  </Button>
-                  <Button 
-                    onClick={() => window.location.reload()} 
-                    variant="outline"
-                  >
-                    Refresh Page
-                  </Button>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Check the browser console (F12) for detailed error logs
-                </div>
+                <Button 
+                  onClick={() => window.location.reload()} 
+                  variant="outline"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
               </div>
             </div>
           ) : (
@@ -1475,15 +1390,38 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
   )
 }
 
-// Type that accepts both camelCase and snake_case field names
-type CallbackData = Callback & {
+// Callback interface that accepts both camelCase and snake_case field names
+interface Callback {
+  id: string;
   customer_name?: string;
+  customerName?: string;
   phone_number?: string;
+  phoneNumber?: string;
   sales_agent?: string;
+  salesAgent?: string;
+  salesAgentName?: string; // Added missing property
+  SalesAgentID?: string;
+  salesAgentId?: string;
   first_call_date?: string;
+  firstCallDate?: string;
   first_call_time?: string;
+  firstCallTime?: string;
   scheduled_date?: string;
+  scheduledDate?: string;
   callback_notes?: string;
+  callbackNotes?: string;
+  status?: string;
+  priority?: string;
+  sales_team?: string;
+  salesTeam?: string;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  email?: string; // Also adding email since it's used in the CSV export
+}
+
+type CallbackData = Callback & {
   created_by_id?: string;
   SalesAgentID?: string;
   sales_team?: string;
@@ -1500,7 +1438,19 @@ function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveT
         setLoading(true)
         setError(null)
         console.log('Fetching callbacks...')
-        const allCallbacks = await callbacksService.getCallbacks('manager')
+        const response = await fetch('/api/callbacks?limit=1000&userRole=manager&userId=manager-001', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        const allCallbacks = result.success ? result.callbacks || [] : [];
         console.log('Callbacks fetched:', allCallbacks)
         
         // Ensure we have a valid array
@@ -1526,7 +1476,7 @@ function AdminCallbacksTablePage({ user, setActiveTab }: { user: any, setActiveT
   // Helper functions to get field values from either camelCase or snake_case
   const getCustomerName = (callback: CallbackData) => callback?.customer_name || callback?.customerName || '';
   const getPhoneNumber = (callback: CallbackData) => callback?.phone_number || callback?.phoneNumber || '';
-  const getSalesAgent = (callback: CallbackData) => callback?.sales_agent || callback?.salesAgentName || '';
+  const getSalesAgent = (callback: CallbackData) => callback?.sales_agent || callback?.salesAgent || callback?.salesAgentName || '';
   const getFirstCallDate = (callback: CallbackData) => callback?.first_call_date || callback?.firstCallDate || '';
 
   const exportToCSV = () => {

@@ -16,7 +16,7 @@ import { useMySQLSalesData } from "@/hooks/useMySQLSalesData";
 const COLORS = ['#06b6d4', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#6366f1', '#84cc16', '#f97316'];
 
 interface EnhancedAnalyticsProps {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   user: { id: string; name: string; username: string; managedTeam?: string };
 }
 
@@ -56,29 +56,29 @@ function EnhancedAnalytics({ userRole, user }: EnhancedAnalyticsProps) {
     const startDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
 
     // Filter data by time range and user role
-    let filteredSales = sales.filter((sale: any) => {
-      const saleDate = new Date(sale.date);
-      return saleDate >= startDate;
+    let filteredDeals = deals.filter((deal: any) => {
+      const dealDate = new Date(deal.createdAt || deal.signupDate || deal.created_at);
+      return dealDate >= startDate;
     });
 
     if (userRole === 'salesman' && user) {
       const agentName = user.name.toLowerCase();
-      filteredSales = filteredSales.filter((sale: any) => 
-        sale.sales_agent?.toLowerCase() === agentName || 
-        sale.closing_agent?.toLowerCase() === agentName
+      filteredDeals = filteredDeals.filter((deal: any) => 
+        deal.salesAgentName?.toLowerCase() === agentName || 
+        deal.closingAgentName?.toLowerCase() === agentName
       );
     }
 
     // Group by date
-    const dailyData = sales.reduce((acc, sale) => {
-      const saleDate = new Date((sale as any).date || (sale as any).signup_date || (sale as any).created_at);
-      const dateStr = saleDate.toISOString().split('T')[0];
+    const dailyData = filteredDeals.reduce((acc, deal) => {
+      const dealDate = new Date(deal.createdAt || deal.signupDate || deal.created_at);
+      const dateStr = dealDate.toISOString().split('T')[0];
       
       if (!acc[dateStr]) {
         acc[dateStr] = { sales: 0, deals: 0 };
       }
       
-      acc[dateStr].sales += ((sale as any).amount_paid || (sale as any).amount || 0);
+      acc[dateStr].sales += (deal.amountPaid || deal.amount_paid || deal.amount || 0);
       acc[dateStr].deals += 1;
       
       return acc;
@@ -106,7 +106,7 @@ function EnhancedAnalytics({ userRole, user }: EnhancedAnalyticsProps) {
     }
 
     return result;
-  }, [sales, timeRange, userRole, user]);
+  }, [deals, timeRange, userRole, user]);
 
   // Calculate performance metrics
   const performanceMetrics = useMemo((): PerformanceMetrics => {

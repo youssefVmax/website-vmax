@@ -35,7 +35,7 @@ interface EnhancedAnalyticsData {
 }
 
 interface UseEnhancedAnalyticsProps {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   userId?: string;
   userName?: string;
   username?: string;

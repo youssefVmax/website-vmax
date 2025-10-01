@@ -13,8 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showDealAdded, showError } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
-import { User } from "@/lib/auth";
-import { apiService, Deal, User as APIUser } from "@/lib/api-service";
+import type { User } from "@/types/user";
+import { apiService, Deal } from "@/lib/api-service";
 import { useToast } from "@/hooks/use-toast";
 
 export function AddDealPage() {
@@ -35,7 +35,7 @@ export function AddDealPage() {
         ])
         
         const salesmen = usersData.filter(u => u.role === 'salesman')
-        const teamLeaders = usersData.filter(u => u.role === 'team-leader')
+        const teamLeaders = usersData.filter(u => u.role === 'team_leader')
         const managers = usersData.filter(u => u.role === 'manager')
         
         setSalesmanOptions(salesmen as User[])
@@ -67,7 +67,6 @@ export function AddDealPage() {
     if (user?.team) set.add(user.team)
     return Array.from(set).sort()
   }, [sales, user?.team])
-
   const serviceOptions = useMemo(() => {
     // Fixed service options only
     return ["GOLD", "PREMIUM", "SILVER"]
@@ -75,15 +74,9 @@ export function AddDealPage() {
 
   // Program and Duration options derived from MySQL data
   const programOptions = useMemo(() => {
-    const set = new Set<string>()
-    ;(sales || []).forEach(s => { 
-      const prog = (s.productType || '').toString().toUpperCase()
-      if (prog) set.add(prog)
-    })
-    // Ensure sensible defaults are present
-    ;["IBO PLAYER","BOB PLAYER","IBO PRO","SMARTERS","IBOSS"].forEach(v => set.add(v))
-    return Array.from(set).sort()
-  }, [sales])
+    // Use hardcoded sensible defaults since productType field doesn't exist in Deal interface
+    return ["IBO PLAYER","BOB PLAYER","IBO PRO","SMARTERS","IBOSS"]
+  }, [])
 
   const durationOptions = useMemo(() => {
     const set = new Set<string>()
@@ -463,7 +456,7 @@ export function AddDealPage() {
                       </div>
                       
                       <div className="space-y-2">
-                        <Label htmlFor="first_call_time">First Call Time *</Label>
+                        <Label htmlFor="first_call_time">First Call Time </Label>
                         <Input
                           type="time"
                           id="first_call_time"
@@ -527,7 +520,7 @@ export function AddDealPage() {
                   <div className="space-y-2">
                     <Label htmlFor="amount">Amount ($) *</Label>
                     <Combobox
-                      options={[...new Set((sales || []).map(s => s.amount?.toString()).filter(Boolean))].sort((a, b) => parseFloat(a) - parseFloat(b))}
+                      options={[...new Set((sales || []).map(s => s.amount?.toString()).filter((item): item is string => item !== undefined))].sort((a, b) => parseFloat(a) - parseFloat(b))}
                       value={formData.amount}
                       onValueChange={(value) => setFormData(prev => ({ ...prev, amount: value }))}
                       placeholder="Select or type amount"
@@ -644,20 +637,18 @@ export function AddDealPage() {
                         />
                         <span className="text-sm font-medium text-gray-900 dark:text-gray-300">{service}</span>
                       </label>
-                    ))}
-                  </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="invoice">Invoice Reference</Label>
-                <Combobox
-                  options={[...new Set((sales || []).map(s => (s as any).invoice).filter(Boolean) as string[])].sort()}
+                <Label htmlFor="invoice">Invoice Type</Label>
+                <Input
+                  id="invoice"
+                  name="invoice"
+                  type="text"
                   value={formData.invoice}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, invoice: value }))}
-                  placeholder="Select or type invoice reference"
-                  searchPlaceholder="Search invoices..."
-                  allowCustom={true}
+                  onChange={handleChange}
+                  placeholder="Enter invoice link or reference"
                 />
               </div>
 

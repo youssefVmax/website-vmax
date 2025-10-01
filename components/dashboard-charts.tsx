@@ -14,10 +14,40 @@ import {
   RefreshCw, Calendar, Users, DollarSign, Target
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { chartsService, type ChartsData, type ChartsFilters, formatCurrency, formatNumber } from '@/lib/charts-service';
+
+// Types for charts data
+interface ChartsData {
+  dailyTrend?: Array<{ date: string; sales: number; deals: number; }>;
+  serviceDistribution?: Array<{ name: string; value: number; }>;
+  agentPerformance?: Array<{ agent: string; sales: number; deals: number; }>;
+  monthlyTrend?: Array<{ month: string; sales: number; deals: number; }>;
+  summary?: {
+    totalSales: number;
+    totalDeals: number;
+    avgDealSize: number;
+    topAgent: string;
+    uniqueAgents?: number;
+  };
+  salesTrend?: Array<{ date: string; sales: number; deals: number; }>;
+  salesByAgent?: Array<{ agent: string; sales: number; deals: number; }>;
+  salesByTeam?: Array<{ team: string; sales: number; deals: number; }>;
+  dealStatus?: Array<{ status: string; count: number; }>;
+  monthlyRevenue?: Array<{ month: string; revenue: number; }>;
+  callbackPerformance?: Array<{ agent: string; callbacks: number; conversion: number; }>;
+}
+
+interface ChartsFilters {
+  userRole: string;
+  userId: string;
+  managedTeam?: string;
+  dateRange: string;
+}
+
+const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
+const formatNumber = (value: number) => value.toLocaleString();
 
 interface DashboardChartsProps {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   user: { 
     id: string; 
     name: string; 
@@ -49,21 +79,185 @@ export function DashboardCharts({ userRole, user }: DashboardChartsProps) {
       
       console.log('🔄 DashboardCharts: Loading charts data...', filters);
       
-      const data = await chartsService.getChartsData(filters);
-      setChartsData(data);
+      // Build API URLs with role-based filtering
+      const dealsUrl = new URL('/api/deals', window.location.origin);
+      dealsUrl.searchParams.set('limit', '1000');
       
-      console.log('✅ DashboardCharts: Charts data loaded successfully');
+      // Role-based filtering
+      if (userRole === 'manager') {
+        // Managers see all data - no additional filters
+      } else if (userRole === 'team_leader' && user.managedTeam) {
+        dealsUrl.searchParams.set('salesTeam', user.managedTeam);
+      } else if (userRole === 'salesman') {
+        dealsUrl.searchParams.set('salesAgentId', user.id);
+      }
+      
+      const response = await fetch(dealsUrl.toString());
+      const dealsData = await response.json();
+      const deals = dealsData?.deals || [];
+      
+      // Process data for charts
+      const processedData: ChartsData = {
+        dailyTrend: processDailyTrend(deals),
+        serviceDistribution: processServiceDistribution(deals),
+        agentPerformance: processAgentPerformance(deals),
+        monthlyTrend: processMonthlyTrend(deals),
+        salesTrend: processDailyTrend(deals), // Same as dailyTrend
+        salesByAgent: processAgentPerformance(deals), // Same as agentPerformance
+        salesByTeam: processTeamPerformance(deals),
+        dealStatus: processDealStatus(deals),
+        monthlyRevenue: processMonthlyRevenue(deals),
+        callbackPerformance: [], // Will be populated when callbacks are fetched
+        summary: {
+          totalSales: deals.reduce((sum: number, deal: any) => sum + (parseFloat(deal.amount_paid) || 0), 0),
+          totalDeals: deals.length,
+          avgDealSize: deals.length > 0 ? deals.reduce((sum: number, deal: any) => sum + (parseFloat(deal.amount_paid) || 0), 0) / deals.length : 0,
+          topAgent: processAgentPerformance(deals)[0]?.agent || 'N/A'
+        }
+      };
+      
+      setChartsData(processedData);
+      
+      console.log('✅ DashboardCharts: Charts data loaded', processedData);
     } catch (err) {
-      console.error('❌ DashboardCharts: Error loading charts:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load charts');
+      console.error('❌ DashboardCharts: Error loading charts data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load charts data');
       toast({
         title: "Error",
-        description: "Failed to load chart data. Please try again.",
-        variant: "destructive"
+        description: "Failed to load charts data",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Data processing functions
+  const processDailyTrend = (deals: any[]) => {
+    const last30Days = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      return date.toISOString().split('T')[0];
+    });
+
+    return last30Days.map(date => {
+      const dayDeals = deals.filter((deal: any) => {
+        const dealDate = new Date(deal.signup_date || deal.created_at).toISOString().split('T')[0];
+        return dealDate === date;
+      });
+
+      const dayRevenue = dayDeals.reduce((sum: number, deal: any) => sum + (parseFloat(deal.amount_paid) || 0), 0);
+
+      return {
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        deals: dayDeals.length,
+        sales: dayRevenue
+      };
+    });
+  };
+
+  const processServiceDistribution = (deals: any[]) => {
+    const serviceData = deals.reduce((acc: any, deal: any) => {
+      const service = deal.service_tier || deal.product_type || 'Unknown';
+      if (!acc[service]) {
+        acc[service] = 0;
+      }
+      acc[service] += parseFloat(deal.amount_paid) || 0;
+      return acc;
+    }, {});
+
+    return Object.entries(serviceData).map(([name, value]) => ({ name, value: value as number }));
+  };
+
+  const processAgentPerformance = (deals: any[]) => {
+    const agentData = deals.reduce((acc: any, deal: any) => {
+      const agent = deal.sales_agent || deal.salesAgent || 'Unknown';
+      if (!acc[agent]) {
+        acc[agent] = { sales: 0, deals: 0 };
+      }
+      acc[agent].sales += parseFloat(deal.amount_paid) || 0;
+      acc[agent].deals += 1;
+      return acc;
+    }, {});
+
+    return Object.entries(agentData)
+      .map(([agent, data]: [string, any]) => ({ agent, ...data }))
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 10);
+  };
+
+  const processMonthlyTrend = (deals: any[]) => {
+    const last12Months = Array.from({ length: 12 }, (_, i) => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - (11 - i));
+      return date.toISOString().slice(0, 7); // YYYY-MM
+    });
+
+    return last12Months.map(monthStr => {
+      const monthDeals = deals.filter((deal: any) => {
+        const dealMonth = new Date(deal.signup_date || deal.created_at).toISOString().slice(0, 7);
+        return dealMonth === monthStr;
+      });
+
+      const monthRevenue = monthDeals.reduce((sum: number, deal: any) => sum + (parseFloat(deal.amount_paid) || 0), 0);
+
+      return {
+        month: new Date(monthStr + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        deals: monthDeals.length,
+        sales: monthRevenue
+      };
+    });
+  };
+
+  const processTeamPerformance = (deals: any[]) => {
+    const teamData = deals.reduce((acc: any, deal: any) => {
+      const team = deal.sales_team || deal.team || 'Unknown';
+      if (!acc[team]) {
+        acc[team] = { sales: 0, deals: 0 };
+      }
+      acc[team].sales += parseFloat(deal.amount_paid) || 0;
+      acc[team].deals += 1;
+      return acc;
+    }, {});
+
+    return Object.entries(teamData)
+      .map(([team, data]: [string, any]) => ({ team, ...data }))
+      .sort((a, b) => b.sales - a.sales);
+  };
+
+  const processDealStatus = (deals: any[]) => {
+    const statusData = deals.reduce((acc: any, deal: any) => {
+      const status = deal.status || deal.stage || 'Unknown';
+      if (!acc[status]) {
+        acc[status] = 0;
+      }
+      acc[status] += 1;
+      return acc;
+    }, {});
+
+    return Object.entries(statusData).map(([status, count]) => ({ status, count: count as number }));
+  };
+
+  const processMonthlyRevenue = (deals: any[]) => {
+    const last12Months = Array.from({ length: 12 }, (_, i) => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - (11 - i));
+      return date.toISOString().slice(0, 7); // YYYY-MM
+    });
+
+    return last12Months.map(monthStr => {
+      const monthDeals = deals.filter((deal: any) => {
+        const dealMonth = new Date(deal.signup_date || deal.created_at).toISOString().slice(0, 7);
+        return dealMonth === monthStr;
+      });
+
+      const monthRevenue = monthDeals.reduce((sum: number, deal: any) => sum + (parseFloat(deal.amount_paid) || 0), 0);
+
+      return {
+        month: new Date(monthStr + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        revenue: monthRevenue
+      };
+    });
   };
 
   const handleRefresh = async () => {
@@ -161,7 +355,7 @@ export function DashboardCharts({ userRole, user }: DashboardChartsProps) {
           <p className="text-gray-600">
             {userRole === 'manager' 
               ? 'System-wide analytics and performance metrics'
-              : userRole === 'team-leader'
+              : userRole === 'team_leader'
               ? `Team ${user.managedTeam} + Personal analytics`
               : 'Your personal performance analytics'
             }
@@ -195,7 +389,7 @@ export function DashboardCharts({ userRole, user }: DashboardChartsProps) {
                 <div>
                   <p className="text-sm font-medium text-blue-600">Total Deals</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {formatNumber(chartsData.summary.total_deals)}
+                    {formatNumber(chartsData.summary.totalDeals)}
                   </p>
                 </div>
                 <div className="p-3 bg-blue-500 rounded-full">
@@ -211,7 +405,7 @@ export function DashboardCharts({ userRole, user }: DashboardChartsProps) {
                 <div>
                   <p className="text-sm font-medium text-green-600">Total Revenue</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {formatCurrency(chartsData.summary.total_revenue)}
+                    {formatCurrency(chartsData.summary.totalSales)}
                   </p>
                 </div>
                 <div className="p-3 bg-green-500 rounded-full">
@@ -227,7 +421,7 @@ export function DashboardCharts({ userRole, user }: DashboardChartsProps) {
                 <div>
                   <p className="text-sm font-medium text-amber-600">Avg Deal Size</p>
                   <p className="text-2xl font-bold text-amber-900">
-                    {formatCurrency(chartsData.summary.avg_deal_size)}
+                    {formatCurrency(chartsData.summary.avgDealSize)}
                   </p>
                 </div>
                 <div className="p-3 bg-amber-500 rounded-full">
@@ -243,7 +437,7 @@ export function DashboardCharts({ userRole, user }: DashboardChartsProps) {
                 <div>
                   <p className="text-sm font-medium text-purple-600">Active Agents</p>
                   <p className="text-2xl font-bold text-purple-900">
-                    {formatNumber(chartsData.summary.unique_agents)}
+                    {chartsData.summary.topAgent || 'N/A'}
                   </p>
                 </div>
                 <div className="p-3 bg-purple-500 rounded-full">

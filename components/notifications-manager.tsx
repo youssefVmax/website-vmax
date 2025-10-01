@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/hooks/use-notifications'
-import { User } from '@/lib/auth'
+import { apiService } from '@/lib/api-service'
 
-interface Recipient extends Pick<User, 'id' | 'name' | 'role' | 'team'> {}
+type Recipient = { id: string; name: string; role: string; team?: string; managedTeam?: string }
 
 interface NotificationsManagerProps {
   userRole?: string
@@ -33,7 +33,7 @@ export default function NotificationsManager({ userRole, user: propUser }: Notif
   const [audience, setAudience] = useState<'ALL' | 'SPECIFIC'>('ALL')
   const [selected, setSelected] = useState<string[]>([])
   const [addUserId, setAddUserId] = useState<string>('')
-  const [selectedRole, setSelectedRole] = useState<'manager' | 'salesman' | 'customer-service' | 'none'>('none')
+  const [selectedRole, setSelectedRole] = useState<'manager' | 'salesman' | 'team_leader' | 'none'>('none')
   const [selectedTeam, setSelectedTeam] = useState<string>('')
 
   const [title, setTitle] = useState('')
@@ -44,14 +44,14 @@ export default function NotificationsManager({ userRole, user: propUser }: Notif
 
   // Manager-only guard affects rendering only (not hook calls)
   const isManager = user?.role === 'manager' || userRole === 'manager'
+  const isTeamLeader = user?.role === 'team_leader' || userRole === 'team_leader'
 
   useEffect(() => {
     let mounted = true
     const load = async () => {
       try {
-        const { userService } = await import('@/lib/firebase-user-service')
-        const data = await userService.getAllUsers()
-        if (mounted) setUsers(data)
+        const data = await apiService.getUsers()
+        if (mounted) setUsers((data || []).map(u => ({ id: u.id, name: u.name, role: u.role, team: u.team, managedTeam: (u as any).managedTeam })))
       } catch (e) {
         console.error('Failed to fetch users', e)
         if (mounted) setUsers([])
@@ -64,12 +64,21 @@ export default function NotificationsManager({ userRole, user: propUser }: Notif
   }, [])
 
   const visibleUsers = useMemo(() => {
-    // Exclude manager self to avoid notifying yourself unnecessarily
-    return users.filter(u => u.id !== user?.id)
-  }, [users, user?.id])
+    if (!user) return []
+    const all = users.filter(u => u.id !== user.id)
+    if (isManager) return all
+    if (isTeamLeader) {
+      const teamName = (user as any).managedTeam || user.team
+      const managers = all.filter(u => u.role === 'manager')
+      const teamMembers = teamName ? all.filter(u => u.team === teamName) : []
+      return [...new Set([...managers, ...teamMembers])]
+    }
+    // Salesman: can only notify manager
+    return all.filter(u => u.role === 'manager')
+  }, [users, user, isManager, isTeamLeader])
 
   const teams = useMemo(() => Array.from(new Set(visibleUsers.map(u => u.team).filter(Boolean))) as string[], [visibleUsers])
-  const roles: Array<'manager' | 'salesman' | 'customer-service'> = ['manager', 'salesman', 'customer-service']
+  const roles: Array<'manager' | 'team_leader' | 'salesman'> = ['manager', 'team_leader', 'salesman']
 
   const toggleSelected = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -109,7 +118,32 @@ export default function NotificationsManager({ userRole, user: propUser }: Notif
 
     setSubmitting(true)
     try {
-      const to = audience === 'ALL' ? ['all'] : selected
+      // Audience rules:
+      // - Manager: ALL is allowed (maps to ['all']). SPECIFIC: use selected IDs (individual or teams expanded).
+      // - Team leader: cannot use ALL. SPECIFIC only: must be manager or members of his managed team.
+      // - Salesman: SPECIFIC only: manager only.
+      let to: string[] = []
+      if (audience === 'ALL') {
+        if (!isManager) { setSubmitting(false); return }
+        to = ['all']
+      } else {
+        // selected contains user IDs; if team quick select used, it already expanded ids
+        to = Array.from(new Set(selected))
+        if (isTeamLeader) {
+          const teamName = (user as any).managedTeam || user.team
+          const allowedIds = new Set(
+            users
+              .filter(u => u.role === 'manager' || (teamName && u.team === teamName))
+              .map(u => u.id)
+          )
+          to = to.filter(id => allowedIds.has(id))
+        }
+        if (!isManager && !isTeamLeader) {
+          // salesman -> only managers
+          const managerIds = new Set(users.filter(u => u.role === 'manager').map(u => u.id))
+          to = to.filter(id => managerIds.has(id))
+        }
+      }
       await addNotification({
         title,
         message,
@@ -117,7 +151,7 @@ export default function NotificationsManager({ userRole, user: propUser }: Notif
         priority: priority as any,
         from: user.id,
         to,
-        isManagerMessage: true,
+        isManagerMessage: isManager,
         actionRequired: false,
       } as any)
 
@@ -148,7 +182,7 @@ export default function NotificationsManager({ userRole, user: propUser }: Notif
                   <SelectValue placeholder="Select audience" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">All Users</SelectItem>
+                  {isManager && <SelectItem value="ALL">All Users</SelectItem>}
                   <SelectItem value="SPECIFIC">Specific Users</SelectItem>
                 </SelectContent>
               </Select>

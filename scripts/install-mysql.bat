@@ -4,6 +4,33 @@ echo VMAX MySQL Installation Script
 echo ========================================
 echo.
 
+REM Check if this is a cleanup call
+if "%1"=="cleanup" goto cleanup
+
+goto install
+
+:cleanup
+echo ========================================
+echo VMAX Cleanup Script
+echo ========================================
+echo.
+echo Cleaning Next.js cache and build files...
+cd /d "%~dp0\.."
+if exist ".next" (
+    echo Removing .next directory...
+    rmdir /s /q ".next"
+)
+if exist "node_modules\.cache" (
+    echo Removing node_modules cache...
+    rmdir /s /q "node_modules\.cache"
+)
+echo Cleanup complete!
+echo Please restart your development server.
+pause
+exit /b 0
+
+:install
+
 echo Step 1: Creating database and importing schema...
 echo Please ensure MySQL is running and you have admin credentials.
 echo.

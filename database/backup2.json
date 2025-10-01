@@ -237,7 +237,7 @@
       "name": "Ali Ashraf",
       "username": "ali",
       "managedTeam": "ALI ASHRAF",
-      "role": "team-leader",
+      "role": "team_leader",
       "email": "ali@vmax",
       "password": "ali",
       "phone": "123456",

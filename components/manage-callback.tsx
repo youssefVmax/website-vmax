@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ServerPagination } from "@/components/ui/server-pagination";
+import { useServerPagination } from "@/hooks/useServerPagination";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { callbacksService } from "@/lib/mysql-callbacks-service";
 import { 
   Phone, 
   Plus, 
@@ -29,8 +30,12 @@ import {
   AlertCircle,
   Trash2,
   Save,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
+import { callbacksService } from "@/lib/mysql-callbacks-service";
+import { ManagerApiService } from "@/lib/api-service";
 
 interface CallbackRow {
   id: string;
@@ -84,6 +89,21 @@ export default function ManageCallbacksPage() {
   const [phoneFilter, setPhoneFilter] = useState<string>('')
   const [historyForPhone, setHistoryForPhone] = useState<string | null>(null)
 
+  // Pagination state
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total: 0,
+    totalPages: 0
+  })
+
+  const managerApiService = new ManagerApiService()
+
+  // Calculate effective limit based on user role
+  const effectiveLimit = user?.role === 'team_leader' ? 1000 :  // Load up to 1000 callbacks for team leaders
+                        user?.role === 'manager' ? 5000 :       // Load up to 5000 callbacks for managers
+                        (pagination?.limit || 25);             // Default for others
+
   // Derived analytics for manager view (read-only insights)
   const phoneStats = useMemo(() => {
     const map = new Map<string, { count: number; lastUpdatedAt?: Date; agents: Set<string>; dates: Date[] }>()
@@ -113,57 +133,143 @@ export default function ManageCallbacksPage() {
     return map
   }, [callbacks])
 
+  // Load callbacks with pagination (for team leaders, load all on first page)
+  const loadCallbacks = async (page: number) => {
+    
+    try {
+      setLoading(true);
+      
+      const params: any = {
+        page: user?.role === 'team_leader' ? 1 : page,  // Always load page 1 for team leaders
+        limit: effectiveLimit,
+        search: search.trim(),
+        status: statusFilter === 'all' ? '' : statusFilter,
+        // CRITICAL: provide role context so API applies correct filtering
+        userRole: user.role,
+        userId: user.id,
+      };
+
+      // Optional hints for some views (backend primarily uses userRole/userId)
+      if (user.role === 'team_leader' && user.managedTeam) {
+        params.team = user.managedTeam;
+      }
+
+      // Add additional filters
+      if (agentFilter !== 'all') {
+        params.agent = agentFilter;
+      }
+
+      const response = await managerApiService.getCallbacksWithPagination(params);
+      
+      // The direct service may return either:
+      // 1) an object: { callbacks, total, page, limit, success, ... }
+      // 2) an array of callbacks (no pagination metadata)
+      const callbacksData: CallbackRow[] = Array.isArray(response)
+        ? response
+        : (response?.callbacks ?? []);
+
+      // Derive safe pagination info
+      const pageFromApi = !Array.isArray(response) ? (response?.page ?? params.page ?? 1) : (params.page ?? 1);
+      const limitFromApi = !Array.isArray(response) ? (response?.limit ?? params.limit ?? 25) : (params.limit ?? 25);
+      const totalFromApi = !Array.isArray(response) ? (response?.total ?? callbacksData.length) : callbacksData.length;
+      const totalPagesFromApi = Math.max(1, Math.ceil(totalFromApi / Math.max(1, limitFromApi)));
+
+      setCallbacks(callbacksData);
+      setPagination({
+        page: pageFromApi,
+        limit: limitFromApi,
+        total: totalFromApi,
+        totalPages: totalPagesFromApi,
+      });
+    } catch (error) {
+      console.error('Error loading callbacks:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load callbacks",
+        variant: "destructive",
+      });
+      setCallbacks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (!user) return;
-    const unsub = callbacksService.onCallbacksChange(
-      (list) => {
-        setCallbacks(list as unknown as CallbackRow[]);
-        setLoading(false);
-      },
-      user.role,
-      user.id,
-      user.name
-    );
-    return () => {
-      try { (unsub as any)?.(); } catch {}
-    };
+    if (user) {
+      loadCallbacks(1);
+    }
   }, [user]);
 
-  const filtered = useMemo(() => {
-    let list = Array.isArray(callbacks) ? callbacks : [];
-    if (statusFilter !== "all") list = list.filter((c) => c.status === statusFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (c) =>
-          c.customer_name?.toLowerCase().includes(q) ||
-          c.email?.toLowerCase().includes(q) ||
-          c.phone_number?.toLowerCase().includes(q) ||
-          c.sales_agent?.toLowerCase().includes(q)
+  // Reload when filters change
+  useEffect(() => {
+    if (user && pagination) {
+      loadCallbacks(1);
+    }
+  }, [statusFilter, agentFilter]);
+
+  // Apply search function
+  const handleSearch = () => {
+    loadCallbacks(1);
+  };
+
+  // Handle search on Enter key
+  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  // Pagination Controls Component (only show for non-team leaders)
+  const PaginationControls = () => {
+    // Don't show pagination for team leaders since they load all callbacks on one page
+    if (user?.role === 'team_leader') {
+      return (
+        <div className="flex items-center justify-center px-2 py-4">
+          <div className="text-sm text-muted-foreground">
+            Showing all {pagination.total} callbacks for your team
+          </div>
+        </div>
       );
     }
-    if (agentFilter !== 'all') {
-      list = list.filter(c => (c.sales_agent || '').toLowerCase() === agentFilter.toLowerCase())
-    }
-    if (phoneFilter.trim()) {
-      const q = phoneFilter.toLowerCase()
-      list = list.filter(c => (c.phone_number || '').toLowerCase().includes(q))
-    }
     
-    // Sort by last updated date (newest first)
-    list.sort((a, b) => {
-      const dateA = a.updated_at ? new Date(a.updated_at as any).getTime() : new Date(a.created_at as any).getTime();
-      const dateB = b.updated_at ? new Date(b.updated_at as any).getTime() : new Date(b.created_at as any).getTime();
-      return dateB - dateA; // Newest first
-    });
-    
-    return list;
-  }, [callbacks, statusFilter, search, agentFilter, phoneFilter]);
+    return (
+      <div className="flex items-center justify-between px-2 py-4">
+        <div className="text-sm text-muted-foreground">
+          Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadCallbacks(pagination.page - 1)}
+            disabled={pagination.page <= 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+          <div className="text-sm">
+            Page {pagination.page} of {pagination.totalPages}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadCallbacks(pagination.page + 1)}
+            disabled={pagination.page >= pagination.totalPages}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   const updateStatus = async (row: CallbackRow, next: CallbackRow["status"]) => {
     try {
       await callbacksService.updateCallback(row.id, { status: next });
       toast({ title: "Updated", description: `Callback marked as ${next}` });
+      // Refresh current page (for team leaders, always refresh page 1)
+      loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
     } catch (error) {
       console.error("Error updating status:", error);
       toast({
@@ -197,12 +303,14 @@ export default function ManageCallbacksPage() {
     try {
       await callbacksService.updateCallback(callback.id, {
         status: "pending" as const,
-        callback_notes: `${callback.callback_notes || ''}\n\nFollow-up scheduled for ${followUpDate}`.trim()
+        callbackNotes: `${callback.callback_notes || ''}\n\nFollow-up scheduled for ${followUpDate}`.trim()
       });
       toast({
         title: "Follow-up Scheduled",
         description: `Follow-up scheduled for ${followUpDate}`,
       });
+      // Refresh current page (for team leaders, always refresh page 1)
+      loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
     } catch (error) {
       console.error("Error scheduling follow-up:", error);
       toast({
@@ -217,13 +325,28 @@ export default function ManageCallbacksPage() {
     if (!editingCallback || !editForm) return;
 
     try {
-      await callbacksService.updateCallback(editingCallback.id, editForm);
+      // Convert snake_case form properties to camelCase API properties
+      const apiUpdates: any = {};
+      
+      if (editForm.customer_name !== undefined) apiUpdates.customerName = editForm.customer_name;
+      if (editForm.phone_number !== undefined) apiUpdates.phoneNumber = editForm.phone_number;
+      if (editForm.email !== undefined) apiUpdates.email = editForm.email;
+      if (editForm.status !== undefined) apiUpdates.status = editForm.status;
+      if (editForm.priority !== undefined) apiUpdates.priority = editForm.priority;
+      if (editForm.scheduled_date !== undefined) apiUpdates.scheduledDate = editForm.scheduled_date;
+      if (editForm.scheduled_time !== undefined) apiUpdates.scheduledTime = editForm.scheduled_time;
+      if (editForm.callback_notes !== undefined) apiUpdates.callbackNotes = editForm.callback_notes;
+      if (editForm.callback_reason !== undefined) apiUpdates.callbackReason = editForm.callback_reason;
+
+      await callbacksService.updateCallback(editingCallback.id, apiUpdates);
       setEditingCallback(null);
       setEditForm({});
       toast({
         title: "Success",
         description: "Callback updated successfully",
       });
+      // Refresh current page (for team leaders, always refresh page 1)
+      loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
     } catch (error) {
       console.error("Error updating callback:", error);
       toast({
@@ -241,6 +364,8 @@ export default function ManageCallbacksPage() {
         title: "Success",
         description: `Callback status updated to ${newStatus}`,
       });
+      // Refresh current page (for team leaders, always refresh page 1)
+      loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
     } catch (error) {
       console.error("Error updating status:", error);
       toast({
@@ -258,6 +383,8 @@ export default function ManageCallbacksPage() {
         title: "Success",
         description: "Callback deleted successfully",
       });
+      // Refresh current page (for team leaders, always refresh page 1)
+      loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
     } catch (error) {
       console.error("Error deleting callback:", error);
       toast({
@@ -273,7 +400,12 @@ export default function ManageCallbacksPage() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle>
-            {user?.role === 'manager' ? 'Callbacks Overview (Read-only)' : 'Manage Callbacks'}
+            {user?.role === 'manager' ? 'Callbacks Overview' : 'Manage Callbacks'} - {pagination.total} Total
+            {pagination.total >= effectiveLimit && 
+              <span className="text-sm text-muted-foreground ml-2">
+                (fetched {pagination.total} callbacks)
+              </span>
+            }
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -283,8 +415,13 @@ export default function ManageCallbacksPage() {
                 placeholder="Search customer, email, phone, or agent..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyPress={handleSearchKeyPress}
                 className="w-72"
               />
+              <Button onClick={handleSearch} size="sm">
+                <Search className="h-4 w-4 mr-2" />
+                Search
+              </Button>
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
                 <SelectTrigger className="w-44">
                   <SelectValue placeholder="Status" />
@@ -372,12 +509,12 @@ export default function ManageCallbacksPage() {
                   <tr>
                     <td colSpan={7} className="py-6 text-center text-muted-foreground">Loading callbacks…</td>
                   </tr>
-                ) : filtered.length === 0 ? (
+                ) : callbacks.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-6 text-center text-muted-foreground">No callbacks found</td>
                   </tr>
                 ) : (
-                  filtered.map((c) => (
+                  callbacks.map((c: CallbackRow) => (
                     <tr key={c.id} className="border-b">
                       <td className="py-3 pr-4">
                         <div className="font-medium">{c.customer_name}</div>
@@ -622,11 +759,24 @@ export default function ManageCallbacksPage() {
                             <div className="max-h-[70vh] overflow-auto">
                               <div className="space-y-6 p-4">
                                 {(() => {
+                                  // Define timeline event interface
+                                  interface TimelineEvent {
+                                    id: string;
+                                    type: 'initial' | 'status_update' | 'followup' | 'final';
+                                    date: Date;
+                                    callback: any;
+                                    title: string;
+                                    description: string;
+                                    status: CallbackRow["status"]; // Use same status type as CallbackRow
+                                    isFirst?: boolean;
+                                    isScheduled?: boolean;
+                                  }
+                                  
                                   // Get all callbacks for this phone number
                                   const phoneCallbacks = callbacks.filter(x => (x.phone_number || '') === (c.phone_number || ''));
                                   
                                   // Create timeline events for each callback
-                                  const timelineEvents = [];
+                                  const timelineEvents: TimelineEvent[] = [];
                                   
                                   // Track unique events to avoid duplicates
                                   const addedEvents = new Set();
@@ -824,6 +974,9 @@ export default function ManageCallbacksPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          <PaginationControls />
         </CardContent>
       </Card>
     </div>

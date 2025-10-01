@@ -7,7 +7,7 @@ This document summarizes the complete migration from Firebase to MySQL for the V
 ## 🗄️ Database Structure
 
 ### Tables Created
-- **users** - User management with roles (manager, team-leader, salesman, customer-service)
+- **users** - User management with roles (manager, team_leader, salesman, customer-service)
 - **deals** - Sales deals with full tracking
 - **callbacks** - Customer callback management
 - **targets** - Sales targets and KPIs
@@ -52,7 +52,7 @@ This document summarizes the complete migration from Firebase to MySQL for the V
 ## 🧩 Components Updated
 
 ### Dashboard Components
-- ✅ **team-leader-dashboard.tsx** - Team leader dashboard with MySQL
+- ✅ **team_leader-dashboard.tsx** - Team leader dashboard with MySQL
 - ✅ **callback-kpi-dashboard.tsx** - KPI dashboard using MySQL
 - ✅ **deals-table.tsx** - Deals management with MySQL
 - ✅ **system-test.tsx** - System testing with MySQL
@@ -74,7 +74,7 @@ Based on the memories, the system maintains full team leader functionality:
 - **Data Filtering**: All data filtered by managed team
 
 ### Key Features Preserved
-- ✅ Role-based access control (manager, team-leader, salesman)
+- ✅ Role-based access control (manager, team_leader, salesman)
 - ✅ Team-based data filtering
 - ✅ Real-time data updates via polling
 - ✅ Comprehensive analytics and reporting

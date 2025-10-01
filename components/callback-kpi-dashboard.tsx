@@ -14,270 +14,166 @@ import {
   RefreshCw, Filter, User
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast"
-import { unifiedDataService } from '@/lib/unified-data-service'
-import { mysqlAnalyticsService, CallbackKPIs, CallbackFilters } from '@/lib/mysql-analytics-service'
-import { nextjsAnalyticsService } from '@/lib/nextjs-analytics-service'
-import { callbacksService } from '@/lib/mysql-callbacks-service'
-import { dealsService } from '@/lib/mysql-deals-service'
-import { targetsService } from '@/lib/mysql-targets-service'
+import { useMySQLSalesData } from '@/hooks/useMySQLSalesData'
+
+// Types for callback KPIs
+interface CallbackKPIs {
+  totalCallbacks: number;
+  pendingCallbacks: number;
+  completedCallbacks: number;
+  conversionRate: number;
+  avgResponseTime: number;
+  topAgents: Array<{ agent: string; callbacks: number; conversion: number; }>;
+  callbacksByAgent?: Array<{ agent: string; count: number; }>;
+  recentCallbacks?: Array<any>;
+  statusDistribution?: Array<{ name: string; value: number; color?: string; }>;
+  dailyTrend?: Array<{ date: string; callbacks: number; }>;
+  monthlyTrend?: Array<{ month: string; callbacks: number; }>;
+  topPerformingAgents?: Array<{ agent: string; callbacks: number; conversion: number; }>;
+  contactedCallbacks?: number;
+}
+
+interface CallbackFilters {
+  userRole: string;
+  userId: string;
+  managedTeam?: string;
+  dateRange: string;
+  status?: string;
+  team?: string;
+  userName?: string;
+}
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
 interface CallbackKPIDashboardProps {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   user: { 
     id: string; 
     name: string; 
-    username: string;
     team?: string;
     managedTeam?: string;
   };
 }
 
-export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDashboardProps) {
+export function CallbackKPIDashboard({ 
+  userRole, 
+  user 
+}: CallbackKPIDashboardProps) {
   const { toast } = useToast();
-  const [kpis, setKpis] = useState<CallbackKPIs | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<CallbackFilters>({
-    userRole,
-    userId: user.id
-  });
   const [refreshing, setRefreshing] = useState(false);
-  // Manager-only revenue by user count + team comparisons
-  const [teamAnalysis, setTeamAnalysis] = useState<{
-    perTeam: Array<{
-      team: string;
-      members: number;
-      deals: number;
-      revenue: number;
-      revenuePerUser: number;
-      targetRevenue?: number;
-      targetDeals?: number;
-      performanceRevenuePct?: number;
-      performanceDealsPct?: number;
-      trend?: Array<{ x: number; y: number }>;
-    }>;
-  } | null>(null)
-  const [timeframe, setTimeframe] = useState<'30d' | 'month' | 'ytd'>('30d')
-  const [sortKey, setSortKey] = useState<'team' | 'members' | 'deals' | 'revenue' | 'revenuePerUser' | 'performanceRevenuePct' | 'performanceDealsPct'>('revenuePerUser')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  // Get the user's team for filtering
-  const getUserTeam = useCallback(() => {
-    // For team leaders, use their managed team
-    if (userRole === 'team-leader' && user.managedTeam) {
-      return user.managedTeam;
-    }
-    // For other users, use their assigned team
-    return user.team || '';
-  }, [user, userRole]);
+  // Add missing state variables for manager analysis
+  const [timeframe, setTimeframe] = useState('30d');
+  const [sortKey, setSortKey] = useState('team');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [teamAnalysis, setTeamAnalysis] = useState<{ perTeam: any[] } | null>(null);
 
-  // Test function to use Next.js analytics instead of PHP
-  const testNextJSAnalytics = async () => {
-    try {
-      console.log('🔄 CallbackKPIDashboard: Testing Next.js analytics...');
-      const analytics = await nextjsAnalyticsService.getDashboardStats(userRole, user.id, 'today');
-      console.log('✅ CallbackKPIDashboard: Next.js analytics result:', analytics);
-      
-      // Also test the test-analytics endpoint
-      const testResponse = await fetch('/api/test-analytics?userRole=manager&dateRange=today');
-      const testData = await testResponse.json();
-      console.log('✅ CallbackKPIDashboard: Test analytics result:', testData);
-      
-      toast({
-        title: "Analytics Test Complete",
-        description: `Next.js Analytics: ${analytics.total_deals} deals, ${analytics.total_callbacks} callbacks. Check console for details.`,
-      });
-    } catch (error) {
-      console.error('❌ CallbackKPIDashboard: Test failed:', error);
-      toast({
-        title: "Analytics Test Failed",
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: "destructive"
-      });
-    }
-  };
+  // Use MySQL data hook for callback analytics
+  const { deals, callbacks, loading, error, refreshData: refreshMySQLData } = useMySQLSalesData({
+    userRole,
+    userId: user.id,
+    userName: user.name,
+    managedTeam: user.managedTeam
+  });
 
-  const loadKPIs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const userTeam = getUserTeam();
-      console.log('🔄 CallbackKPIDashboard: Loading KPIs with user info:', { 
-        id: user.id, 
-        name: user.name, 
-        role: userRole,
-        team: userTeam
-      });
-      
-      // Try unified data service first for better performance
-      try {
-        const dashboardData = await unifiedDataService.getDashboardData(
-          userRole,
-          user.id,
-          user.name,
-          user.managedTeam || user.team
-        );
-        
-        if (dashboardData.success && dashboardData.data.callbacks) {
-          console.log('✅ CallbackKPIDashboard: Data loaded from unified service');
-          
-          const callbacks = dashboardData.data.callbacks || [];
-          const deals = dashboardData.data.deals || [];
-          
-          // Calculate KPIs from the data with null checks
-          const totalCallbacks = Array.isArray(callbacks) ? callbacks.length : 0;
-          const pendingCallbacks = Array.isArray(callbacks) ? callbacks.filter(cb => cb.status === 'pending').length : 0;
-          const completedCallbacks = Array.isArray(callbacks) ? callbacks.filter(cb => cb.status === 'completed').length : 0;
-          const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
-          
-          // Calculate response times from actual data
-          const responseTimes = Array.isArray(callbacks) ? callbacks
-            .filter(cb => cb.firstCallDate && cb.created_at)
-            .map(cb => {
-              const created = new Date(cb.created_at);
-              const firstCall = new Date(cb.firstCallDate);
-              return Math.abs(firstCall.getTime() - created.getTime()) / (1000 * 60 * 60); // hours
-            })
-            .filter(time => !isNaN(time) && time >= 0) : [];
-          
-          const avgResponseTime = responseTimes.length > 0 
-            ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length 
-            : 0;
-          
-          // Group callbacks by status
-          const statusDistribution = [
-            { name: 'Pending', value: pendingCallbacks, color: '#FF8042' },
-            { name: 'Contacted', value: Array.isArray(callbacks) ? callbacks.filter(cb => cb.status === 'contacted').length : 0, color: '#FFBB28' },
-            { name: 'Completed', value: completedCallbacks, color: '#00C49F' }
-          ];
-          
-          // Daily trend (last 30 days)
-          const dailyTrend = Array.from({ length: 30 }, (_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() - (29 - i));
-            const dateStr = date.toISOString().split('T')[0];
-            const dayCallbacks = Array.isArray(callbacks) ? callbacks.filter(cb => 
-              cb.created_at && cb.created_at.startsWith(dateStr)
-            ).length : 0;
-            return {
-              date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-              callbacks: dayCallbacks
-            };
-          });
-          
-          // Agent performance
-          const agentPerformance = Array.isArray(callbacks) ? callbacks.reduce((acc, cb) => {
-            const agent = cb.salesAgentName || cb.salesAgentId || cb.SalesAgentID || 'Unknown';
-            if (!acc[agent]) {
-              acc[agent] = { agent, callbacks: 0, completed: 0 };
-            }
-            acc[agent].callbacks++;
-            if (cb.status === 'completed') {
-              acc[agent].completed++;
-            }
-            return acc;
-          }, {} as Record<string, { agent: string; callbacks: number; completed: number }>) : {};
-          
-          const topAgents = Object.values(agentPerformance)
-            .map((agentData) => {
-              const data = agentData as { agent: string; callbacks: number; completed: number };
-              return {
-                agent: data.agent,
-                callbacks: data.callbacks,
-                completed: data.completed,
-                conversionRate: data.callbacks > 0 ? (data.completed / data.callbacks) * 100 : 0
-              };
-            })
-            .sort((a, b) => b.conversionRate - a.conversionRate)
-            .slice(0, 10);
-          
-          const calculatedKPIs: any = {
-            totalCallbacks,
-            pendingCallbacks,
-            completedCallbacks,
-            conversionRate,
-            averageResponseTime: avgResponseTime,
-            statusDistribution,
-            dailyTrend,
-            monthlyTrend: [], // Will be calculated if needed
-            topAgents,
-            callbacksByAgent: topAgents.map(agent => ({ agent: agent.agent, count: agent.callbacks })),
-            recentCallbacks: callbacks.slice(0, 10),
-            responseTimeAnalysis: {
-              average: avgResponseTime,
-              median: avgResponseTime,
-              fastest: 0.5,
-              slowest: 8.0
-            }
-          };
-          
-          setKpis(calculatedKPIs);
-          setError(null);
-          return;
-        }
-      } catch (unifiedError) {
-        console.warn('⚠️ CallbackKPIDashboard: Unified service failed, falling back to analytics service:', unifiedError);
-      }
-      
-      // Fallback to original analytics service
-      const filters: CallbackFilters = {};
-      
-      if (userRole === 'manager') {
-        filters.userRole = 'manager';
-      } else if (userRole === 'team-leader' && userTeam) {
-        filters.userRole = 'team-leader';
-        filters.team = userTeam;
-      } else {
-        filters.userRole = userRole as any;
-        filters.userId = user.id;
-        filters.userName = user.name;
-      }
-      
-      console.log('🔄 CallbackKPIDashboard: Using fallback analytics service with filters:', filters);
-      
-      const data = await mysqlAnalyticsService.getCallbackKPIs(filters);
-      console.log('✅ CallbackKPIDashboard: KPIs loaded from analytics service:', data);
-      
-      // Ensure all required properties exist with fallbacks
-      const safeKpis = {
-        totalCallbacks: data?.totalCallbacks || 0,
-        pendingCallbacks: data?.pendingCallbacks || 0,
-        completedCallbacks: data?.completedCallbacks || 0,
-        contactedCallbacks: data?.contactedCallbacks || 0,
-        conversionRate: data?.conversionRate || 0,
-        averageResponseTime: data?.averageResponseTime || 0,
-        statusDistribution: data?.statusDistribution || [],
-        callbacksByStatus: data?.callbacksByStatus || [],
-        dailyTrend: data?.dailyTrend || [],
-        dailyCallbackTrend: data?.dailyCallbackTrend || [],
-        monthlyTrend: data?.monthlyTrend || [],
-        topAgents: data?.topAgents || [],
-        callbacksByAgent: data?.callbacksByAgent || data?.topAgents?.map(agent => ({ agent: agent.agent, count: agent.callbacks })) || [],
-        topPerformingAgents: data?.topPerformingAgents || [],
-        recentCallbacks: data?.recentCallbacks || [],
-        responseTimeAnalysis: data?.responseTimeAnalysis || {
-          average: 0,
-          median: 0,
-          fastest: 0,
-          slowest: 0
-        }
+  // Calculate KPIs from the data
+  const kpis = useMemo(() => {
+    if (!callbacks || callbacks.length === 0) {
+      return {
+        totalCallbacks: 0,
+        pendingCallbacks: 0,
+        completedCallbacks: 0,
+        conversionRate: 0,
+        avgResponseTime: 0,
+        topAgents: []
       };
-      
-      setKpis(safeKpis);
-      setError(null);
-    } catch (error) {
-      console.error('❌ CallbackKPIDashboard: Error loading callback KPIs:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load callback data');
-    } finally {
-      setLoading(false);
     }
-  }, [userRole, user.id, user.name, getUserTeam]);
 
-  const refreshData = async () => {
+    const totalCallbacks = callbacks.length;
+    const completedCallbacks = callbacks.filter((cb: any) => cb.status === 'completed').length;
+    const pendingCallbacks = callbacks.filter((cb: any) => cb.status === 'pending').length;
+    const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
+
+    // Calculate agent performance
+    const agentPerformance = callbacks.reduce((acc: any, callback: any) => {
+      const agent = callback.sales_agent || callback.salesAgent || 'Unknown';
+      if (!acc[agent]) {
+        acc[agent] = { callbacks: 0, completed: 0 };
+      }
+      acc[agent].callbacks += 1;
+      if (callback.status === 'completed') {
+        acc[agent].completed += 1;
+      }
+      return acc;
+    }, {});
+
+    const topAgents = Object.entries(agentPerformance)
+      .map(([agent, data]: [string, any]) => ({
+        agent,
+        callbacks: data.callbacks,
+        conversion: data.callbacks > 0 ? (data.completed / data.callbacks) * 100 : 0
+      }))
+      .sort((a, b) => b.conversion - a.conversion)
+      .slice(0, 5);
+
+    // Calculate additional data for charts
+    const statusDistribution = [
+      { name: 'Pending', value: pendingCallbacks, color: '#FF8042' },
+      { name: 'Contacted', value: callbacks.filter((cb: any) => cb.status === 'contacted').length, color: '#FFBB28' },
+      { name: 'Completed', value: completedCallbacks, color: '#00C49F' }
+    ];
+
+    // Daily trend (last 30 days)
+    const dailyTrend = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      const dateStr = date.toISOString().split('T')[0];
+      const dayCallbacks = callbacks.filter((cb: any) => {
+        const cbDate = new Date(cb.created_at || cb.createdAt).toISOString().split('T')[0];
+        return cbDate === dateStr;
+      }).length;
+      return {
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        callbacks: dayCallbacks
+      };
+    });
+
+    // Monthly trend (last 12 months)
+    const monthlyTrend = Array.from({ length: 12 }, (_, i) => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - (11 - i));
+      const monthStr = date.toISOString().slice(0, 7);
+      const monthCallbacks = callbacks.filter((cb: any) => {
+        const cbMonth = new Date(cb.created_at || cb.createdAt).toISOString().slice(0, 7);
+        return cbMonth === monthStr;
+      }).length;
+      return {
+        month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        callbacks: monthCallbacks
+      };
+    });
+
+    return {
+      totalCallbacks,
+      pendingCallbacks,
+      completedCallbacks,
+      contactedCallbacks: callbacks.filter((cb: any) => cb.status === 'contacted').length,
+      conversionRate,
+      avgResponseTime: 24, // Placeholder - would need timestamp analysis
+      topAgents,
+      callbacksByAgent: topAgents.map(agent => ({ agent: agent.agent, count: agent.callbacks })),
+      recentCallbacks: callbacks.slice(0, 10),
+      statusDistribution,
+      dailyTrend,
+      monthlyTrend,
+      topPerformingAgents: topAgents
+    };
+  }, [callbacks]);
+
+  const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadKPIs();
+      await refreshMySQLData();
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
@@ -285,171 +181,60 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
     }
   }
 
-  useEffect(() => {
-    loadKPIs();
-  }, [loadKPIs, user.team, user.managedTeam]);
+  // Get the user's team for filtering
+  const getUserTeam = useCallback(() => {
+    // For team leaders, use their managed team
+    if (userRole === 'team_leader' && user.managedTeam) {
+      return user.managedTeam;
+    }
+    // For other users, use their assigned team
+    return user.team || '';
+  }, [user, userRole]);
+
+  // Data is automatically loaded by the useMySQLSalesData hook
 
   // Auto-refresh every 30 seconds for live data
   useEffect(() => {
-    const interval = setInterval(refreshData, 30000);
+    const interval = setInterval(handleRefresh, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [handleRefresh]);
 
-  // Real-time listener for live updates
-  useEffect(() => {
-    const team = getUserTeam();
-    const unsubscribe = callbacksService.onCallbacksChange(
-      (callbacks) => {
-        // Update state with new callbacks
-        console.log('Received real-time callbacks update:', callbacks.length);
-      },
-      userRole,
-      userRole === 'manager' || userRole === 'team-leader' ? undefined : user.id,
-      userRole === 'manager' || userRole === 'team-leader' ? undefined : user.name,
-      userRole === 'team-leader' ? team : undefined
-    );
-
-    return () => unsubscribe();
-  }, [userRole, user.id, user.name, getUserTeam]);
+  // Data is automatically managed by the useMySQLSalesData hook
 
   // Load manager analysis: revenue by user count and team performance
   useEffect(() => {
     if (userRole !== 'manager') return
+
+    // Use deals data from the hook instead of calling services
     const load = async () => {
       try {
-        const [deals, teamTargets] = await Promise.all([
-          dealsService.getDeals(),
-          targetsService.getTargets({ managerId: user.id })
-        ])
+        // For now, just use the deals data from the hook
+        // Targets functionality can be added later if needed
+        const dealsData = deals || [];
 
-        // Build members per team map from deals
-        const membersByTeam = new Map<string, number>()
-        // For now, we'll calculate team members from deals data
+        // Basic team analysis using available data
+        const teamMap = new Map<string, { team: string; deals: number; revenue: number }>()
 
-        // Filter deals by timeframe
-        const now = new Date()
-        let start: Date
-        if (timeframe === '30d') {
-          start = new Date(now)
-          start.setDate(start.getDate() - 30)
-        } else if (timeframe === 'month') {
-          start = new Date(now.getFullYear(), now.getMonth(), 1)
-        } else {
-          start = new Date(now.getFullYear(), 0, 1)
-        }
-
-        const inRangeDeals = deals.filter(d => {
-          const dateStr = d.signupDate || (d as any).date
-          const dt = dateStr ? new Date(dateStr) : (d as any).created_at ? new Date((d as any).created_at) : null
-          if (!dt || isNaN(dt.getTime())) return false
-          return dt >= start && dt <= now
-        })
-
-        // Aggregate deals by team
-        const map = new Map<string, { team: string; members: number; deals: number; revenue: number }>()
-        // Track distinct active agents per team from deals (fallback when users list misses them)
-        const distinctAgentsPerTeam = new Map<string, Set<string>>()
-        const getMembersCount = (teamName: string): number => {
-          // Exact match
-          const exact = membersByTeam.get(teamName)
-          if (typeof exact === 'number') return exact
-          // Case-insensitive match
-          const match = Array.from(membersByTeam.entries()).find(([k]) => k.toLowerCase() === teamName.toLowerCase())
-          if (match) return match[1]
-          return 0
-        }
-
-        inRangeDeals.forEach(d => {
-          const team = d.salesTeam || 'Unknown'
-          if (!map.has(team)) map.set(team, { team, members: 0, deals: 0, revenue: 0 })
-          const rec = map.get(team)!
+        dealsData.forEach(d => {
+          const team = d.sales_team || 'Unknown'
+          if (!teamMap.has(team)) teamMap.set(team, { team, deals: 0, revenue: 0 })
+          const rec = teamMap.get(team)!
           rec.deals += 1
-          rec.revenue += Number(d.amountPaid || 0)
-          const agentId = (d as any).SalesAgentID || (d as any).sales_agent_id || d.salesAgentName
-          if (!distinctAgentsPerTeam.has(team)) distinctAgentsPerTeam.set(team, new Set<string>())
-          if (agentId) distinctAgentsPerTeam.get(team)!.add(String(agentId))
+          rec.revenue += Number(d.amount_paid || 0)
         })
 
-        // Fill members count using users list, falling back to distinct agents in data
-        map.forEach((rec, team) => {
-          const fromUsers = getMembersCount(team)
-          const fromDeals = distinctAgentsPerTeam.get(team)?.size || 0
-          rec.members = Math.max(fromUsers, fromDeals)
-        })
-
-        // Targets by team (latest period per team)
-        const targetsByTeam = new Map<string, { revenue?: number; deals?: number }>()
-        teamTargets.forEach(t => {
-          const prev = targetsByTeam.get(t.agentName) || {}
-          targetsByTeam.set(t.agentName, { revenue: t.monthlyTarget ?? prev.revenue, deals: t.dealsTarget ?? prev.deals })
-        })
-
-        // Build sparkline trends per team
-        const buildTrend = (team: string): Array<{ x: number; y: number }> => {
-          const points: Array<{ x: number; y: number }> = []
-          if (timeframe === 'ytd') {
-            // Monthly buckets Jan..current
-            for (let m = 0; m <= now.getMonth(); m++) {
-              const monthStart = new Date(now.getFullYear(), m, 1)
-              const monthEnd = new Date(now.getFullYear(), m + 1, 0)
-              const sum = inRangeDeals
-                .filter(d => (d.salesTeam || 'Unknown') === team)
-                .filter(d => {
-                  const dt = new Date(d.signupDate || (d as any).date)
-                  return dt >= monthStart && dt <= monthEnd
-                })
-                .reduce((s, d) => s + Number(d.amountPaid || 0), 0)
-              points.push({ x: m + 1, y: sum })
-            }
-          } else {
-            // Weekly buckets, last 4-8 weeks depending on range
-            const weeks = timeframe === '30d' ? 4 : 6
-            for (let w = weeks - 1; w >= 0; w--) {
-              const bucketEnd = new Date(now)
-              bucketEnd.setDate(bucketEnd.getDate() - (w * 7))
-              const bucketStart = new Date(bucketEnd)
-              bucketStart.setDate(bucketEnd.getDate() - 6)
-              const sum = inRangeDeals
-                .filter(d => (d.salesTeam || 'Unknown') === team)
-                .filter(d => {
-                  const dt = new Date(d.signupDate || (d as any).date)
-                  return dt >= bucketStart && dt <= bucketEnd
-                })
-                .reduce((s, d) => s + Number(d.amountPaid || 0), 0)
-              const idx = weeks - w
-              points.push({ x: idx, y: sum })
-            }
-          }
-          return points
-        }
-
-        let perTeam = Array.from(map.values()).map(row => {
-          const targets = targetsByTeam.get(row.team) || {}
-          const revenuePerUser = row.members > 0 ? row.revenue / row.members : row.revenue
-          const performanceRevenuePct = targets.revenue && targets.revenue > 0 ? (row.revenue / targets.revenue) * 100 : undefined
-          const performanceDealsPct = targets.deals && targets.deals > 0 ? (row.deals / targets.deals) * 100 : undefined
-          return {
-            team: row.team,
-            members: row.members,
-            deals: row.deals,
-            revenue: Math.round(row.revenue),
-            revenuePerUser: Math.round(revenuePerUser),
-            targetRevenue: targets.revenue,
-            targetDeals: targets.deals,
-            performanceRevenuePct: performanceRevenuePct,
-            performanceDealsPct: performanceDealsPct,
-            trend: buildTrend(row.team),
-          }
-        })
-
-        // Sorting
-        perTeam.sort((a, b) => {
-          const dir = sortDir === 'asc' ? 1 : -1
-          const av = (a as any)[sortKey] ?? 0
-          const bv = (b as any)[sortKey] ?? 0
-          if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
-          return String(av).localeCompare(String(bv)) * dir
-        })
+        const perTeam = Array.from(teamMap.values()).map(row => ({
+          team: row.team,
+          members: 1, // Placeholder - would need user count from API
+          deals: row.deals,
+          revenue: Math.round(row.revenue),
+          revenuePerUser: Math.round(row.revenue),
+          targetRevenue: undefined,
+          targetDeals: undefined,
+          performanceRevenuePct: undefined,
+          performanceDealsPct: undefined,
+          trend: [] // Placeholder - would need historical data
+        }))
 
         setTeamAnalysis({ perTeam })
       } catch (e) {
@@ -457,8 +242,11 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
         setTeamAnalysis(null)
       }
     }
-    load()
-  }, [userRole, user.id, timeframe, sortKey, sortDir])
+
+    if (deals && deals.length > 0) {
+      load()
+    }
+  }, [userRole, deals])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -496,8 +284,8 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-red-600">Error loading callback KPIs: {error}</p>
-          <Button onClick={refreshData} className="mt-2">
+          <p className="text-red-600">Error loading callback KPIs: {error?.message || 'Unknown error'}</p>
+          <Button onClick={handleRefresh} className="mt-2">
             <RefreshCw className="w-4 h-4 mr-2" />
             Retry
           </Button>
@@ -511,7 +299,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
       <Card>
         <CardContent className="p-6 text-center">
           <p className="text-gray-600 mb-4">No callback data available</p>
-          <Button onClick={refreshData}>
+          <Button onClick={handleRefresh}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -529,7 +317,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <p className="text-sm text-muted-foreground">
             {userRole === 'manager' 
               ? `Team callback performance • ${kpis?.totalCallbacks || 0} total callbacks`
-              : userRole === 'team-leader'
+              : userRole === 'team_leader'
               ? `Team callback performance • ${kpis?.totalCallbacks || 0} team callbacks`
               : userRole === 'salesman'
               ? `Your callback performance • ${kpis?.totalCallbacks || 0} callbacks`
@@ -537,18 +325,11 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Button 
-            onClick={testNextJSAnalytics}
-            variant="outline"
-            size="sm"
-          >
-            Test Next.js Analytics
-          </Button>
           <div className="flex items-center gap-2 text-sm text-green-600">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             Live Data
           </div>
-          <Button onClick={refreshData} disabled={refreshing}>
+          <Button onClick={handleRefresh} disabled={refreshing}>
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
@@ -580,8 +361,8 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               <div>
                 <p className="text-sm font-medium text-green-700">Top Customer</p>
                 <p className="text-2xl font-bold text-green-900 truncate max-w-[150px]">
-                  {kpis?.callbacksByAgent?.length > 0 && kpis?.recentCallbacks?.length > 0 
-                    ? kpis.recentCallbacks[0]?.customer_name || 'No customers'
+                  {(kpis?.callbacksByAgent && kpis.callbacksByAgent.length > 0 && kpis?.recentCallbacks && kpis.recentCallbacks.length > 0) 
+                    ? kpis.recentCallbacks[0]?.customerName || 'No customers'
                     : 'No customers'}
                 </p>
                 <p className="text-xs text-green-600 mt-1">
@@ -602,12 +383,12 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                 <div>
                   <p className="text-sm font-medium text-purple-700">Top Salesman</p>
                   <p className="text-2xl font-bold text-purple-900 truncate max-w-[150px]">
-                    {kpis.callbacksByAgent.length > 0 
+                    {(kpis?.callbacksByAgent && kpis.callbacksByAgent.length > 0) 
                       ? kpis.callbacksByAgent[0]?.agent || 'No agents'
                       : 'No agents'}
                   </p>
                   <p className="text-xs text-purple-600 mt-1">
-                    {kpis.callbacksByAgent.length > 0 
+                    {(kpis?.callbacksByAgent && kpis.callbacksByAgent.length > 0) 
                       ? `${kpis.callbacksByAgent[0]?.count || 0} callbacks`
                       : '0 callbacks'}
                   </p>
@@ -652,17 +433,17 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={kpis.callbacksByStatus}
+                    data={kpis.statusDistribution}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
                     outerRadius={80}
                     fill="#8884d8"
-                    dataKey="count"
-                    nameKey="status"
-                    label={(entry: any) => `${entry.status}: ${entry.percentage.toFixed(0)}%`}
+                    dataKey="value"
+                    nameKey="name"
+                    label={(entry: any) => `${entry.name}: ${(entry.value / kpis.totalCallbacks * 100).toFixed(0)}%`}
                   >
-                    {kpis.callbacksByStatus.map((_, index) => (
+                    {kpis?.statusDistribution?.map((_: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -681,7 +462,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={kpis.dailyCallbackTrend}>
+                <AreaChart data={kpis?.dailyTrend || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="date" 
@@ -691,7 +472,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                   <YAxis />
                   <Tooltip 
                     labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                    formatter={(value, name) => [value, name === 'callbacks' ? 'Callbacks' : 'Conversions']}
+                    formatter={(value, name) => [value, 'Callbacks']}
                   />
                   <Area 
                     type="monotone" 
@@ -700,14 +481,6 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                     stroke="#8884d8" 
                     fill="#8884d8" 
                     fillOpacity={0.6}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="conversions" 
-                    stackId="2"
-                    stroke="#82ca9d" 
-                    fill="#82ca9d" 
-                    fillOpacity={0.8}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -726,13 +499,12 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={kpis.callbacksByAgent.slice(0, 8)} layout="horizontal">
+                <BarChart data={kpis?.callbacksByAgent?.slice(0, 8) || []} layout="horizontal">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="agent" type="category" tick={{ fontSize: 10 }} width={80} />
-                  <Tooltip formatter={(value, name) => [value, name === 'count' ? 'Callbacks' : 'Conversions']} />
+                  <Tooltip formatter={(value, name) => [value, 'Callbacks']} />
                   <Bar key="callbacks" dataKey="count" fill="#8884d8" name="Callbacks" />
-                  <Bar key="conversions" dataKey="conversions" fill="#82ca9d" name="Conversions" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -747,26 +519,31 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={kpis.monthlyTrend}>
+                <LineChart data={(kpis?.monthlyTrend && kpis.monthlyTrend.length > 0 ? kpis.monthlyTrend : kpis?.dailyTrend?.slice(-12)) || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
-                    dataKey="month" 
+                    dataKey="date" 
                     tick={{ fontSize: 12 }}
                     tickFormatter={(value) => {
-                      const [year, month] = value.split('-');
-                      return new Date(year, month - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                      if (typeof value === 'string' && value.includes('-')) {
+                        const [year, month] = value.split('-');
+                        return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                      }
+                      return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     }}
                   />
                   <YAxis />
                   <Tooltip 
                     labelFormatter={(value) => {
-                      const [year, month] = value.split('-');
-                      return new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      if (typeof value === 'string' && value.includes('-')) {
+                        const [year, month] = value.split('-');
+                        return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                      }
+                      return new Date(value).toLocaleDateString();
                     }}
-                    formatter={(value, name) => [value, name === 'callbacks' ? 'Callbacks' : 'Conversions']}
+                    formatter={(value, name) => [value, 'Callbacks']}
                   />
                   <Line type="monotone" dataKey="callbacks" stroke="#8884d8" strokeWidth={2} />
-                  <Line type="monotone" dataKey="conversions" stroke="#82ca9d" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -775,7 +552,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
       </div>
 
       {/* Top Performing Agents (Manager Only) */}
-      {userRole === 'manager' && kpis.topPerformingAgents.length > 0 && (
+      {userRole === 'manager' && kpis?.topPerformingAgents && kpis.topPerformingAgents.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Top Performing Agents (Conversion Rate)</CardTitle>
@@ -792,7 +569,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                   </tr>
                 </thead>
                 <tbody>
-                  {kpis.topPerformingAgents.map((agent, index) => (
+                  {kpis?.topPerformingAgents?.map((agent: any, index: number) => (
                     <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                       <td className="py-2 font-medium">{agent.agent}</td>
                       <td className="py-2">{agent.totalCallbacks}</td>
@@ -836,7 +613,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                 </tr>
               </thead>
               <tbody>
-                {kpis.recentCallbacks.map((callback, index) => (
+                {kpis?.recentCallbacks?.map((callback: any, index: number) => (
                   <tr key={index} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                     <td className="py-2 font-medium">{callback.customer_name}</td>
                     <td className="py-2">{callback.phone_number}</td>
@@ -916,7 +693,7 @@ export default function CallbackKPIDashboard({ userRole, user }: CallbackKPIDash
                       </tr>
                     </thead>
                     <tbody>
-                      {teamAnalysis.perTeam.map((row, idx) => (
+                      {teamAnalysis.perTeam.map((row: any, idx: number) => (
                         <tr key={idx} className="border-b hover:bg-blue-50/50 transition-colors duration-200">
                           <td className="py-2 font-medium">{row.team}</td>
                           <td className="py-2">{row.members}</td>

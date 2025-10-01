@@ -117,8 +117,8 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
         if (user.role === 'salesman') {
           setActiveTab('agent')
           setRoleMessage(`Sales agent account detected: ${user.name}`)
-        } else if (user.role === 'team-leader') {
-          setActiveTab('team-leader')
+        } else if (user.role === 'team_leader') {
+          setActiveTab('team_leader')
           setRoleMessage(`Team leader account detected: ${user.name}`)
         }
       } else {
@@ -238,9 +238,9 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                   Agent
                 </TabsTrigger>
                 <TabsTrigger 
-                  value="team-leader" 
+                  value="team_leader" 
                   className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-600 data-[state=active]:text-white text-slate-300"
-                  disabled={!!detectedRole && detectedRole !== 'team-leader'}
+                  disabled={!!detectedRole && detectedRole !== 'team_leader'}
                 >
                   <UserCheck className="h-4 w-4 mr-2" />
                   Team Leader
@@ -382,7 +382,7 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                 </div>
               </TabsContent>
 
-              <TabsContent value="team-leader">
+              <TabsContent value="team_leader">
                 <div className="space-y-4 mt-4">
                   <div className="bg-orange-500/20 p-3 rounded-lg border border-orange-400/30 backdrop-blur-sm">
                     <p className="text-sm text-orange-200 font-medium">Team Leader Access</p>
@@ -393,9 +393,9 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                   
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="team-leader-username" className="text-slate-200">Username</Label>
+                      <Label htmlFor="team_leader-username" className="text-slate-200">Username</Label>
                       <Input
-                        id="team-leader-username"
+                        id="team_leader-username"
                         type="text"
                         value={username}
                         onChange={(e) => handleUsernameChange(e.target.value)}
@@ -405,10 +405,10 @@ export default function UnifiedLogin({ onLogin, onBackToLanding }: UnifiedLoginP
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="team-leader-password" className="text-slate-200">Password</Label>
+                      <Label htmlFor="team_leader-password" className="text-slate-200">Password</Label>
                       <div className="relative">
                         <Input
-                          id="team-leader-password"
+                          id="team_leader-password"
                           type={showPassword ? "text" : "password"}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}

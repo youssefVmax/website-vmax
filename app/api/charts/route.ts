@@ -50,36 +50,40 @@ export async function GET(request: NextRequest) {
     let callbacksWhere = '';
     const params: any[] = [];
 
+    // Use COALESCE for date source (some rows may lack created_at)
+    const dealDateExpr = 'COALESCE(created_at, signup_date)';
+
     if (userRole === 'salesman') {
       dealsWhere = 'WHERE SalesAgentID = ?';
       callbacksWhere = 'WHERE SalesAgentID = ?';
       params.push(userId, userId);
-    } else if (userRole === 'team-leader' && managedTeam) {
+    } else if (userRole === 'team_leader' && managedTeam) {
       dealsWhere = 'WHERE (SalesAgentID = ? OR sales_team = ?)';
       callbacksWhere = 'WHERE (SalesAgentID = ? OR sales_team = ?)';
       params.push(userId, managedTeam, userId, managedTeam);
     }
 
-    // Add date range filter
-    const dateFilter = `AND created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
-    dealsWhere += dealsWhere ? ` ${dateFilter}` : `WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
-    callbacksWhere += callbacksWhere ? ` ${dateFilter}` : `WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+    // Add date range filter (use dealDateExpr for deals)
+    const dateFilterDeals = `AND ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+    const dateFilterCallbacks = `AND created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+    dealsWhere += dealsWhere ? ` ${dateFilterDeals}` : `WHERE ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+    callbacksWhere += callbacksWhere ? ` ${dateFilterCallbacks}` : `WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
 
     // 1. Sales Trend Chart (Daily/Weekly/Monthly)
     if (chartType === 'all' || chartType === 'sales-trend') {
       const salesTrendQuery = `
         SELECT 
-          DATE(created_at) as date,
+          DATE(${dealDateExpr}) as date,
           COUNT(*) as deals,
           COALESCE(SUM(amount_paid), 0) as revenue
         FROM deals 
         ${dealsWhere}
-        GROUP BY DATE(created_at)
+        GROUP BY DATE(${dealDateExpr})
         ORDER BY date DESC
         LIMIT 30
       `;
 
-      const salesTrend = await query<any>(salesTrendQuery, params.slice(0, userRole === 'team-leader' ? 2 : 1));
+      const salesTrend = await query<any>(salesTrendQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
       charts.salesTrend = salesTrend.map(row => ({
         date: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -92,17 +96,17 @@ export async function GET(request: NextRequest) {
     if (chartType === 'all' || chartType === 'sales-by-agent') {
       const salesByAgentQuery = `
         SELECT 
-          sales_agent as agent,
+          COALESCE(sales_agent, SalesAgentID) as agent,
           COUNT(*) as deals,
           COALESCE(SUM(amount_paid), 0) as revenue
         FROM deals 
         ${dealsWhere}
-        GROUP BY sales_agent
+        GROUP BY COALESCE(sales_agent, SalesAgentID)
         ORDER BY revenue DESC
         LIMIT 10
       `;
 
-      const salesByAgent = await query<any>(salesByAgentQuery, params.slice(0, userRole === 'team-leader' ? 2 : 1));
+      const salesByAgent = await query<any>(salesByAgentQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
       charts.salesByAgent = salesByAgent.map(row => ({
         agent: row.agent || 'Unknown',
@@ -119,12 +123,12 @@ export async function GET(request: NextRequest) {
           COUNT(*) as deals,
           COALESCE(SUM(amount_paid), 0) as revenue
         FROM deals 
-        ${userRole === 'manager' ? `WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)` : dealsWhere}
+        ${userRole === 'manager' ? `WHERE ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)` : dealsWhere}
         GROUP BY sales_team
         ORDER BY revenue DESC
       `;
 
-      const teamParams = userRole === 'manager' ? [] : params.slice(0, userRole === 'team-leader' ? 2 : 1);
+      const teamParams = userRole === 'manager' ? [] : params.slice(0, userRole === 'team_leader' ? 2 : 1);
       const salesByTeam = await query<any>(salesByTeamQuery, teamParams);
       
       charts.salesByTeam = salesByTeam.map(row => ({
@@ -146,7 +150,7 @@ export async function GET(request: NextRequest) {
         ORDER BY count DESC
       `;
 
-      const dealStatus = await query<any>(dealStatusQuery, params.slice(0, userRole === 'team-leader' ? 2 : 1));
+      const dealStatus = await query<any>(dealStatusQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
       charts.dealStatus = dealStatus.map(row => ({
         status: row.status,
@@ -159,16 +163,16 @@ export async function GET(request: NextRequest) {
     if (chartType === 'all' || chartType === 'service-tier') {
       const serviceTierQuery = `
         SELECT 
-          service_tier as service,
+          COALESCE(service_tier, 'Unknown') as service,
           COUNT(*) as deals,
           COALESCE(SUM(amount_paid), 0) as revenue
         FROM deals 
         ${dealsWhere}
-        GROUP BY service_tier
+        GROUP BY COALESCE(service_tier, 'Unknown')
         ORDER BY revenue DESC
       `;
 
-      const serviceTier = await query<any>(serviceTierQuery, params.slice(0, userRole === 'team-leader' ? 2 : 1));
+      const serviceTier = await query<any>(serviceTierQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
       charts.serviceTier = serviceTier.map(row => ({
         service: row.service || 'Unknown',
@@ -192,7 +196,7 @@ export async function GET(request: NextRequest) {
         LIMIT 30
       `;
 
-      const callbackParams = userRole === 'team-leader' ? [userId, managedTeam] : [userId];
+      const callbackParams = userRole === 'team_leader' ? [userId, managedTeam] : [userId];
       const callbackPerformance = await query<any>(callbackPerformanceQuery, callbackParams);
       
       charts.callbackPerformance = callbackPerformance.map(row => ({
@@ -208,17 +212,17 @@ export async function GET(request: NextRequest) {
     if (chartType === 'all' || chartType === 'monthly-revenue') {
       const monthlyRevenueQuery = `
         SELECT 
-          DATE_FORMAT(created_at, '%Y-%m') as month,
+          DATE_FORMAT(${dealDateExpr}, '%Y-%m') as month,
           COUNT(*) as deals,
           COALESCE(SUM(amount_paid), 0) as revenue
         FROM deals 
-        ${dealsWhere.replace('created_at >= DATE_SUB(NOW(), INTERVAL ' + dateRange + ' DAY)', 'created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)')}
-        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ${dealsWhere.replace(`${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`, `${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`)}
+        GROUP BY DATE_FORMAT(${dealDateExpr}, '%Y-%m')
         ORDER BY month DESC
         LIMIT 12
       `;
 
-      const monthlyRevenue = await query<any>(monthlyRevenueQuery, params.slice(0, userRole === 'team-leader' ? 2 : 1));
+      const monthlyRevenue = await query<any>(monthlyRevenueQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
       charts.monthlyRevenue = monthlyRevenue.map(row => ({
         month: new Date(row.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
@@ -241,7 +245,7 @@ export async function GET(request: NextRequest) {
         LIMIT 10
       `;
 
-      const topCustomers = await query<any>(topCustomersQuery, params.slice(0, userRole === 'team-leader' ? 2 : 1));
+      const topCustomers = await query<any>(topCustomersQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
       charts.topCustomers = topCustomers.map(row => ({
         customer: row.customer || 'Unknown',
@@ -256,12 +260,12 @@ export async function GET(request: NextRequest) {
         COUNT(*) as total_deals,
         COALESCE(SUM(amount_paid), 0) as total_revenue,
         COALESCE(AVG(amount_paid), 0) as avg_deal_size,
-        COUNT(DISTINCT sales_agent) as unique_agents
+        COUNT(DISTINCT COALESCE(sales_agent, SalesAgentID)) as unique_agents
       FROM deals 
       ${dealsWhere}
     `;
 
-    const summary = await query<any>(summaryQuery, params.slice(0, userRole === 'team-leader' ? 2 : 1));
+    const summary = await query<any>(summaryQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
     
     charts.summary = summary[0] || {
       total_deals: 0,

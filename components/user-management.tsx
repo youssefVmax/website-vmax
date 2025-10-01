@@ -8,27 +8,41 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { apiService, User as APIUser } from "@/lib/api-service"
-import { mysqlUserService, User } from "@/lib/firebase-user-service"
 import { showSuccess, showToast, showUserAdded } from "@/lib/sweetalert"
+
+// Define User interface locally (MySQL-based)
+interface User {
+  id: string;
+  username: string;
+  email?: string;
+  name: string;
+  role: 'manager' | 'team_leader' | 'salesman';
+  team?: string;
+  phone?: string;
+  managedTeam?: string;
+  password?: string;
+  created_at: string;
+  updated_at: string;
+  is_active?: boolean;
+}
 
 const TEAMS = [
   'ALI ASHRAF',
-  'SAIF MOHAMED', 
+  'SAIF MOHAMED',
   'CS TEAM',
   'OTHER'
 ];
 
 const ROLES = [
   { value: 'salesman', label: 'Salesman' },
-  { value: 'team-leader', label: 'Team Leader' }
+  { value: 'team_leader', label: 'Team Leader' }
 ];
 
 interface UserManagementProps {
-  userRole: 'manager' | 'salesman' | 'team-leader'
+  userRole: 'manager' | 'salesman' | 'team_leader'
   user: { name: string; username: string; id: string }
 }
 
@@ -75,14 +89,77 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
   const loadUsers = async () => {
     try {
       setLoading(true)
-      const fetchedUsers = await mysqlUserService.getUsers()
-      setUsers(fetchedUsers)
       setError(null)
+      
+      console.log('🔄 Loading users from direct API...')
+      
+      // Use direct users API instead of unified-data API
+      const response = await fetch('/api/users?limit=1000', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      console.log('✅ Users API response:', data)
+      
+      if (data.success && Array.isArray(data.users)) {
+        // Transform users to match expected format
+        const transformedUsers = data.users.map((user: any) => ({
+          id: user.id.toString(),
+          username: user.username,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          team: user.team,
+          phone: user.phone,
+          managedTeam: user.managedTeam,
+          password: user.password || '',
+          created_at: user.created_at,
+          updated_at: user.updated_at
+        }))
+        
+        console.log('✅ Transformed users:', transformedUsers.length, 'users')
+        setUsers(transformedUsers)
+      } else {
+        console.warn('⚠️ Users API returned invalid data:', data)
+        setUsers([])
+      }
     } catch (err) {
-      setError('Failed to load users')
-      console.error('Error loading users:', err)
+      console.error('❌ Error loading users:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load users'
+      setError(errorMessage)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const checkUsernameExists = async (username: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/users?username=${encodeURIComponent(username)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      })
+      
+      if (!response.ok) {
+        return false // If API fails, assume username doesn't exist
+      }
+      
+      const data = await response.json()
+      return data.success && data.user !== null
+    } catch (error) {
+      console.error('Error checking username existence:', error)
+      return false // If check fails, assume username doesn't exist
     }
   }
 
@@ -97,21 +174,36 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       }
 
       // Validate managed team for team leaders
-      if (formData.role === 'team-leader' && !formData.managedTeam) {
+      if (formData.role === 'team_leader' && !formData.managedTeam) {
         setError('Please select a team to manage for team leaders')
         return
       }
 
       // Check if username already exists
-      const existingUser = await mysqlUserService.getUserByUsername(formData.username)
-      if (existingUser) {
+      const existingUsers = await checkUsernameExists(formData.username)
+      if (existingUsers) {
         setError('Username already exists')
         return
       }
 
       console.log('Creating user with data:', formData)
-      const newUser = await mysqlUserService.createUser(formData)
-      console.log('User created successfully:', newUser)
+      
+      // Use direct API call
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      console.log('✅ User created successfully:', result)
       
       await loadUsers()
       setIsAddDialogOpen(false)
@@ -140,14 +232,30 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
     try {
       // If username changed, check if new username exists
       if (formData.username !== editingUser.username) {
-        const existingUser = await mysqlUserService.getUserByUsername(formData.username)
-        if (existingUser) {
+        const existingUsers = await checkUsernameExists(formData.username)
+        if (existingUsers) {
           setError('Username already exists')
           return
         }
       }
 
-      await mysqlUserService.updateUser(editingUser.id, formData)
+      // Direct API call to MySQL
+      const response = await fetch(`/api/users?id=${editingUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      console.log('✅ User updated successfully in MySQL:', result)
+
       await loadUsers()
       setIsEditDialogOpen(false)
       setEditingUser(null)
@@ -155,15 +263,26 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       setError(null)
     } catch (err) {
       setError('Failed to update user')
-      console.error('Error updating user:', err)
+      console.error('Error updating user in MySQL:', err)
     }
   }
 
   const handleDeleteUser = async (userId: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return
-
     try {
-      await mysqlUserService.deleteUser(userId)
+      // Use direct API call
+      const response = await fetch(`/api/users?id=${userId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      console.log('✅ User deleted successfully:', result)
+
       await loadUsers()
       setError(null)
     } catch (err) {
@@ -216,7 +335,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
   const getRoleBadgeColor = (role: User['role']) => {
     switch (role) {
       case 'salesman': return 'bg-blue-100 text-blue-800'
-      case 'team-leader': return 'bg-purple-100 text-purple-800'
+      case 'team_leader': return 'bg-purple-100 text-purple-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -316,7 +435,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
                   </SelectContent>
                 </Select>
               </div>
-              {formData.role === 'team-leader' && (
+              {formData.role === 'team_leader' && (
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="managedTeam" className="text-right">
                     Managed Team *
@@ -392,7 +511,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
             Salesmen: {users.filter(u => u.role === 'salesman').length}
           </Badge>
           <Badge variant="outline" className="px-3 py-1">
-            Team Leaders: {users.filter(u => u.role === 'team-leader').length}
+            Team Leaders: {users.filter(u => u.role === 'team_leader').length}
           </Badge>
         </div>
       </div>
@@ -446,7 +565,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
                     </TableCell>
                     <TableCell>
                       <Badge className={getRoleBadgeColor(user.role)}>
-                        {user.role === 'team-leader' ? 'Team Leader' : 'Salesman'}
+                        {user.role === 'team_leader' ? 'Team Leader' : 'Salesman'}
                       </Badge>
                     </TableCell>
                     <TableCell>{user.team}</TableCell>
@@ -556,7 +675,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
                 </SelectContent>
               </Select>
             </div>
-            {formData.role === 'team-leader' && (
+            {formData.role === 'team_leader' && (
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="edit-managedTeam" className="text-right">
                   Managed Team *

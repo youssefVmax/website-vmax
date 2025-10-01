@@ -18,4 +18,17 @@ export interface Notification {
   dealValue?: number
   isManagerMessage?: boolean
   actionRequired?: boolean
+  // MySQL storage fields
+  salesAgentId?: string
+  salesAgent?: string
+  customerName?: string
+  customerPhone?: string
+  customerEmail?: string
+  callbackId?: string
+  callbackStatus?: string
+  callbackReason?: string
+  targetId?: string
+  userRole?: string
+  teamName?: string
+  isRead?: boolean
 }

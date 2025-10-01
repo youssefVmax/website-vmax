@@ -18,7 +18,6 @@ export function MainNavOld() {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/deals", label: "Deals" },
     { href: "/callbacks", label: "Callbacks" },
-    { href: "/reports", label: "Reports" },
     { href: "/settings", label: "Settings" },
   ]
 
@@ -60,24 +59,15 @@ export function MainNavOld() {
               >
                 Callbacks Table
               </Link>
-              <Link
-                href="/admin/backup"
-                className={cn(
-                  "text-sm font-semibold transition-colors hover:text-primary",
-                  pathname.startsWith("/admin") ? "text-primary" : "text-muted-foreground"
-                )}
-                title="Manage (Backup, Data Export)"
-              >
-                Admin
-              </Link>
+
             </>
           )}
-          {user?.role === 'team-leader' && (
+          {user?.role === 'team_leader' && (
             <Link
-              href="/team-leader"
+              href="/team_leader"
               className={cn(
                 "text-sm font-semibold transition-colors hover:text-primary",
-                pathname.startsWith("/team-leader") ? "text-primary" : "text-muted-foreground"
+                pathname.startsWith("/team_leader") ? "text-primary" : "text-muted-foreground"
               )}
               title="Team Leader Dashboard"
             >
@@ -86,7 +76,7 @@ export function MainNavOld() {
           )}
         </nav>
         <div className="ml-auto flex items-center space-x-4">
-          {(user?.role === 'manager' || user?.role === 'team-leader' || user?.role === 'salesman') && (
+          {(user?.role === 'manager' || user?.role === 'team_leader' || user?.role === 'salesman') && (
             <Link href="/deals/new">
               <Button variant="default" className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600">
                 <PlusCircle className="mr-2 h-4 w-4" />
@@ -94,7 +84,7 @@ export function MainNavOld() {
               </Button>
             </Link>
           )}
-          {(user?.role === 'manager' || user?.role === 'team-leader' || user?.role === 'salesman') && (
+          {(user?.role === 'manager' || user?.role === 'team_leader' || user?.role === 'salesman') && (
             <Link href="/callbacks/new">
               <Button variant="outline" className="border-cyan-500 text-cyan-600 hover:bg-cyan-50">
                 <PlusCircle className="mr-2 h-4 w-4" />

@@ -143,7 +143,7 @@ class MigrationVerifier {
         echo "👥 Testing Team Leader Functionality...\n";
         
         // Test team leader users
-        $result = $this->conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'team-leader'");
+        $result = $this->conn->query("SELECT COUNT(*) as count FROM users WHERE role = 'team_leader'");
         if ($result) {
             $row = $result->fetch_assoc();
             $this->addResult("Team Leaders", "ℹ️ INFO", "{$row['count']} team leader(s) found");

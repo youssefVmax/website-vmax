@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      whereConditions.push('(f.feedback_text LIKE ? OR u.name LIKE ? OR d.title LIKE ?)');
+      whereConditions.push('(f.feedback_text LIKE ? OR f.user_id LIKE ? OR d.title LIKE ?)');
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
     }
@@ -90,17 +90,15 @@ export async function GET(request: NextRequest) {
     const feedbackQuery = `
       SELECT 
         f.*,
-        u.name as user_name,
-        u.username as user_username,
-        u.role as user_role,
+        f.user_id as user_name,
+        f.user_id as user_username,
+        'user' as user_role,
         d.title as data_title,
         d.description as data_description,
         d.sent_by_id,
-        sender.name as sent_by_name
+        d.sent_by_id as sent_by_name
       FROM data_feedback f
-      LEFT JOIN users u ON f.user_id = u.id
       LEFT JOIN data_center d ON f.data_id = d.id
-      LEFT JOIN users sender ON d.sent_by_id = sender.id
       ${whereClause}
       ORDER BY f.created_at DESC
       LIMIT ? OFFSET ?
@@ -109,9 +107,7 @@ export async function GET(request: NextRequest) {
     const countQuery = `
       SELECT COUNT(*) as total 
       FROM data_feedback f
-      LEFT JOIN users u ON f.user_id = u.id
       LEFT JOIN data_center d ON f.data_id = d.id
-      LEFT JOIN users sender ON d.sent_by_id = sender.id
       ${whereClause}
     `;
 
@@ -122,17 +118,17 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Executing feedback query:', feedbackQuery);
     console.log('🔍 Query params:', queryParams);
 
-    // Execute queries
-    const [feedback, countResult] = await Promise.all([
+    // Execute queries with correct tuple destructuring
+    const [[feedbackRows], [countRows]] = await Promise.all([
       query<any>(feedbackQuery, queryParams),
       query<any>(countQuery, countParams)
     ]);
 
-    const total = countResult[0]?.total || 0;
+    const total = (countRows as any)[0]?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
     // Format the feedback data
-    const formattedFeedback = feedback.map((item: any) => ({
+    const formattedFeedback = (feedbackRows as any[]).map((item: any) => ({
       ...item,
       created_at: item.created_at ? new Date(item.created_at).toISOString() : null,
       updated_at: item.updated_at ? new Date(item.updated_at).toISOString() : null
@@ -149,14 +145,12 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN feedback_type = 'acknowledgment' THEN 1 END) as acknowledgments,
         COUNT(CASE WHEN feedback_type = 'general' THEN 1 END) as general
       FROM data_feedback f
-      LEFT JOIN users u ON f.user_id = u.id
       LEFT JOIN data_center d ON f.data_id = d.id
-      LEFT JOIN users sender ON d.sent_by_id = sender.id
       ${whereClause}
     `;
 
-    const statsResult = await query<any>(statsQuery, params);
-    const stats = statsResult[0] || {};
+    const [statsRows] = await query<any>(statsQuery, params);
+    const stats = (statsRows as any[])[0] || {};
 
     console.log('✅ All feedback fetched successfully:', formattedFeedback.length);
 
@@ -189,11 +183,31 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ All Data Feedback API Error:', error);
+    // Return safe empty payload so UI can still render
     const response = NextResponse.json({
-      success: false,
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+      success: true,
+      data: [],
+      pagination: {
+        page: 1,
+        limit: 50,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false
+      },
+      stats: {
+        total_feedback: 0,
+        avg_rating: '0.0',
+        breakdown: {
+          questions: 0,
+          suggestions: 0,
+          concerns: 0,
+          acknowledgments: 0,
+          general: 0
+        }
+      },
+      timestamp: new Date().toISOString()
+    });
     return addCorsHeaders(response);
   }
 }

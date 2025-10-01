@@ -56,15 +56,16 @@ class MySQLNotificationService implements NotificationService {
 
   async getNotifications(userId: string, userRole: string): Promise<Notification[]> {
     try {
-      const filters: Record<string, string> = {};
-      
+      const filters: Record<string, string> = {
+        userRole,
+        userId,
+      };
       // Filter notifications based on user role and targeting
       if (userRole !== 'manager') {
-        filters.to = userId; // This will use JSON_CONTAINS in the API
+        // API supports userRole/userId filtering; no need to send 'to' explicitly, but keep as hint
+        filters.to = userId;
       }
-      
-      const response = await directMySQLService.getNotifications(filters);
-      const notifications = Array.isArray(response) ? response : (response.notifications || []);
+      const notifications = await directMySQLService.getNotifications(filters);
       
       return notifications.map(this.mapNotification).filter((notification: Notification) => {
         // Additional filtering logic
@@ -126,9 +127,10 @@ class MySQLNotificationService implements NotificationService {
 
   async markAsRead(id: string): Promise<void> {
     try {
-      await directMySQLService.makeDirectRequest(`notifications-api.php?id=${id}`, {
+      await directMySQLService.makeDirectRequest(`notifications`, {
         method: 'PUT',
-        body: JSON.stringify({ isRead: true })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, isRead: true })
       });
       
       // Trigger listeners
@@ -142,15 +144,16 @@ class MySQLNotificationService implements NotificationService {
   async markAllAsRead(userId: string): Promise<void> {
     try {
       // Get all unread notifications for the user
-      const notifications = await this.getNotifications(userId, 'user');
+      const notifications = await this.getNotifications(userId, 'salesman');
       const unreadNotifications = notifications.filter(n => !n.isRead);
       
       // Mark each as read
       await Promise.all(
-        unreadNotifications.map(notification => 
-          directMySQLService.makeDirectRequest(`notifications-api.php?id=${notification.id}`, {
+        unreadNotifications.map(notification =>
+          directMySQLService.makeDirectRequest('notifications', {
             method: 'PUT',
-            body: JSON.stringify({ isRead: true })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: notification.id, isRead: true })
           })
         )
       );

@@ -18,36 +18,46 @@ export async function OPTIONS() {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 GET /api/targets - Starting request processing');
+
+  
+
     const { searchParams } = new URL(request.url);
     const agentId = searchParams.get('agentId');
     const managerId = searchParams.get('managerId');
     const period = searchParams.get('period');
+    const salesTeam = searchParams.get('salesTeam');
     const page = parseInt(searchParams.get('page') || '1', 10) || 1;
     const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 200);
     const offset = (page - 1) * limit;
 
     const where: string[] = [];
     const params: any[] = [];
-    if (agentId) { where.push('`agentId` = ?'); params.push(agentId); }
-    if (managerId) { where.push('`managerId` = ?'); params.push(managerId); }
-    if (period) { where.push('`period` = ?'); params.push(period); }
+    if (agentId) { where.push('agentId = ?'); params.push(agentId); }
+    if (managerId) { where.push('managerId = ?'); params.push(managerId); }
+    if (period) { where.push('period = ?'); params.push(period); }
+    // salesTeam filtering removed until column is added to database
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const [rows] = await query<any>(
-      `SELECT * FROM \`targets\` ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
-    const [totals] = await query<any>(`SELECT COUNT(*) as c FROM \`targets\` ${whereSql}`, params);
+    // Build the complete SQL query with proper parameter handling
+    // Note: salesTeam column might not exist in current database schema
+    const baseSql = `SELECT id, monthlyTarget, agentName, agentId, dealsTarget, managerId, period, description, updated_at, managerName, type, created_at FROM targets ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 50`; // Limit to 50 for performance
+    const countSql = `SELECT COUNT(*) as c FROM targets ${whereSql}`;
+
+
+
+    const [rows] = await query<any>(baseSql, params);
+    const [totals] = await query<any>(countSql, params);
+
+    console.log('✅ Query executed successfully, found', rows.length, 'targets');
 
     return addCorsHeaders(NextResponse.json({
       targets: rows,
       total: totals[0]?.c || 0,
-      page,
-      limit,
       success: true
     }));
   } catch (error) {
-    console.error('Error fetching targets:', error);
+    console.error('❌ Error in GET /api/targets:', error);
     return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to fetch targets' }, { status: 502 }));
   }
 }
@@ -55,20 +65,29 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
+
     // Generate unique ID
     const id = `target_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     const [result] = await query<any>(
-      `INSERT INTO \`targets\` (
-        id, agentId, agentName, managerId, managerName, monthlyTarget, dealsTarget,
-        period, type, description, created_at, updated_at
+      `INSERT INTO targets (
+        id, monthlyTarget, agentName, agentId, dealsTarget, managerId,
+        period, description, updated_at, managerName, type, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, body.agentId, body.agentName, body.managerId, body.managerName,
-        body.monthlyTarget || 0, body.dealsTarget || 0, body.period,
-        body.type || 'sales', body.description, now, now
+        id,
+        body.monthlyTarget || 0,
+        body.agentName || null,
+        body.agentId || null,
+        body.dealsTarget || 0,
+        body.managerId || null,
+        body.period || null,
+        body.description || null,
+        now,
+        body.managerName || null,
+        body.type || 'individual',
+        now
       ]
     );
 
@@ -92,21 +111,29 @@ export async function PUT(request: NextRequest) {
     const setClauses: string[] = [];
     const params: any[] = [];
 
+    // Only allow updates to specific fields that exist in the table
+    const allowedFields = ['monthlyTarget', 'agentName', 'agentId', 'dealsTarget', 'managerId', 'period', 'description', 'managerName', 'type'];
+
     Object.entries(updates).forEach(([key, value]) => {
-      if (key === 'id') return;
-      setClauses.push(`\`${key}\` = ?`);
-      params.push(value);
+      if (allowedFields.includes(key)) {
+        setClauses.push(`${key} = ?`);
+        params.push(value);
+      }
     });
 
     if (setClauses.length === 0) {
-      return addCorsHeaders(NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 }));
+      return addCorsHeaders(NextResponse.json({ success: false, error: 'No valid fields to update' }, { status: 400 }));
     }
 
-    setClauses.push('`updated_at` = ?');
-    params.push(now, id);
+    // Always update the updated_at timestamp
+    setClauses.push('updated_at = ?');
+    params.push(now);
+
+    // Add the ID at the end for the WHERE clause
+    params.push(id);
 
     const [result] = await query<any>(
-      `UPDATE \`targets\` SET ${setClauses.join(', ')} WHERE \`id\` = ?`,
+      `UPDATE targets SET ${setClauses.join(', ')} WHERE id = ?`,
       params
     );
 
@@ -126,7 +153,7 @@ export async function DELETE(request: NextRequest) {
       return addCorsHeaders(NextResponse.json({ success: false, error: 'Target ID is required' }, { status: 400 }));
     }
 
-    const [result] = await query<any>(`DELETE FROM \`targets\` WHERE \`id\` = ?`, [id]);
+    const [result] = await query<any>(`DELETE FROM  targets  WHERE  id  = ?`, [id]);
     return addCorsHeaders(NextResponse.json({ success: true, affected: (result as any).affectedRows }));
   } catch (error) {
     console.error('Error deleting target:', error);

@@ -102,7 +102,7 @@ export function EnhancedSidebar() {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'manager': return 'bg-purple-100 text-purple-800'
-      case 'team-leader': return 'bg-blue-100 text-blue-800'
+      case 'team_leader': return 'bg-blue-100 text-blue-800'
       case 'salesman': return 'bg-green-100 text-green-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -123,15 +123,14 @@ export function EnhancedSidebar() {
       roleSpecificItems.push(
         { href: "/manager/deals", label: "Deals Table", icon: FileText },
         { href: "/manager/callbacks", label: "Callbacks Table", icon: Phone },
-        { href: "/admin/backup", label: "Admin Panel", icon: Database },
         { href: "/notifications", label: "Notifications", icon: Bell },
         { href: "/targets", label: "Targets", icon: Target }
       )
     }
 
-    if (user?.role === 'team-leader') {
+    if (user?.role === 'team_leader') {
       roleSpecificItems.push(
-        { href: "/team-leader", label: "Team Management", icon: Building2 },
+        { href: "/team_leader", label: "Team Management", icon: Building2 },
         { href: "/targets", label: "Targets", icon: Target }
       )
     }

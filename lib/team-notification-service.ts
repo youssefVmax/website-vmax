@@ -40,7 +40,7 @@ class TeamNotificationService {
       
       // Find team leaders for the specific team
       const teamLeaders = allUsers.filter(user => 
-        user.role === 'team-leader' && 
+        user.role === 'team_leader' && 
         (user.managedTeam === teamName || user.team === teamName)
       )
       
@@ -175,13 +175,13 @@ class TeamNotificationService {
       'completed': 'completed callback for',
       'converted': 'converted callback to deal for',
       'cancelled': 'cancelled callback for'
-    }
+    };
 
     const statusTypes = {
       'completed': 'success' as const,
       'converted': 'success' as const,
       'cancelled': 'warning' as const
-    }
+    };
 
     await this.notifyTeamLeaders({
       title: `Callback ${callbackData.status.charAt(0).toUpperCase() + callbackData.status.slice(1)}`,

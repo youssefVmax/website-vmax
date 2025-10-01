@@ -14,10 +14,10 @@ import {
   RefreshCw, Calendar, Users, DollarSign, Target, Award, Phone
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { useUnifiedData } from '@/hooks/useUnifiedData';
+import { useMySQLSalesData } from '@/hooks/useMySQLSalesData';
 
 interface ComprehensiveAnalyticsProps {
-  userRole: 'manager' | 'salesman' | 'team-leader';
+  userRole: 'manager' | 'salesman' | 'team_leader';
   userId?: string;
   userName?: string;
   userTeam?: string;
@@ -28,33 +28,32 @@ export function EnhancedComprehensiveAnalytics({
   userRole, 
   userId, 
   userName, 
-  userTeam, 
+  userTeam,
   managedTeam 
 }: ComprehensiveAnalyticsProps) {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('overview');
   const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
-  // Use unified data hook for consistent data fetching
-  const {
-    data,
-    kpis,
-    loading,
-    error,
-    lastUpdated,
-    refresh
-  } = useUnifiedData({
-    userRole,
+  // Use MySQL data hook for comprehensive analytics
+  const { 
+    deals, 
+    callbacks, 
+    loading, 
+    error, 
+    refreshData 
+  } = useMySQLSalesData({
+    userRole: userRole || 'salesman',
     userId: userId || '',
     userName: userName || '',
-    managedTeam: managedTeam || userTeam,
-    autoLoad: true
+    managedTeam: managedTeam || userTeam
   });
 
   // Process comprehensive analytics data
   const analyticsData = useMemo(() => {
-    const deals = data.deals || [];
-    const callbacks = data.callbacks || [];
+    const dealsData = deals || [];
+    const callbacksData = callbacks || [];
     
     // Revenue trends (monthly)
     const revenueTrends = deals.reduce((acc: any[], deal) => {
@@ -138,11 +137,12 @@ export function EnhancedComprehensiveAnalytics({
       callbackConversion,
       teamPerformance
     };
-  }, [data, userRole]);
+  }, [deals, callbacks, userRole]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refresh();
+    await refreshData();
+    setLastUpdated(new Date());
     setRefreshing(false);
     toast({
       title: "Success",
@@ -204,7 +204,7 @@ export function EnhancedComprehensiveAnalytics({
     return (
       <Card>
         <CardContent className="p-6 text-center">
-          <p className="text-red-600 mb-4">Error loading analytics: {error}</p>
+          <p className="text-red-600 mb-4">Error loading analytics: {error?.message || 'Unknown error'}</p>
           <Button onClick={handleRefresh} variant="outline">
             <RefreshCw className="h-4 w-4 mr-2" />
             Retry
@@ -214,9 +214,9 @@ export function EnhancedComprehensiveAnalytics({
     );
   }
 
-  const totalRevenue = (data.deals || []).reduce((sum, deal) => sum + (typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || 0)), 0);
-  const totalDeals = data.deals?.length || 0;
-  const totalCallbacks = data.callbacks?.length || 0;
+  const totalRevenue = (deals || []).reduce((sum, deal) => sum + (typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || 0)), 0);
+  const totalDeals = deals?.length || 0;
+  const totalCallbacks = callbacks?.length || 0;
   const avgDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0;
 
   return (

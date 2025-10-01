@@ -14,6 +14,36 @@ const nextConfig = {
   },
   // Force development mode to see unminified errors
   productionBrowserSourceMaps: true,
+  
+  // Fix webpack cache warnings
+  webpack: (config, { isServer, dev }) => {
+    // Disable snapshot caching to prevent cache warnings
+    config.snapshot = {
+      managedPaths: [],
+      immutablePaths: [],
+      buildDependencies: {
+        hash: false,
+        timestamp: false,
+      },
+    };
+    
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        crypto: false,
+      };
+    }
+    
+    // Disable minification in development
+    if (dev) {
+      config.optimization = {
+        ...config.optimization,
+        minimize: false,
+      };
+    }
+    
+    return config;
+  },
   // Add CORS headers for development
   async headers() {
     return [

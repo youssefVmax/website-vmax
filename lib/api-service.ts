@@ -1,15 +1,25 @@
 // DIRECT MYSQL API SERVICE - BYPASSES ALL FAILING NEXT.JS ROUTES
 import { directMySQLService } from './direct-mysql-service';
 
-// Type definitions
+// Type definitions - Updated to match database schema
 export interface User {
   id: string;
+  username?: string;
   name: string;
   email: string;
   role: string;
   team?: string;
+  managedTeam?: string;
+  password?: string;
+  phone?: string;
+  created_by?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  // Backward compatibility
   createdAt?: string;
   updatedAt?: string;
+  isActive?: boolean;
 }
 
 export interface Deal {
@@ -25,16 +35,30 @@ export interface Deal {
   customCountry?: string;
   amountPaid: number;
   amount_paid?: number;
+  amount?: number; // For compatibility
   serviceTier: string;
   service_tier?: string;
+  // Legacy/compat fields used by older components
+  type_service?: string;
   salesAgentId: string;
+  // Compatibility with legacy DB field
+  SalesAgentID?: string;
   salesAgentName: string;
+  sales_agent?: string; // For compatibility
   salesTeam: string;
+  sales_team?: string; // For compatibility
+  team?: string; // Legacy team field
+  closingAgentId?: string;
+  ClosingAgentID?: string; // Database field name
+  closingAgentName?: string; // Added missing property
+  closing_agent?: string; // For compatibility
   stage: string;
   status: string;
   priority: string;
   signupDate: string;
   signup_date?: string;
+  // Additional legacy date field used in some tables
+  date?: string;
   endDate?: string;
   end_date?: string;
   durationYears?: number;
@@ -46,8 +70,14 @@ export interface Deal {
   notes?: string;
   createdBy: string;
   createdById: string;
+  // Additional legacy snake_case fields used in MyDealsTable
+  phone_number?: string;
+  device_key?: string;
+  device_id?: string;
   createdAt?: string;
+  created_at?: string; // For compatibility
   updatedAt?: string;
+  updated_at?: string; // For compatibility
   invoice_link?: string;
 }
 
@@ -63,7 +93,7 @@ export interface Callback {
   firstCallTime: string;
   scheduledDate: string;
   scheduledTime: string;
-  status: 'pending' | 'contacted' | 'completed';
+  status: 'pending' | 'contacted' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high';
   callbackReason: string;
   callbackNotes?: string;
@@ -72,7 +102,8 @@ export interface Callback {
   createdById: string;
   createdAt?: string;
   updatedAt?: string;
-  converted_to_deal?: boolean;
+  convertedToDeal?: boolean; // CamelCase version for compatibility
+  converted_to_deal?: boolean; // Snake_case version from database
   created_by_id?: string;
   SalesAgentID?: string;
 }
@@ -88,6 +119,37 @@ export interface SalesTarget {
   currentDeals: number;
   month: string;
   year: number;
+  createdAt?: string;
+  updatedAt?: string;
+  // Additional fields for enhanced targets management
+  agentId?: string;
+  agentName?: string;
+  monthlyTarget?: number;
+  dealsTarget?: number;
+  period?: string;
+  description?: string;
+  managerId?: string;
+  managerName?: string;
+  type?: 'individual' | 'team';
+}
+
+export interface TeamTarget {
+  id: string;
+  teamName: string;
+  targetAmount: number;
+  targetDeals: number;
+  currentAmount: number;
+  currentDeals: number;
+  month: string;
+  year: number;
+  managerId: string;
+  managerName: string;
+  period?: string;
+  monthlyTarget?: number;
+  dealsTarget?: number;
+  teamId?: string;
+  members?: string[];
+  description?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -219,12 +281,12 @@ class DirectApiService {
         const dealData = JSON.parse(options.body as string);
         return await directMySQLService.createDeal(dealData);
       } else if (options.method === 'PUT') {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         const id = url.searchParams.get('id');
         const dealData = JSON.parse(options.body as string);
         return await directMySQLService.updateDeal(id!, dealData);
       } else if (options.method === 'DELETE') {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         const id = url.searchParams.get('id');
         return await directMySQLService.deleteDeal(id!);
       }
@@ -232,7 +294,7 @@ class DirectApiService {
       // GET request
       const filters: Record<string, string> = {};
       if (endpoint.includes('?')) {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         url.searchParams.forEach((value, key) => {
           filters[key] = value;
         });
@@ -251,12 +313,12 @@ class DirectApiService {
         const callbackData = JSON.parse(options.body as string);
         return await directMySQLService.createCallback(callbackData);
       } else if (options.method === 'PUT') {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         const id = url.searchParams.get('id');
         const callbackData = JSON.parse(options.body as string);
         return await directMySQLService.updateCallback(id!, callbackData);
       } else if (options.method === 'DELETE') {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         const id = url.searchParams.get('id');
         return await directMySQLService.deleteCallback(id!);
       }
@@ -264,7 +326,7 @@ class DirectApiService {
       // GET request
       const filters: Record<string, string> = {};
       if (endpoint.includes('?')) {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         url.searchParams.forEach((value, key) => {
           filters[key] = value;
         });
@@ -281,7 +343,7 @@ class DirectApiService {
     try {
       const filters: Record<string, string> = {};
       if (endpoint.includes('?')) {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         url.searchParams.forEach((value, key) => {
           filters[key] = value;
         });
@@ -298,7 +360,7 @@ class DirectApiService {
     try {
       const filters: Record<string, string> = {};
       if (endpoint.includes('?')) {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`http ://localhost:3000${endpoint}`);
         url.searchParams.forEach((value, key) => {
           filters[key] = value;
         });
@@ -352,6 +414,120 @@ class DirectApiService {
     return await directMySQLService.getTargets(filters);
   }
 
+  // Create a single (usually individual) target via Next.js targets API
+  async createTarget(targetData: {
+    type: 'individual' | 'team';
+    agentId: string;
+    agentName: string;
+    monthlyTarget: number;
+    dealsTarget: number;
+    period: string;
+    description?: string;
+    managerId: string;
+    managerName: string;
+  }): Promise<{ success: boolean; id: string }> {
+    const res = await fetch('/api/targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(targetData)
+    });
+    if (!res.ok) {
+      throw new Error(`Create target API error: ${res.status} ${res.statusText}`);
+    }
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create target');
+    }
+    return { success: true, id: result.id };
+  }
+
+  // Create a team target via Next.js targets API
+  async createTeamTarget(teamTargetData: {
+    teamId?: string;
+    teamName: string;
+    monthlyTarget: number;
+    dealsTarget: number;
+    period: string;
+    description?: string;
+    managerId: string;
+    managerName: string;
+    members?: Array<{ id: string; name?: string } | string>;
+  }): Promise<{ success: boolean; id: string } & typeof teamTargetData> {
+    // Map to /api/targets expected fields
+    const payload = {
+      agentId: teamTargetData.teamId || `team_${teamTargetData.teamName}`,
+      agentName: teamTargetData.teamName,
+      managerId: teamTargetData.managerId,
+      managerName: teamTargetData.managerName,
+      monthlyTarget: teamTargetData.monthlyTarget,
+      dealsTarget: teamTargetData.dealsTarget,
+      period: teamTargetData.period,
+      type: 'team',
+      description: teamTargetData.description || null
+    };
+
+    const res = await fetch('/api/targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      throw new Error(`Create team target API error: ${res.status} ${res.statusText}`);
+    }
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create team target');
+    }
+    return { success: true, id: result.id, ...teamTargetData };
+  }
+
+  // Optionally create individual targets from a team target
+  async createIndividualTargetsFromTeamTarget(teamTarget: {
+    id: string;
+    teamName: string;
+    monthlyTarget: number;
+    dealsTarget: number;
+    period: string;
+    description?: string;
+    managerId: string;
+    managerName: string;
+    members?: Array<{ id: string; name?: string } | string>;
+  }): Promise<{ success: boolean; created: number }> {
+    const members = teamTarget.members || [];
+    if (!members.length) return { success: true, created: 0 };
+
+    const perMemberAmount = Math.floor((teamTarget.monthlyTarget || 0) / members.length);
+    const perMemberDeals = Math.floor((teamTarget.dealsTarget || 0) / members.length);
+
+    let created = 0;
+    for (const m of members) {
+      const agentId = typeof m === 'string' ? m : m.id;
+      const agentName = typeof m === 'string' ? m : (m.name || m.id);
+      const payload = {
+        agentId,
+        agentName,
+        managerId: teamTarget.managerId,
+        managerName: teamTarget.managerName,
+        monthlyTarget: perMemberAmount,
+        dealsTarget: perMemberDeals,
+        period: teamTarget.period,
+        type: 'individual',
+        description: teamTarget.description ? `${teamTarget.description} (from team ${teamTarget.teamName})` : `From team ${teamTarget.teamName}`
+      };
+
+      const res = await fetch('/api/targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const r = await res.json();
+        if (r && r.success) created += 1;
+      }
+    }
+    return { success: true, created };
+  }
+
   async getNotifications(filters: Record<string, string> = {}): Promise<Notification[]> {
     return await directMySQLService.getNotifications(filters);
   }
@@ -396,6 +572,68 @@ class DirectApiService {
     } catch (error) {
       console.error('❌ ApiService: Get user profile error:', error);
       return null;
+    }
+  }
+
+  async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<{ success: boolean; id: string }> {
+    try {
+      console.log('🔄 ApiService: Creating user:', userData.username);
+      
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(userData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Create user API error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create user');
+      }
+
+      console.log('✅ ApiService: User created successfully');
+      return { success: true, id: result.id };
+    } catch (error) {
+      console.error('❌ ApiService: Create user error:', error);
+      throw error;
+    }
+  }
+
+  async updateUser(id: string, userData: Partial<User>): Promise<{ success: boolean }> {
+    try {
+      console.log('🔄 ApiService: Updating user:', id);
+      
+      const response = await fetch(`/api/users?id=${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(userData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Update user API error: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update user');
+      }
+
+      console.log('✅ ApiService: User updated successfully');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ ApiService: Update user error:', error);
+      throw error;
     }
   }
 

@@ -14,7 +14,7 @@ async function getNotifications(userId: string | null, role: string | null) {
     
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const [rows] = await query<any>(
-      `SELECT * FROM \`notifications\` ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC LIMIT 50`,
+      `SELECT * FROM  notifications  ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC LIMIT 50`,
       params
     );
     

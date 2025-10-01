@@ -34,19 +34,7 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Full request URL:', request.url);
     console.log('🔍 All search params:', Object.fromEntries(searchParams.entries()));
 
-    // Test database connection first
-    try {
-      const [testResult] = await query('SELECT 1 as test');
-      console.log('✅ Database connection test successful');
-    } catch (dbError) {
-      console.error('❌ Database connection failed:', dbError);
-      const response = NextResponse.json({
-        success: false,
-        error: 'Database connection failed',
-        details: dbError instanceof Error ? dbError.message : 'Unknown database error'
-      }, { status: 503 });
-      return addCorsHeaders(response);
-    }
+    console.log('🔍 Analytics API - Processing request...');
 
     // Build comprehensive filters
     const dealWhere: string[] = [];
@@ -63,7 +51,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Team leader filtering (dual access: personal + managed team)
-    if (userRole === 'team-leader' && managedTeam && userId) {
+    if (userRole === 'team_leader' && managedTeam && userId) {
       dealWhere.push('(`sales_team` = ? OR `SalesAgentID` = ?)');
       dealParams.push(managedTeam, userId);
       cbWhere.push('(`sales_team` = ? OR `SalesAgentID` = ?)');
@@ -113,7 +101,7 @@ export async function GET(request: NextRequest) {
             COALESCE(SUM(amount_paid), 0) as total_revenue,
             COALESCE(AVG(amount_paid), 0) as avg_deal_size,
             COUNT(DISTINCT SalesAgentID) as unique_agents
-          FROM \`deals\` ${dealWhereSql}`, 
+          FROM  deals  ${dealWhereSql}`, 
           dealParams
         );
         
@@ -125,7 +113,7 @@ export async function GET(request: NextRequest) {
           `SELECT 
             COUNT(*) as today_deals, 
             COALESCE(SUM(amount_paid), 0) as today_revenue
-          FROM \`deals\` 
+          FROM  deals  
           WHERE DATE(created_at) = CURDATE() ${dealWhere.length ? ' AND (' + dealWhere.join(' AND ') + ')' : ''}`, 
           dealParams
         );
@@ -136,13 +124,13 @@ export async function GET(request: NextRequest) {
             COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_callbacks,
             COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_callbacks,
             COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_callbacks
-          FROM \`callbacks\` ${cbWhereSql}`, 
+          FROM  callbacks  ${cbWhereSql}`, 
           cbParams
         );
         
         const [cbToday] = await query<any>(
           `SELECT COUNT(*) as today_callbacks 
-          FROM \`callbacks\` 
+          FROM  callbacks  
           WHERE DATE(created_at) = CURDATE() ${cbWhere.length ? ' AND (' + cbWhere.join(' AND ') + ')' : ''}`, 
           cbParams
         );
@@ -154,7 +142,7 @@ export async function GET(request: NextRequest) {
             COUNT(*) as team_deals,
             COALESCE(SUM(amount_paid), 0) as team_revenue,
             COALESCE(AVG(amount_paid), 0) as team_avg_deal
-          FROM \`deals\` ${dealWhereSql}
+          FROM  deals  ${dealWhereSql}
           GROUP BY sales_team
           ORDER BY team_revenue DESC`, 
           dealParams
@@ -169,7 +157,7 @@ export async function GET(request: NextRequest) {
             COUNT(*) as agent_deals,
             COALESCE(SUM(amount_paid), 0) as agent_revenue,
             COALESCE(AVG(amount_paid), 0) as agent_avg_deal
-          FROM \`deals\` ${dealWhereSql}
+          FROM  deals  ${dealWhereSql}
           GROUP BY SalesAgentID, sales_agent, sales_team
           ORDER BY agent_revenue DESC
           LIMIT 10`, 
@@ -182,7 +170,7 @@ export async function GET(request: NextRequest) {
             DATE_FORMAT(created_at, '%Y-%m') as month,
             COUNT(*) as deals_count,
             COALESCE(SUM(amount_paid), 0) as revenue
-          FROM \`deals\` ${dealWhereSql}
+          FROM  deals  ${dealWhereSql}
           GROUP BY DATE_FORMAT(created_at, '%Y-%m')
           ORDER BY month DESC
           LIMIT 12`, 
@@ -246,8 +234,8 @@ export async function GET(request: NextRequest) {
           COUNT(DISTINCT d.SalesAgentID) as team_size,
           COUNT(DISTINCT c.id) as total_callbacks,
           COUNT(DISTINCT CASE WHEN c.status = 'completed' THEN c.id END) as completed_callbacks
-        FROM \`deals\` d
-        LEFT JOIN \`callbacks\` c ON c.sales_team = d.sales_team
+        FROM  deals  d
+        LEFT JOIN  callbacks  c ON c.sales_team = d.sales_team
         ${dealWhereSql}
         GROUP BY d.sales_team
         ORDER BY total_revenue DESC`, 
@@ -278,8 +266,8 @@ export async function GET(request: NextRequest) {
               (COUNT(DISTINCT CASE WHEN c.status = 'completed' THEN c.id END) / COUNT(DISTINCT c.id) * 100)
             ELSE 0 
           END as conversion_rate
-        FROM \`deals\` d
-        LEFT JOIN \`callbacks\` c ON c.SalesAgentID = d.SalesAgentID
+        FROM  deals  d
+        LEFT JOIN  callbacks  c ON c.SalesAgentID = d.SalesAgentID
         ${dealWhereSql}
         GROUP BY d.SalesAgentID, d.sales_agent, d.sales_team
         ORDER BY revenue DESC`, 

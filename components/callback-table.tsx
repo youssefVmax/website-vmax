@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Callback } from '@/lib/api-service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,184 +8,156 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Download, Filter, Phone, Calendar, Users, Clock, RefreshCw } from 'lucide-react'
+import { ServerPagination } from '@/components/ui/server-pagination'
+import { useServerPagination } from '@/hooks/useServerPagination'
+import { useAuth } from '@/hooks/useAuth'
+import { Search, Download, Filter, Phone, Calendar, Users, Clock, RefreshCw, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default function CallbacksTablePage() {
   const [callbacks, setCallbacks] = useState<Callback[]>([])
-  const [filteredCallbacks, setFilteredCallbacks] = useState<Callback[]>([])
-  const [loading, setLoading] = useState(true)
+  const [totalCallbacks, setTotalCallbacks] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [teamFilter, setTeamFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
+  // Server pagination hook
+  const [paginationState, paginationActions] = useServerPagination({
+    initialPage: 1,
+    initialItemsPerPage: 25,
+    onPageChange: (page, itemsPerPage) => {
+      fetchCallbacks(page, itemsPerPage, debouncedSearchTerm, statusFilter, teamFilter);
+    }
+  });
+
+  // Debounce search term
   useEffect(() => {
-    fetchCallbacks()
-  }, [])
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  // Normalize all callbacks to a consistent camelCase view model
-  const normalizedCallbacks = useMemo(() => {
-    console.log('🔄 Normalizing callbacks, count:', callbacks.length)
-    if (callbacks.length > 0) {
-      console.log('📋 Sample callback before normalization:', callbacks[0])
-    }
-    
-    // Handle case where callbacks might be null or undefined
-    if (!callbacks || !Array.isArray(callbacks)) {
-      console.warn('⚠️ Callbacks is not an array:', callbacks)
-      return []
-    }
-    
-    const normalized = callbacks.map((cb: any, index: number) => {
-      if (!cb) {
-        console.warn(`⚠️ Callback at index ${index} is null/undefined`)
-        return null
-      }
-      
-      const normalizedCallback = {
-        id: cb.id ?? cb.ID ?? `callback-${index}`,
-        customerName: cb.customerName ?? cb.customer_name ?? cb.CustomerName ?? cb.Customer_Name ?? 'Unknown Customer',
-        phoneNumber: cb.phoneNumber ?? cb.phone_number ?? cb.PhoneNumber ?? cb.Phone_Number ?? '',
-        email: cb.email ?? cb.Email ?? cb.EMAIL ?? '',
-        salesAgentName: cb.salesAgentName ?? cb.sales_agent ?? cb.SalesAgentName ?? cb.sales_agent_name ?? cb.SalesAgent ?? 'Unknown Agent',
-        salesTeam: cb.salesTeam ?? cb.sales_team ?? cb.SalesTeam ?? cb.Sales_Team ?? 'Unknown Team',
-        firstCallDate: cb.firstCallDate ?? cb.first_call_date ?? cb.FirstCallDate ?? cb.First_Call_Date ?? '',
-        firstCallTime: cb.firstCallTime ?? cb.first_call_time ?? cb.FirstCallTime ?? cb.First_Call_Time ?? '',
-        callbackReason: cb.callbackReason ?? cb.callback_reason ?? cb.CallbackReason ?? cb.Callback_Reason ?? '',
-        callbackNotes: cb.callbackNotes ?? cb.callback_notes ?? cb.CallbackNotes ?? cb.Callback_Notes ?? '',
-        status: cb.status ?? cb.Status ?? cb.STATUS ?? 'pending',
-        createdBy: cb.createdBy ?? cb.created_by ?? cb.CreatedBy ?? cb.Created_By ?? '',
-        createdAt: cb.createdAt ?? cb.created_at ?? cb.CreatedAt ?? cb.Created_At ?? '',
-        convertedToDeal: cb.converted_to_deal ?? cb.convertedToDeal ?? cb.ConvertedToDeal ?? cb.Converted_To_Deal ?? false,
-      }
-      
-      if (index === 0) {
-        console.log('📋 First callback normalization details:', {
-          original: cb,
-          normalized: normalizedCallback
-        })
-      }
-      
-      return normalizedCallback
-    }).filter(Boolean) // Remove any null entries
-    
-    if (normalized.length > 0) {
-      console.log('📋 Sample callback after normalization:', normalized[0])
-    }
-    console.log('✅ Normalized callbacks count:', normalized.length)
-    
-    return normalized
-  }, [callbacks])
-
+  // Reset to first page when search or filter changes
   useEffect(() => {
-    filterAndSortCallbacks()
-  }, [normalizedCallbacks, searchTerm, statusFilter, teamFilter, sortBy, sortOrder])
+    if (debouncedSearchTerm !== searchTerm) return; // Wait for debounce
+    paginationActions.goToFirstPage();
+  }, [debouncedSearchTerm, statusFilter, teamFilter]);
 
-  const fetchCallbacks = async () => {
+  // Fetch callbacks with server-side pagination
+  const fetchCallbacks = useCallback(async (
+    page: number = paginationState.currentPage,
+    limit: number = paginationState.itemsPerPage,
+    search: string = debouncedSearchTerm,
+    statusFilterParam: string = statusFilter,
+    teamFilterParam: string = teamFilter
+  ) => {
     try {
-      setLoading(true)
+      paginationActions.setIsLoading(true)
       setError(null)
-      console.log('🔄 Fetching all callbacks from API...')
       
-      // Fetch all callbacks using the Next.js API route
-      const response = await fetch('/api/callbacks?limit=1000')
+      // Build API parameters
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      })
+
+      // Role-based scoping
+      if (user?.role === 'team_leader') {
+        params.set('userRole', 'team_leader')
+        params.set('userId', String(user.id))
+      } else if (user?.role === 'salesman') {
+        params.set('userRole', 'salesman')
+        params.set('userId', String(user.id))
+      } else {
+        params.set('userRole', 'manager')
+        params.set('userId', String(user?.id || 'manager-001'))
+      }
+      
+      // Add search if provided
+      if (search.trim()) {
+        params.append('search', search.trim())
+      }
+      
+      // Add status filter if not 'all'
+      if (statusFilterParam && statusFilterParam !== 'all') {
+        params.append('status', statusFilterParam)
+      }
+      
+      // Add team filter only for manager; team leaders are locked to their managedTeam by API
+      if (user?.role !== 'team_leader') {
+        if (teamFilterParam && teamFilterParam !== 'all') {
+          params.append('salesTeam', teamFilterParam)
+        }
+      }
+      
+      // Fetch from API
+      const response = await fetch(`/api/callbacks?${params.toString()}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      })
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
       
       const result = await response.json()
-      console.log('✅ Callbacks API response:', result)
       
-      if (result.success && Array.isArray(result.callbacks)) {
-        console.log('📊 First callback sample:', result.callbacks[0])
-        setCallbacks(result.callbacks)
-        console.log(`📊 Loaded ${result.callbacks.length} callbacks`)
-      } else {
-        console.warn('⚠️ Invalid callbacks response:', result)
-        setCallbacks([])
-        setError('Invalid response format from server')
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch callbacks')
       }
+      
+      // Normalize callbacks data
+      const normalizedCallbacks = (result.callbacks || []).map((cb: any) => ({
+        id: cb.id ?? `callback-${Math.random()}`,
+        customerName: cb.customerName ?? cb.customer_name ?? 'Unknown Customer',
+        phoneNumber: cb.phoneNumber ?? cb.phone_number ?? '',
+        email: cb.email ?? '',
+        salesAgentId: cb.salesAgentId ?? cb.SalesAgentID ?? '',
+        salesAgentName: cb.salesAgentName ?? cb.sales_agent ?? 'Unknown Agent',
+        salesTeam: cb.salesTeam ?? cb.sales_team ?? 'Unknown Team',
+        firstCallDate: cb.firstCallDate ?? cb.first_call_date ?? '',
+        firstCallTime: cb.firstCallTime ?? cb.first_call_time ?? '',
+        scheduledDate: cb.scheduledDate ?? cb.scheduled_date ?? '',
+        scheduledTime: cb.scheduledTime ?? cb.scheduled_time ?? '',
+        status: cb.status ?? 'pending',
+        priority: cb.priority ?? 'medium',
+        callbackReason: cb.callbackReason ?? cb.callback_reason ?? '',
+        callbackNotes: cb.callbackNotes ?? cb.callback_notes ?? '',
+        followUpRequired: cb.followUpRequired ?? cb.follow_up_required ?? false,
+        createdBy: cb.createdBy ?? cb.created_by ?? '',
+        createdById: cb.createdById ?? cb.created_by_id ?? '',
+        createdAt: cb.createdAt ?? cb.created_at ?? '',
+        updatedAt: cb.updatedAt ?? cb.updated_at ?? '',
+        convertedToDeal: cb.converted_to_deal ?? cb.convertedToDeal ?? false,
+      }))
+      
+      setCallbacks(normalizedCallbacks)
+      setTotalCallbacks(result.total || 0)
+      paginationActions.setTotalItems(result.total || 0)
+      
     } catch (error) {
       console.error('❌ Error fetching callbacks:', error)
       setError(error instanceof Error ? error.message : 'Failed to fetch callbacks')
       setCallbacks([])
+      setTotalCallbacks(0)
+      paginationActions.setTotalItems(0)
     } finally {
-      setLoading(false)
+      paginationActions.setIsLoading(false)
     }
-  }
+  }, [paginationState.currentPage, paginationState.itemsPerPage, debouncedSearchTerm, statusFilter, teamFilter, paginationActions])
 
-  const filterAndSortCallbacks = () => {
-    console.log('🔍 Starting filter with normalized callbacks:', normalizedCallbacks.length)
-    console.log('🔍 Search term:', searchTerm, 'Status filter:', statusFilter, 'Team filter:', teamFilter)
-    let filtered = [...normalizedCallbacks]
+  useEffect(() => {
+    fetchCallbacks()
+  }, [fetchCallbacks])
 
-    // Apply search filter
-    if (searchTerm) {
-      const beforeSearch = filtered.length
-      filtered = filtered.filter(cb =>
-        (cb.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (cb.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (cb.phoneNumber || '').includes(searchTerm) ||
-        (cb.salesAgentName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (cb.callbackReason || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (cb.callbackNotes || '').toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      console.log('🔍 After search filter:', beforeSearch, '->', filtered.length)
-    }
-
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      const beforeStatus = filtered.length
-      filtered = filtered.filter(cb => cb.status === statusFilter)
-      console.log('🔍 After status filter:', beforeStatus, '->', filtered.length)
-    }
-
-    // Apply team filter
-    if (teamFilter !== 'all') {
-      const beforeTeam = filtered.length
-      filtered = filtered.filter(cb => cb.salesTeam === teamFilter)
-      console.log('🔍 After team filter:', beforeTeam, '->', filtered.length)
-    }
-
-    // Apply sorting
-    filtered.sort((a: any, b: any) => {
-      let aValue: any
-      let bValue: any
-
-      // map sortBy to normalized keys
-      const mapField = (field: string) => {
-        switch (field) {
-          case 'created_at': return 'createdAt'
-          case 'first_call_date': return 'firstCallDate'
-          case 'customer_name': return 'customerName'
-          case 'sales_agent': return 'salesAgentName'
-          default: return field
-        }
-      }
-
-      const key = mapField(sortBy)
-      aValue = a[key]
-      bValue = b[key]
-
-      if (key === 'createdAt' || key === 'firstCallDate') {
-        aValue = new Date(aValue).getTime()
-        bValue = new Date(bValue).getTime()
-      }
-
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase()
-        bValue = bValue.toLowerCase()
-      }
-      return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1)
-    })
-
-    console.log('✅ Filtered callbacks result:', filtered.length)
-    setFilteredCallbacks(filtered)
-  }
 
   const exportToCSV = () => {
     const headers = [
@@ -194,7 +166,7 @@ export default function CallbacksTablePage() {
       'Status', 'Created By', 'Created At', 'Converted to Deal'
     ]
 
-    const csvData = filteredCallbacks.map(callback => [
+    const csvData = callbacks.map(callback => [
       callback.customerName || '',
       callback.phoneNumber || '',
       callback.email || '',
@@ -245,15 +217,14 @@ export default function CallbacksTablePage() {
     }
   }
 
-  // Calculate summary statistics
-  const totalCallbacks = filteredCallbacks.length
-  const pendingCallbacks = filteredCallbacks.filter(cb => cb.status === 'pending').length
-  const completedCallbacks = filteredCallbacks.filter(cb => cb.status === 'completed').length
-  const convertedCallbacks = filteredCallbacks.filter(cb => cb.convertedToDeal).length
-  const uniqueAgents = new Set(filteredCallbacks.map(cb => cb.salesAgentName)).size
-  const conversionRate = totalCallbacks > 0 ? (convertedCallbacks / totalCallbacks) * 100 : 0
+  // Calculate summary statistics from current page data
+  const pendingCallbacks = callbacks.filter(cb => cb.status === 'pending').length
+  const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length
+  const convertedCallbacks = callbacks.filter(cb => cb.convertedToDeal).length
+  const uniqueAgents = new Set(callbacks.map(cb => cb.salesAgentName)).size
+  const conversionRate = callbacks.length > 0 ? (convertedCallbacks / callbacks.length) * 100 : 0
 
-  if (loading) {
+  if (paginationState.isLoading && callbacks.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -281,21 +252,21 @@ export default function CallbacksTablePage() {
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={fetchCallbacks} 
+            onClick={() => fetchCallbacks()} 
             variant="outline" 
             className="gap-2"
-            disabled={loading}
+            disabled={paginationState.isLoading}
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${paginationState.isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button 
             onClick={exportToCSV} 
             className="gap-2"
-            disabled={filteredCallbacks.length === 0}
+            disabled={callbacks.length === 0}
           >
             <Download className="h-4 w-4" />
-            Export CSV ({filteredCallbacks.length})
+            Export CSV ({callbacks.length})
           </Button>
         </div>
       </div>
@@ -310,7 +281,7 @@ export default function CallbacksTablePage() {
           <CardContent>
             <div className="text-2xl font-bold">{totalCallbacks}</div>
             <p className="text-xs text-muted-foreground">
-              {normalizedCallbacks.length} total in database
+              Total in system
             </p>
           </CardContent>
         </Card>
@@ -397,16 +368,23 @@ export default function CallbacksTablePage() {
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={teamFilter} onValueChange={setTeamFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Team" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Teams</SelectItem>
-                <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
-                <SelectItem value="CS TEAM">CS TEAM</SelectItem>
-              </SelectContent>
-            </Select>
+            {user?.role === 'team_leader' ? (
+              <div className="h-10 flex items-center px-3 rounded-md border text-sm bg-muted">
+                <span className="capitalize">Team: {user?.managedTeam || user?.team || user?.team_name || 'N/A'}</span>
+                <Badge variant="secondary" className="ml-2">Locked</Badge>
+              </div>
+            ) : (
+              <Select value={teamFilter} onValueChange={setTeamFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Team" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Teams</SelectItem>
+                  <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
+                  <SelectItem value="CS TEAM">CS TEAM</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
               const [field, order] = value.split('-')
               setSortBy(field)
@@ -433,7 +411,7 @@ export default function CallbacksTablePage() {
       {/* Callbacks Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Callbacks ({filteredCallbacks.length})</CardTitle>
+          <CardTitle>Callbacks ({callbacks.length})</CardTitle>
           <CardDescription>
             All callbacks from salesmen with complete information
           </CardDescription>
@@ -456,7 +434,7 @@ export default function CallbacksTablePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCallbacks.map((cb) => (
+                {callbacks.map((cb) => (
                   <TableRow key={cb.id}>
                     <TableCell>
                       <div className="font-medium">{cb.customerName}</div>
@@ -519,7 +497,24 @@ export default function CallbacksTablePage() {
               </TableBody>
             </Table>
           </div>
-          {filteredCallbacks.length === 0 && (
+          
+          {/* Pagination */}
+          {!paginationState.isLoading && callbacks.length > 0 && (
+            <div className="mt-6">
+              <ServerPagination
+                currentPage={paginationState.currentPage}
+                totalPages={paginationState.totalPages}
+                totalItems={paginationState.totalItems}
+                itemsPerPage={paginationState.itemsPerPage}
+                onPageChange={paginationActions.goToPage}
+                onItemsPerPageChange={paginationActions.setItemsPerPage}
+                isLoading={paginationState.isLoading}
+                className="justify-center"
+              />
+            </div>
+          )}
+          
+          {callbacks.length === 0 && !paginationState.isLoading && (
             <div className="text-center py-8">
               <p className="text-muted-foreground">No callbacks found matching your criteria.</p>
             </div>

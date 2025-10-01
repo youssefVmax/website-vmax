@@ -11,6 +11,7 @@ interface UseUnifiedDataOptions {
   userId?: string;
   userName?: string;
   managedTeam?: string;
+  dataTypes?: string[]; // Default: ['deals', 'callbacks', 'targets', 'notifications']
   autoLoad?: boolean; // Default: true
 }
 
@@ -28,6 +29,7 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
     userId,
     userName,
     managedTeam,
+    dataTypes = ['deals', 'callbacks', 'targets', 'notifications'], // Default data types
     autoLoad = true
   } = options;
 
@@ -65,30 +67,37 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
       if (userRole === 'salesman' && userId) {
         filters.salesAgentId = userId;
         filters.SalesAgentID = userId; // For callbacks
-      } else if (userRole === 'team-leader' && managedTeam) {
+        filters.userRole = 'salesman';
+        filters.userId = userId;
+      } else if (userRole === 'team_leader' && managedTeam) {
         filters.salesTeam = managedTeam;
         filters.sales_team = managedTeam; // For callbacks
+        filters.userRole = 'team_leader';
+        filters.userId = userId || '';
+      } else if (userRole === 'manager') {
+        filters.userRole = 'manager';
+        filters.userId = userId || '';
       }
-      // Manager gets all data (no filters)
+      // Manager gets all data (no additional filters needed)
 
       // Load all data in parallel
       const [deals, callbacks, targets, notifications, analytics] = await Promise.all([
-        unifiedApiService.getDeals(filters).catch(err => {
+        dataTypes.includes('deals') ? unifiedApiService.getDeals(filters).catch(err => {
           console.error('Error loading deals:', err);
           return [];
-        }),
-        unifiedApiService.getCallbacks(filters).catch(err => {
+        }) : Promise.resolve([]),
+        dataTypes.includes('callbacks') ? unifiedApiService.getCallbacks(filters).catch(err => {
           console.error('Error loading callbacks:', err);
           return [];
-        }),
-        unifiedApiService.getTargets(filters).catch(err => {
+        }) : Promise.resolve([]),
+        dataTypes.includes('targets') ? unifiedApiService.getTargets(filters).catch(err => {
           console.error('Error loading targets:', err);
           return [];
-        }),
-        unifiedApiService.getNotifications({ ...filters, userId: userId || '' }).catch(err => {
+        }) : Promise.resolve([]),
+        dataTypes.includes('notifications') ? unifiedApiService.getNotifications({ ...filters, userId: userId || '' }).catch(err => {
           console.error('Error loading notifications:', err);
           return [];
-        }),
+        }) : Promise.resolve([]),
         unifiedApiService.getDashboardStats(filters).catch(err => {
           console.error('Error loading analytics:', err);
           return {};
@@ -118,7 +127,7 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [userRole, userId, managedTeam, loading]);
+  }, [userRole, userId, managedTeam, dataTypes]);
 
   /**
    * Manual refresh function
@@ -145,7 +154,7 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
         notifications: safeNotifications.filter(n => n.salesAgentId === userId || n.userId === userId),
         analytics: data.analytics || {}
       };
-    } else if (userRole === 'team-leader' && managedTeam) {
+    } else if (userRole === 'team_leader' && managedTeam) {
       return {
         deals: safeDeals.filter(d => 
           d.salesTeam === managedTeam || 

@@ -3,12 +3,14 @@ import { dealsService } from '@/lib/mysql-deals-service';
 import { callbacksService } from '@/lib/mysql-callbacks-service';
 import { targetsService } from '@/lib/mysql-targets-service';
 import { unifiedDataService } from '@/lib/unified-data-service';
+import { directMySQLService } from '@/lib/direct-mysql-service';
 import { Deal, Callback, SalesTarget } from '@/lib/api-service';
 
 export interface SalesDataHookReturn {
   deals: Deal[];
   callbacks: Callback[];
   targets: SalesTarget[];
+  users: any[];
   loading: boolean;
   error: Error | null;
   refreshData: () => Promise<void>;
@@ -18,11 +20,15 @@ export interface SalesDataHookReturn {
     pendingCallbacks: number;
     completedCallbacks: number;
     targetAchievement: number;
+    totalUsers: number;
+    activeUsers: number;
+    salesmenCount: number;
+    teamLeadersCount: number;
   };
 }
 
 export interface SalesDataFilters {
-  userRole?: 'manager' | 'team-leader' | 'salesman';
+  userRole?: 'manager' | 'team_leader' | 'salesman';
   userId?: string;
   userName?: string;
   managedTeam?: string;
@@ -38,12 +44,14 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     deals: Deal[];
     callbacks: Callback[];
     targets: SalesTarget[];
+    users: any[];
     loading: boolean;
     error: Error | null;
   }>({
     deals: [],
     callbacks: [],
     targets: [],
+    users: [],
     loading: true,
     error: null
   });
@@ -53,14 +61,19 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     totalRevenue: 0,
     pendingCallbacks: 0,
     completedCallbacks: 0,
-    targetAchievement: 0
+    targetAchievement: 0,
+    totalUsers: 0,
+    activeUsers: 0,
+    salesmenCount: 0,
+    teamLeadersCount: 0
   });
 
-  const calculateAnalytics = useCallback((deals: Deal[], callbacks: Callback[], targets: SalesTarget[]) => {
+  const calculateAnalytics = useCallback((deals: Deal[], callbacks: Callback[], targets: SalesTarget[], users: any[]) => {
     // Ensure arrays are defined and fallback to empty arrays
     const safeDeals = deals || [];
     const safeCallbacks = callbacks || [];
     const safeTargets = targets || [];
+    const safeUsers = users || [];
     
     const totalDeals = safeDeals.length;
     const totalRevenue = safeDeals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0);
@@ -76,12 +89,22 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
       }
     }
 
+    // User analytics
+    const totalUsers = safeUsers.length;
+    const activeUsers = safeUsers.filter(u => u.is_active).length;
+    const salesmenCount = safeUsers.filter(u => u.role === 'salesman').length;
+    const teamLeadersCount = safeUsers.filter(u => u.role === 'team_leader').length;
+
     return {
       totalDeals,
       totalRevenue,
       pendingCallbacks,
       completedCallbacks,
-      targetAchievement
+      targetAchievement,
+      totalUsers,
+      activeUsers,
+      salesmenCount,
+      teamLeadersCount
     };
   }, [filters?.userId]);
 
@@ -89,82 +112,97 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     try {
       setData(prev => ({ ...prev, loading: true, error: null }));
 
-      console.log('🔄 useMySQLSalesData: Loading data via unified service');
+      console.log('🔄 useMySQLSalesData: Loading data directly from APIs');
 
-      // Try unified data service first for better performance
-      try {
-        const unifiedResult = await unifiedDataService.getDashboardData(
-          filters?.userRole || 'manager',
-          filters?.userId,
-          filters?.userName,
-          filters?.managedTeam
-        );
-
-        if (unifiedResult.success) {
-          console.log('✅ useMySQLSalesData: Data loaded from unified service');
-          
-          // Ensure we have arrays (fallback to empty arrays if undefined)
-          const deals = Array.isArray(unifiedResult.data.deals) ? unifiedResult.data.deals : [];
-          const callbacks = Array.isArray(unifiedResult.data.callbacks) ? unifiedResult.data.callbacks : [];
-          const targets = Array.isArray(unifiedResult.data.targets) ? unifiedResult.data.targets : [];
-
-          // Calculate analytics
-          const analyticsData = calculateAnalytics(deals, callbacks, targets);
-
-          setData({
-            deals,
-            callbacks,
-            targets,
-            loading: false,
-            error: null
-          });
-
-          setAnalytics(analyticsData);
-          return; // Success, exit early
-        }
-      } catch (unifiedError) {
-        console.warn('⚠️ useMySQLSalesData: Unified service failed, falling back to individual services:', unifiedError);
+      // Build filters for API calls
+      const apiFilters: Record<string, string> = {};
+      
+      if (filters?.userRole === 'salesman' && filters?.userId) {
+        apiFilters.salesAgentId = filters.userId;
+        apiFilters.SalesAgentID = filters.userId;
+        apiFilters.userRole = 'salesman';
+        apiFilters.userId = filters.userId;
+      } else if (filters?.userRole === 'team_leader' && filters?.managedTeam) {
+        apiFilters.salesTeam = filters.managedTeam;
+        apiFilters.sales_team = filters.managedTeam;
+        apiFilters.userRole = 'team_leader';
+        apiFilters.userId = filters.userId || '';
+      } else if (filters?.userRole === 'manager') {
+        apiFilters.userRole = 'manager';
+        apiFilters.userId = filters.userId || '';
       }
 
-      // Fallback to individual services if unified service fails
-      const dealFilters = {
-        userRole: filters?.userRole,
-        userId: filters?.userId,
-        managedTeam: filters?.managedTeam
-      };
+      console.log('📊 useMySQLSalesData: Using filters:', apiFilters);
 
-      const callbackFilters = {
-        userRole: filters?.userRole,
-        userId: filters?.userId,
-        userName: filters?.userName,
-        managedTeam: filters?.managedTeam
-      };
-
-      const targetFilters = {
-        agentId: filters?.userId,
-        period: filters?.period,
-        managedTeam: filters?.managedTeam
-      };
-
-      // Fetch data in parallel using individual services
-      const [dealsResponse, callbacksResponse, targetsResponse] = await Promise.all([
-        dealsService.getDeals(dealFilters.userRole, dealFilters.userId, dealFilters.managedTeam),
-        callbacksService.getCallbacks(callbackFilters.userRole, callbackFilters.userId, callbackFilters.userName, callbackFilters.managedTeam),
-        targetsService.getTargets(targetFilters)
+      // Load data directly from APIs with better error handling
+      const [dealsResult, callbacksResult, targetsResult, usersResult] = await Promise.all([
+        fetch(`/api/deals?${new URLSearchParams({ limit: '1000', ...apiFilters }).toString()}`)
+          .then(async res => {
+            if (!res.ok) {
+              console.warn(`⚠️ Deals API returned ${res.status}: ${res.statusText}`);
+              return { success: true, deals: [], total: 0 };
+            }
+            const data = await res.json();
+            return data.success !== false ? data : { success: true, deals: [], total: 0 };
+          })
+          .catch(err => {
+            console.error('❌ Error loading deals:', err);
+            return { success: true, deals: [], total: 0 };
+          }),
+        fetch(`/api/callbacks?${new URLSearchParams({ limit: '1000', ...apiFilters }).toString()}`)
+          .then(async res => {
+            if (!res.ok) {
+              console.warn(`⚠️ Callbacks API returned ${res.status}: ${res.statusText}`);
+              return { success: true, callbacks: [], total: 0 };
+            }
+            const data = await res.json();
+            return data.success !== false ? data : { success: true, callbacks: [], total: 0 };
+          })
+          .catch(err => {
+            console.error('❌ Error loading callbacks:', err);
+            return { success: true, callbacks: [], total: 0 };
+          }),
+        fetch(`/api/targets?${new URLSearchParams({ limit: '1000', ...apiFilters }).toString()}`)
+          .then(async res => {
+            if (!res.ok) {
+              console.warn(`⚠️ Targets API returned ${res.status}: ${res.statusText}`);
+              return { success: true, targets: [], total: 0 };
+            }
+            const data = await res.json();
+            return data.success !== false ? data : { success: true, targets: [], total: 0 };
+          })
+          .catch(err => {
+            console.error('❌ Error loading targets:', err);
+            return { success: true, targets: [], total: 0 };
+          }),
+        directMySQLService.getUsers({})
+          .then(users => ({ success: true, users }))
+          .catch(err => {
+            console.error('❌ Error loading users:', err);
+            return { success: true, users: [] };
+          })
       ]);
 
-      // Ensure we have arrays (fallback to empty arrays if undefined)
-      const deals = Array.isArray(dealsResponse) ? dealsResponse : [];
-      const callbacks = Array.isArray(callbacksResponse) ? callbacksResponse : [];
-      const targets = Array.isArray(targetsResponse) ? targetsResponse : [];
+      console.log('✅ useMySQLSalesData: API Results:', {
+        deals: dealsResult.success ? (dealsResult.deals?.length || 0) : 'failed',
+        callbacks: callbacksResult.success ? (callbacksResult.callbacks?.length || 0) : 'failed',
+        targets: targetsResult.success ? (targetsResult.targets?.length || 0) : 'failed',
+        users: usersResult.success ? (usersResult.users?.length || 0) : 'failed'
+      });
+
+      const deals = dealsResult.deals || [];
+      const callbacks = callbacksResult.callbacks || [];
+      const targets = targetsResult.targets || [];
+      const users = usersResult.users || [];
 
       // Calculate analytics
-      const analyticsData = calculateAnalytics(deals, callbacks, targets);
+      const analyticsData = calculateAnalytics(deals, callbacks, targets, users);
 
       setData({
         deals,
         callbacks,
         targets,
+        users,
         loading: false,
         error: null
       });
@@ -172,11 +210,12 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
       setAnalytics(analyticsData);
 
     } catch (error) {
-      console.error('Error loading sales data:', error);
+      console.error('❌ useMySQLSalesData: Error loading data:', error);
       setData(prev => ({
         ...prev,
         loading: false,
-        error: error as Error
+        error: error as Error,
+        users: [] // Ensure users is included
       }));
     }
   }, [filters?.userRole, filters?.userId, filters?.userName, filters?.managedTeam, filters?.period, calculateAnalytics]);
@@ -195,7 +234,7 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     const unsubscribeDeals = dealsService.onDealsChange(
       (newDeals) => {
         setData(prev => {
-          const newAnalytics = calculateAnalytics(newDeals, prev.callbacks, prev.targets);
+          const newAnalytics = calculateAnalytics(newDeals, prev.callbacks, prev.targets, prev.users);
           setAnalytics(newAnalytics);
           return { ...prev, deals: newDeals };
         });
@@ -208,7 +247,7 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     const unsubscribeCallbacks = callbacksService.onCallbacksChange(
       (newCallbacks) => {
         setData(prev => {
-          const newAnalytics = calculateAnalytics(prev.deals, newCallbacks, prev.targets);
+          const newAnalytics = calculateAnalytics(prev.deals, newCallbacks, prev.targets, prev.users);
           setAnalytics(newAnalytics);
           return { ...prev, callbacks: newCallbacks };
         });
@@ -230,6 +269,7 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     deals: data.deals,
     callbacks: data.callbacks,
     targets: data.targets,
+    users: data.users,
     loading: data.loading,
     error: data.error,
     refreshData,

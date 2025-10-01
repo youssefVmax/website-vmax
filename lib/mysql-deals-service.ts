@@ -1,5 +1,6 @@
 import { directMySQLService } from './direct-mysql-service';
 import { databaseService } from './mysql-database-service';
+import { Deal } from './api-service';
 
 export interface DealsService {
   createDeal: (dealData: any, user: any) => Promise<string>;
@@ -170,7 +171,7 @@ class MySQLDealsService implements DealsService {
       
       if (userRole === 'salesman' && userId) {
         filters.salesAgentId = userId;
-      } else if (userRole === 'team-leader' && managedTeam) {
+      } else if (userRole === 'team_leader' && managedTeam) {
         filters.salesTeam = managedTeam;
       }
       // Managers can see all deals (no filters)
