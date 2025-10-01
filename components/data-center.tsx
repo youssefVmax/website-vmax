@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -58,6 +59,9 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   const [dataEntries, setDataEntries] = useState<DataCenterEntry[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showShareFileModal, setShowShareFileModal] = useState(false)
+  const [showContentModal, setShowContentModal] = useState(false)
+  const [selectedDataContent, setSelectedDataContent] = useState('')
+  const [selectedDataTitle, setSelectedDataTitle] = useState('')
   const [createDataForm, setCreateDataForm] = useState({
     title: '',
     description: '',
@@ -106,12 +110,14 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
       const validUserId = user.id === 'manager-001' ? '0ChFAyPoh0nOK9MybrJn' : user.id;
       console.log('🔍 Loading data with user ID:', validUserId, 'Role:', userRole);
       
-      // Load shared data entries
+      // Load shared data entries with role-based filtering
+      console.log('🔍 Loading shared data entries for:', { userId: validUserId, userRole });
       const result = await dataCenterService.getDataEntries(validUserId, userRole, {
         page: 1,
         limit: 50,
         data_type: 'all'
       })
+      console.log('🔍 Shared data entries result:', result);
       setDataEntries(result.data || [])
       
       // Load shared files from data_center table (files only)
@@ -1048,6 +1054,126 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         </Dialog>
       )}
 
+      {/* Content View Modal */}
+      {showContentModal && (
+        <Dialog open={showContentModal} onOpenChange={setShowContentModal}>
+          <DialogContent className="max-w-4xl max-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <FileText className="h-5 w-5 mr-2" />
+                {selectedDataTitle} - File Data
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="bg-muted/30 p-4 rounded-lg border">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-muted-foreground">File Content:</span>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedDataContent)
+                        toast({
+                          title: "Copied!",
+                          description: "Content copied to clipboard",
+                        })
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Copy
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const blob = new Blob([selectedDataContent], { type: 'text/plain' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `${selectedDataTitle.replace(/[^a-z0-9]/gi, '_')}.txt`
+                        a.click()
+                        URL.revokeObjectURL(url)
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download
+                    </Button>
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded border max-h-96 overflow-y-auto">
+                  {selectedDataContent.includes('File:') && selectedDataContent.includes('records') ? (
+                    // File metadata display
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-blue-600 mb-3">📁 File Information:</div>
+                      <pre className="whitespace-pre-wrap text-sm font-mono bg-blue-50 p-3 rounded">
+                        {selectedDataContent}
+                      </pre>
+                      <div className="text-xs text-muted-foreground mt-2 p-2 bg-yellow-50 rounded">
+                        💡 This appears to be file metadata. The actual file data would be processed and displayed here in a production system.
+                      </div>
+                    </div>
+                  ) : selectedDataContent.includes(',') && selectedDataContent.includes('\n') ? (
+                    // CSV-like data display
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-green-600 mb-3">📊 Structured Data:</div>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-xs border-collapse border border-gray-300">
+                          {selectedDataContent.split('\n').slice(0, 10).map((line, index) => (
+                            <tr key={index} className={index === 0 ? 'bg-gray-100 font-medium' : ''}>
+                              {line.split(',').map((cell, cellIndex) => (
+                                <td key={cellIndex} className="border border-gray-300 px-2 py-1">
+                                  {cell.trim()}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </table>
+                        {selectedDataContent.split('\n').length > 10 && (
+                          <div className="text-xs text-muted-foreground mt-2 text-center">
+                            ... and {selectedDataContent.split('\n').length - 10} more rows
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    // Regular text display
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-gray-600 mb-3">📄 Text Content:</div>
+                      <pre className="whitespace-pre-wrap text-sm font-mono">
+                        {selectedDataContent}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 text-xs text-muted-foreground">
+                  Content length: {selectedDataContent.length} characters
+                  {selectedDataContent.includes('\n') && (
+                    <span> • {selectedDataContent.split('\n').length} lines</span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setShowContentModal(false)}>
+                  Close
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setShowContentModal(false)
+                    setShowFeedbackModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <MessageCircle className="h-4 w-4 mr-1" />
+                  Provide Feedback
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Share File Modal */}
       {showShareFileModal && (
         <Dialog open={showShareFileModal} onOpenChange={setShowShareFileModal}>
@@ -1262,69 +1388,123 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {dataEntries.map((entry) => (
-                <Card key={entry.id} className="border-l-4 border-l-blue-500">
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <h4 className="font-semibold text-lg">{entry.title}</h4>
-                          <Badge className={`${
-                            entry.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-                            entry.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                            entry.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {entry.priority}
-                          </Badge>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[150px]">Title</TableHead>
+                    <TableHead className="w-[200px]">Description</TableHead>
+                    <TableHead className="w-[300px]">Content</TableHead>
+                    <TableHead className="w-[80px]">Type</TableHead>
+                    <TableHead className="w-[80px]">Priority</TableHead>
+                    <TableHead className="w-[100px]">Team</TableHead>
+                    <TableHead className="w-[120px]">Created</TableHead>
+                    <TableHead className="w-[120px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dataEntries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell>
+                        <div className="font-medium text-sm">{entry.title}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm text-muted-foreground max-w-[200px] truncate">
+                          {entry.description}
                         </div>
-                        <p className="text-muted-foreground mb-3">{entry.description}</p>
-                        {entry.content && (
-                          <div className="bg-muted/50 p-3 rounded-md mb-3">
-                            <p className="text-sm">{entry.content}</p>
+                      </TableCell>
+                      <TableCell>
+                        {entry.content ? (
+                          <div className="max-w-[300px]">
+                            <div 
+                              className="bg-muted/50 p-2 rounded text-xs border cursor-pointer hover:bg-muted/70 transition-colors"
+                              onClick={() => {
+                                setSelectedDataId(entry.id)
+                                setSelectedDataContent(entry.content || '')
+                                setSelectedDataTitle(entry.title || 'Untitled')
+                                setShowContentModal(true)
+                              }}
+                            >
+                              <div className="max-h-20 overflow-y-auto">
+                                <div className="whitespace-pre-wrap">
+                                  {entry.content.length > 150 
+                                    ? `${entry.content.substring(0, 150)}...` 
+                                    : entry.content
+                                  }
+                                </div>
+                                <div className="flex items-center justify-between mt-1">
+                                  <span className="text-blue-600 text-xs font-medium">
+                                    <Eye className="h-3 w-3 mr-1 inline" />
+                                    Click to view file data
+                                  </span>
+                                  {entry.content.length > 150 && (
+                                    <span className="text-muted-foreground text-xs">
+                                      {entry.content.length} chars
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">No content</span>
                         )}
-                        <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                          <span>Type: {entry.data_type}</span>
-                          <span>•</span>
-                          <span>Created: {safeDisplay(formatDisplayDate(entry.created_at))}</span>
-                          {entry.sent_to_team && (
-                            <>
-                              <span>•</span>
-                              <span>Team: {entry.sent_to_team}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => {
-                            setSelectedDataId(entry.id)
-                            setShowFeedbackModal(true)
-                          }}
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          <MessageCircle className="h-4 w-4 mr-1" />
-                          Feedback
-                        </Button>
-                        {isManager && (
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {entry.data_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`text-xs ${
+                          entry.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                          entry.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                          entry.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {entry.priority}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {entry.sent_to_team || 'Individual'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {safeDisplay(formatDisplayDate(entry.created_at))}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex space-x-1">
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => handleDeleteDataEntry(entry.id)}
-                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setSelectedDataId(entry.id)
+                              setShowFeedbackModal(true)
+                            }}
+                            className="text-blue-600 hover:text-blue-700 text-xs px-2 py-1"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <MessageCircle className="h-3 w-3 mr-1" />
+                            Feedback
                           </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                          {isManager && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleDeleteDataEntry(entry.id)}
+                              className="text-destructive hover:text-destructive text-xs px-2 py-1"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>

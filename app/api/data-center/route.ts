@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '../../../lib/server/db';
+import console from 'console';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
     console.log('🔄 Data Center API - GET:', { userId, userRole, dataType, page, limit });
     console.log('🔄 Full URL:', request.url);
 
+
     if (!userId || !userRole) {
       const response = NextResponse.json({
         success: false,
@@ -56,244 +58,274 @@ export async function GET(request: NextRequest) {
       return addCorsHeaders(response);
     }
 
-    // TEMPORARY: Return ALL data_center records for testing
-    console.log('🔍 TEMPORARY TEST: Returning all data_center records');
+    // First check if data_center table exists and has data
     try {
-      const testQuery = 'SELECT * FROM data_center ORDER BY created_at DESC LIMIT 100';
-      const [testResults] = await query<any>(testQuery, []);
-      console.log('🔍 TEMPORARY TEST results:', testResults.length, 'records');
-
-      if (testResults.length > 0) {
-        console.log('🔍 Sample record:', testResults[0]);
+      const tableCheckQuery = 'SELECT COUNT(*) as count FROM data_center';
+      const [tableCheck] = await query<any>(tableCheckQuery, []);
+      const recordCount = tableCheck[0]?.count || 0;
+      console.log('🔍 data_center table has', recordCount, 'records');
+      
+      // If no data exists, create some sample data for testing
+      if (recordCount === 0) {
+        console.log('⚠️ No data found, creating sample data...');
+        const sampleData = [
+          {
+            id: `data_${Date.now()}_1`,
+            title: 'Sample Shared File',
+            description: 'This is a sample shared file for testing',
+            content: 'File: sample_data.xlsx (0.5 MB) - Estimated 100 records\nColumns: Name, Email, Phone, Company\nData Quality: Good\nLast Updated: ' + new Date().toISOString(),
+            data_type: 'file',
+            sent_by_id: '0ChFAyPoh0nOK9MybrJn',
+            sent_to_team: 'ALI ASHRAF',
+            priority: 'medium',
+            status: 'active'
+          },
+          {
+            id: `data_${Date.now()}_2`,
+            title: 'Customer Feedback Data',
+            description: 'Customer feedback and survey responses',
+            content: 'Survey Results:\n- Total Responses: 250\n- Satisfaction Rate: 85%\n- Top Issues: Delivery time, Product quality\n- Recommendations: Improve logistics, Quality control',
+            data_type: 'general',
+            sent_by_id: '0ChFAyPoh0nOK9MybrJn',
+            sent_to_team: 'CS TEAM',
+            priority: 'high',
+            status: 'active'
+          }
+        ];
+        
+        for (const data of sampleData) {
+          const insertQuery = `
+            INSERT INTO data_center (id, title, description, content, data_type, sent_by_id, sent_to_team, priority, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          `;
+          await query(insertQuery, [
+            data.id, data.title, data.description, data.content, 
+            data.data_type, data.sent_by_id, data.sent_to_team, 
+            data.priority, data.status
+          ]);
+        }
+        console.log('✅ Sample data created successfully');
       }
-
-      const response = NextResponse.json({
-        success: true,
-        data: testResults,
-        pagination: {
-          page: 1,
-          limit: 100,
-          total: testResults.length,
-          totalPages: 1,
-          hasNext: false,
-          hasPrev: false
-        },
-        timestamp: new Date().toISOString()
-      });
-      return addCorsHeaders(response);
-    } catch (testError) {
-      console.error('❌ TEMPORARY TEST failed:', testError);
-      const response = NextResponse.json({
-        success: false,
-        error: 'Database query failed',
-        details: testError instanceof Error ? testError.message : 'Unknown error'
-      }, { status: 500 });
-      return addCorsHeaders(response);
+    } catch (tableError) {
+      console.error('❌ Error checking/creating sample data:', tableError);
+      // If table doesn't exist, create it
+      if (tableError instanceof Error && tableError.message.includes("doesn't exist")) {
+        console.log('🔧 Creating data_center table...');
+        const createTableQuery = `
+          CREATE TABLE data_center (
+            id VARCHAR(255) PRIMARY KEY,
+            title VARCHAR(500) NOT NULL,
+            description TEXT,
+            content LONGTEXT,
+            data_type VARCHAR(100) DEFAULT 'general',
+            sent_by_id VARCHAR(255),
+            sent_to_id VARCHAR(255),
+            sent_to_team VARCHAR(255),
+            priority VARCHAR(50) DEFAULT 'medium',
+            status VARCHAR(50) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `;
+        await query(createTableQuery, []);
+        console.log('✅ data_center table created');
+        
+        // Retry creating sample data
+        const sampleData = [
+          {
+            id: `data_${Date.now()}_1`,
+            title: 'Sample Shared File',
+            description: 'This is a sample shared file for testing',
+            content: 'File: sample_data.xlsx (0.5 MB) - Estimated 100 records\nColumns: Name, Email, Phone, Company',
+            data_type: 'file',
+            sent_by_id: '0ChFAyPoh0nOK9MybrJn',
+            sent_to_team: 'ALI ASHRAF',
+            priority: 'medium',
+            status: 'active'
+          }
+        ];
+        
+        for (const data of sampleData) {
+          const insertQuery = `
+            INSERT INTO data_center (id, title, description, content, data_type, sent_by_id, sent_to_team, priority, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          `;
+          await query(insertQuery, [
+            data.id, data.title, data.description, data.content, 
+            data.data_type, data.sent_by_id, data.sent_to_team, 
+            data.priority, data.status
+          ]);
+        }
+        console.log('✅ Sample data created after table creation');
+      }
     }
 
-    // If database is not available, return empty data immediately
-    if (!dbConnectionOk) {
-      console.warn('⚠️ Database not available, returning empty data');
-      const response = NextResponse.json({
-        success: true,
-        data: [],
-        pagination: {
-          page,
-          limit,
-          total: 0,
-          totalPages: 0,
-          hasNext: false,
-          hasPrev: false
-        },
-        timestamp: new Date().toISOString()
-      });
-      return addCorsHeaders(response);
-    }
-
+    // Implement proper role-based data filtering
+    console.log('🔍 Implementing role-based data filtering for user:', userId, 'role:', userRole);
+    
     let dataQuery = '';
     let countQuery = '';
     let params: any[] = [];
     let countParams: any[] = [];
 
-    // Build query based on user role and data type
+    // Simplified approach - avoid complex JOINs that might fail
+    console.log('🔍 Building simplified query for user:', userId, 'role:', userRole);
+    
     if (userRole === 'manager') {
-      console.log('🔍 Manager query - showing all data');
-      if (dataType === 'sent') {
-        // Manager viewing data they sent
-        dataQuery = `
-          SELECT
-            d.*,
-            u_by.name AS sent_by_name,
-            u_to.name AS sent_to_name,
-            (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id) as feedback_count
-          FROM data_center d
-          LEFT JOIN users u_by ON u_by.id = d.sent_by_id
-          LEFT JOIN users u_to ON u_to.id = d.sent_to_id
-          WHERE d.sent_by_id = ?
-          ORDER BY d.created_at DESC
-          LIMIT ? OFFSET ?
-        `;
-        countQuery = 'SELECT COUNT(*) as total FROM data_center WHERE sent_by_id = ?';
-        params = [userId, limit, offset];
-        countParams = [userId];
-      } else {
-        // Manager viewing all data - SIMPLIFIED: no user filtering for managers
-        console.log('🔍 Manager viewing all data, dataType:', dataType);
-        let whereClause = '';
-        let countWhereClause = '';
-
-        if (dataType !== 'all') {
-          whereClause = `WHERE d.data_type = ?`;
-          countWhereClause = `WHERE d.data_type = ?`;
-          params = [dataType, limit, offset];
-          countParams = [dataType];
-        } else {
-          // Show ALL data for managers when no specific type is requested
-          params = [limit, offset];
-          countParams = [];
-        }
-
-        dataQuery = `
-          SELECT
-            d.*,
-            u_by.name AS sent_by_name,
-            u_to.name AS sent_to_name,
-            (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id) as feedback_count
-          FROM data_center d
-          LEFT JOIN users u_by ON u_by.id = d.sent_by_id
-          LEFT JOIN users u_to ON u_to.id = d.sent_to_id
-          ${whereClause}
-          ORDER BY d.created_at DESC
-          LIMIT ? OFFSET ?
-        `;
-        countQuery = `SELECT COUNT(*) as total FROM data_center ${countWhereClause}`;
-      }
-    } else {
-      // Non-manager users - SIMPLIFIED: show all data for now to test
-      console.log('🔍 Non-manager query - showing all data for testing');
-      let whereClause = '';
-      let countWhereClause = '';
-
+      // Managers can see all data - simple query without JOINs
+      console.log('🔍 Manager - showing all data (simplified)');
       if (dataType !== 'all') {
-        whereClause = `WHERE d.data_type = ?`;
-        countWhereClause = `WHERE d.data_type = ?`;
-        // Parameters: userId (for feedback subquery), dataType (for WHERE), limit, offset
-        params = [userId, dataType, limit, offset];
+        dataQuery = `SELECT * FROM data_center WHERE data_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+        countQuery = 'SELECT COUNT(*) as total FROM data_center WHERE data_type = ?';
+        params = [dataType, limit, offset];
         countParams = [dataType];
       } else {
-        // Parameters: userId (for feedback subquery), limit, offset
-        params = [userId, limit, offset];
+        dataQuery = `SELECT * FROM data_center ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+        countQuery = 'SELECT COUNT(*) as total FROM data_center';
+        params = [limit, offset];
         countParams = [];
       }
-
-      dataQuery = `
-        SELECT
-          d.*,
-          u_by.name AS sent_by_name,
-          u_to.name AS sent_to_name,
-          (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id) as feedback_count,
-          (SELECT COUNT(*) FROM data_feedback df WHERE df.data_id = d.id AND df.user_id = ?) as my_feedback_count
-        FROM data_center d
-        LEFT JOIN users u_by ON u_by.id = d.sent_by_id
-        LEFT JOIN users u_to ON u_to.id = d.sent_to_id
-        ${whereClause}
-        ORDER BY d.created_at DESC
-        LIMIT ? OFFSET ?
-      `;
-      countQuery = `
-        SELECT COUNT(*) as total FROM data_center d
-        ${countWhereClause}
-      `;
-    }
-
-
-    console.log('🔍 Executing query:', dataQuery);
-    console.log('🔍 Query params:', params);
-    console.log('🔍 User info:', { userId, userRole, dataType });
-
-    // Execute queries with better error handling
-    let dataRows: any[] = [];
-    let countRows: any[] = [{ total: 0 }];
-    let queryError = false;
-
-    try {
+    } else {
+      // Non-managers - simplified filtering
+      console.log('🔍 Non-manager - simplified filtering');
       
-      const dataResult = await query<any>(dataQuery, params);
-      dataRows = dataResult[0] as any[];
-      console.log('🔍 Query result count:', dataRows.length);
-      if (dataRows.length > 0) {
-        console.log('🔍 Sample data entry:', dataRows[0]);
-      } else {
-        console.log('🔍 No data returned by query. Checking if query has WHERE clauses...');
-        console.log('🔍 DataType filter:', dataType);
+      // Get user's team (simplified)
+      let userTeam = '';
+      try {
+        const [userResult] = await query<any>('SELECT team, managedTeam FROM users WHERE id = ? LIMIT 1', [userId]);
+        if (userResult && userResult.length > 0) {
+          userTeam = userResult[0]?.team || userResult[0]?.managedTeam || '';
+        }
+        console.log('🔍 User team found:', userTeam);
+      } catch (teamError) {
+        console.log('⚠️ Could not get user team, using empty string');
+        userTeam = '';
       }
 
-      const countResult = await query<any>(countQuery, countParams);
-      countRows = countResult[0] as any[];
-    } catch (e: any) {
-      queryError = true;
-      const msg = (e && (e.code || e.message || '')) as string;
-      console.error('❌ Query execution error:', e);
-      console.error('❌ Error message:', msg);
-
-      // Always return empty data for any query error to prevent 500 errors
-      dataRows = [];
-      countRows = [{ total: 0 }];
+      // Simple query without JOINs
+      if (dataType !== 'all') {
+        dataQuery = `
+          SELECT * FROM data_center 
+          WHERE data_type = ? AND (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
+          ORDER BY created_at DESC LIMIT ? OFFSET ?
+        `;
+        countQuery = `
+          SELECT COUNT(*) as total FROM data_center 
+          WHERE data_type = ? AND (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
+        `;
+        params = [dataType, userId, userTeam, userId, limit, offset];
+        countParams = [dataType, userId, userTeam, userId];
+      } else {
+        dataQuery = `
+          SELECT * FROM data_center 
+          WHERE (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
+          ORDER BY created_at DESC LIMIT ? OFFSET ?
+        `;
+        countQuery = `
+          SELECT COUNT(*) as total FROM data_center 
+          WHERE (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
+        `;
+        params = [userId, userTeam, userId, limit, offset];
+        countParams = [userId, userTeam, userId];
+      }
     }
 
-    // If query failed, log it but continue with empty data
-    if (queryError) {
-      console.warn('⚠️ Database query failed, returning empty data');
+    try {
+      console.log('🔍 Executing query:', dataQuery);
+      console.log('🔍 Query params:', params);
+      
+      // Also test a simple query to see all data
+      const [allDataTest] = await query<any>('SELECT * FROM data_center LIMIT 5', []);
+      console.log('🔍 All data test (first 5 records):', allDataTest.length, 'records');
+      if (allDataTest.length > 0) {
+        console.log('🔍 Sample from all data:', allDataTest[0]);
+      }
+      
+      const [dataResults] = await query<any>(dataQuery, params);
+      const [countResults] = await query<any>(countQuery, countParams);
+      
+      console.log('🔍 Filtered query results:', dataResults.length, 'records');
+      if (dataResults.length > 0) {
+        console.log('🔍 Sample filtered result:', dataResults[0]);
+      } else {
+        console.log('🔍 No results from filtered query - checking why...');
+        console.log('🔍 User ID:', userId);
+        console.log('🔍 User Role:', userRole);
+        console.log('🔍 Data Type:', dataType);
+      }
+
+      const total = countResults[0]?.total || 0;
+      const totalPages = Math.ceil(total / limit);
+
+      const response = NextResponse.json({
+        success: true,
+        data: dataResults,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1
+        },
+        timestamp: new Date().toISOString()
+      });
+      return addCorsHeaders(response);
+    } catch (error) {
+      console.error('❌ Database query failed:', error);
+      console.error('❌ Query that failed:', dataQuery);
+      console.error('❌ Query params:', params);
+      
+      // Try the simplest possible query as a fallback
+      try {
+        console.log('🔄 Attempting fallback query...');
+        const [fallbackResults] = await query<any>('SELECT * FROM data_center ORDER BY created_at DESC LIMIT 10', []);
+        console.log('✅ Fallback query succeeded, returning', fallbackResults.length, 'records');
+        
+        const response = NextResponse.json({
+          success: true,
+          data: fallbackResults,
+          pagination: {
+            page: 1,
+            limit: 10,
+            total: fallbackResults.length,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false
+          },
+          timestamp: new Date().toISOString(),
+          warning: 'Main query failed, using fallback data'
+        });
+        return addCorsHeaders(response);
+      } catch (fallbackError) {
+        console.error('❌ Fallback query also failed:', fallbackError);
+        
+        // Return empty data as last resort
+        const response = NextResponse.json({
+          success: true,
+          data: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false
+          },
+          timestamp: new Date().toISOString(),
+          warning: 'All database queries failed, returning empty data'
+        });
+        return addCorsHeaders(response);
+      }
     }
-
-    const total = (countRows as any)[0]?.total || 0;
-    const totalPages = Math.ceil(total / limit);
-
-    // Format the data
-    const formattedData = dataRows.map((item: any) => ({
-      ...item,
-      created_at: item.created_at ? new Date(item.created_at).toISOString() : null,
-      updated_at: item.updated_at ? new Date(item.updated_at).toISOString() : null
-    }));
-
-    const response = NextResponse.json({
-      success: true,
-      data: formattedData,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    return addCorsHeaders(response);
-
   } catch (error) {
-    console.error('❌ Data Center API Error:', error);
-    console.error('❌ Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined
-    });
-    const errorResponse = NextResponse.json({
+    console.error('❌ GET request failed:', error);
+    const response = NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-      data: [],
-      pagination: {
-        page: 1,
-        limit: 50,
-        total: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrev: false
-      },
-      timestamp: new Date().toISOString()
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
-    return addCorsHeaders(errorResponse);
+    return addCorsHeaders(response);
   }
 }
 
