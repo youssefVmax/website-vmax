@@ -1,4 +1,4 @@
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 import { databaseService } from './mysql-database-service';
 import { Deal } from './api-service';
 
@@ -115,7 +115,7 @@ class MySQLDealsService implements DealsService {
 
   async getDealsByAgent(agentId: string): Promise<Deal[]> {
     try {
-      const deals = await directMySQLService.getDeals({ salesAgentId: agentId });
+      const deals = await directMySQLService.getDeals({ salesAgentId: agentId }, { userRole: 'salesman', userId: agentId });
       return deals;
     } catch (error) {
       console.error('Error fetching deals by agent:', error);
@@ -125,7 +125,7 @@ class MySQLDealsService implements DealsService {
 
   async getDealsByTeam(team: string): Promise<Deal[]> {
     try {
-      const deals = await directMySQLService.getDeals({ salesTeam: team });
+      const deals = await directMySQLService.getDeals({ salesTeam: team }, { userRole: 'team_leader', managedTeam: team });
       return deals;
     } catch (error) {
       console.error('Error fetching deals by team:', error);
@@ -169,6 +169,14 @@ class MySQLDealsService implements DealsService {
     try {
       const filters: Record<string, string> = {};
       
+      // Build user context for role-based API filtering
+      const userContext = {
+        userRole,
+        userId,
+        managedTeam
+      };
+      
+      // Note: The API will handle role-based filtering, but we can still add specific filters
       if (userRole === 'salesman' && userId) {
         filters.salesAgentId = userId;
       } else if (userRole === 'team_leader' && managedTeam) {
@@ -176,7 +184,9 @@ class MySQLDealsService implements DealsService {
       }
       // Managers can see all deals (no filters)
       
-      const response = await directMySQLService.getDeals(filters);
+      console.log('🔍 MySQL Deals Service: Fetching deals with context:', { userRole, userId, managedTeam });
+      
+      const response = await directMySQLService.getDeals(filters, userContext);
       const deals = Array.isArray(response) ? response : (response.deals || []);
       return deals;
     } catch (error) {
@@ -187,7 +197,7 @@ class MySQLDealsService implements DealsService {
 
   async getDealById(id: string): Promise<Deal | null> {
     try {
-      const deals = await directMySQLService.getDeals({ id });
+      const deals = await directMySQLService.getDeals({ id }, { userRole: 'manager' });
       return deals.length > 0 ? deals[0] : null;
     } catch (error) {
       console.error('Error fetching deal by ID:', error);

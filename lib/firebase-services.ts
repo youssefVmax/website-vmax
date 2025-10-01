@@ -2,7 +2,7 @@
 import { dealsService, DealsService } from './mysql-deals-service';
 import { callbacksService, CallbacksService } from './mysql-callbacks-service';
 import { notificationService } from './mysql-notifications-service';
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 
 // Sales Service (using deals service as base)
 class MySQLSalesService {

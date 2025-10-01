@@ -19,7 +19,7 @@ function addCorsHeaders(res: NextResponse) {
   return res;
 }
 
-export async function OPTIONS() {``
+export async function OPTIONS() {
   return addCorsHeaders(new NextResponse(null, { status: 200 }));
 }
 
@@ -261,9 +261,59 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const { id, ...updates } = body;
+    const { searchParams } = new URL(request.url);
+    
+    // Get role-based parameters
+    const userRole = searchParams.get('userRole') || body.userRole;
+    const userId = searchParams.get('userId') || body.userId;
+    const managedTeam = searchParams.get('managedTeam') || body.managedTeam;
 
     if (!id) {
       return addCorsHeaders(NextResponse.json({ success: false, error: 'Callback ID is required' }, { status: 400 }));
+    }
+
+    console.log('🔒 PUT /api/callbacks - Role-based update check:', { userRole, userId, managedTeam, callbackId: id });
+
+    // First, check if the callback exists and get its details for permission check
+    const [existingCallback] = await query<any>(`
+      SELECT SalesAgentID, sales_team, created_by_id 
+      FROM callbacks 
+      WHERE id = ?
+    `, [id]);
+
+    if (!existingCallback || existingCallback.length === 0) {
+      return addCorsHeaders(NextResponse.json({ success: false, error: 'Callback not found' }, { status: 404 }));
+    }
+
+    const callback = existingCallback[0];
+    console.log('📋 Existing callback details:', callback);
+
+    // Role-based permission check
+    let hasPermission = false;
+    
+    if (userRole === 'manager') {
+      // Managers can edit all callbacks
+      hasPermission = true;
+      console.log('✅ Manager access granted');
+    } else if (userRole === 'team_leader') {
+      // Team leaders can edit their own callbacks OR their team's callbacks
+      const isOwnCallback = callback.SalesAgentID === userId || callback.created_by_id === userId;
+      const isTeamCallback = Boolean(managedTeam && callback.sales_team === managedTeam);
+      hasPermission = isOwnCallback || isTeamCallback;
+      console.log('🔍 Team leader permission check:', { isOwnCallback, isTeamCallback, hasPermission });
+    } else if (userRole === 'salesman') {
+      // Salesmen can only edit their own callbacks
+      const isOwnCallback = callback.SalesAgentID === userId || callback.created_by_id === userId;
+      hasPermission = isOwnCallback;
+      console.log('🔍 Salesman permission check:', { isOwnCallback, hasPermission });
+    }
+
+    if (!hasPermission) {
+      console.log('❌ Permission denied for callback update');
+      return addCorsHeaders(NextResponse.json({ 
+        success: false, 
+        error: 'Permission denied. You can only edit your own callbacks.' 
+      }, { status: 403 }));
     }
 
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -287,9 +337,9 @@ export async function PUT(request: NextRequest) {
     };
 
     Object.entries(updates).forEach(([key, value]) => {
-      if (key === 'id') return;
+      if (key === 'id' || key === 'userRole' || key === 'userId' || key === 'managedTeam') return;
       const dbField = fieldMap[key] || key;
-      setClauses.push(` ${dbField}  = ?`);
+      setClauses.push(`\`${dbField}\` = ?`);
       params.push(value);
     });
 
@@ -300,14 +350,18 @@ export async function PUT(request: NextRequest) {
     setClauses.push('`updated_at` = ?');
     params.push(now, id);
 
+    console.log('📝 Executing UPDATE with clauses:', setClauses.join(', '));
+    console.log('📝 Update params:', params);
+
     const [result] = await query<any>(
-      `UPDATE  callbacks  SET ${setClauses.join(', ')} WHERE  id  = ?`,
+      `UPDATE callbacks SET ${setClauses.join(', ')} WHERE id = ?`,
       params
     );
 
+    console.log('✅ Callback updated successfully:', { id, affectedRows: (result as any).affectedRows });
     return addCorsHeaders(NextResponse.json({ success: true, affected: (result as any).affectedRows }));
   } catch (error) {
-    console.error('Error updating callback:', error);
+    console.error('❌ Error updating callback:', error);
     return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to update callback' }, { status: 502 }));
   }
 }
@@ -317,14 +371,64 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     
+    // Get role-based parameters
+    const userRole = searchParams.get('userRole');
+    const userId = searchParams.get('userId');
+    const managedTeam = searchParams.get('managedTeam');
+    
     if (!id) {
       return addCorsHeaders(NextResponse.json({ success: false, error: 'Callback ID is required' }, { status: 400 }));
     }
 
-    const [result] = await query<any>(`DELETE FROM  callbacks  WHERE  id  = ?`, [id]);
+    console.log('🔒 DELETE /api/callbacks - Role-based delete check:', { userRole, userId, managedTeam, callbackId: id });
+
+    // First, check if the callback exists and get its details for permission check
+    const [existingCallback] = await query<any>(`
+      SELECT SalesAgentID, sales_team, created_by_id 
+      FROM callbacks 
+      WHERE id = ?
+    `, [id]);
+
+    if (!existingCallback || existingCallback.length === 0) {
+      return addCorsHeaders(NextResponse.json({ success: false, error: 'Callback not found' }, { status: 404 }));
+    }
+
+    const callback = existingCallback[0];
+    console.log('📋 Existing callback details for delete:', callback);
+
+    // Role-based permission check
+    let hasPermission = false;
+    
+    if (userRole === 'manager') {
+      // Managers can delete all callbacks
+      hasPermission = true;
+      console.log('✅ Manager delete access granted');
+    } else if (userRole === 'team_leader') {
+      // Team leaders can delete their own callbacks OR their team's callbacks
+      const isOwnCallback = callback.SalesAgentID === userId || callback.created_by_id === userId;
+      const isTeamCallback = Boolean(managedTeam && callback.sales_team === managedTeam);
+      hasPermission = isOwnCallback || isTeamCallback;
+      console.log('🔍 Team leader delete permission check:', { isOwnCallback, isTeamCallback, hasPermission });
+    } else if (userRole === 'salesman') {
+      // Salesmen can only delete their own callbacks
+      const isOwnCallback = callback.SalesAgentID === userId || callback.created_by_id === userId;
+      hasPermission = isOwnCallback;
+      console.log('🔍 Salesman delete permission check:', { isOwnCallback, hasPermission });
+    }
+
+    if (!hasPermission) {
+      console.log('❌ Permission denied for callback deletion');
+      return addCorsHeaders(NextResponse.json({ 
+        success: false, 
+        error: 'Permission denied. You can only delete your own callbacks.' 
+      }, { status: 403 }));
+    }
+
+    const [result] = await query<any>(`DELETE FROM callbacks WHERE id = ?`, [id]);
+    console.log('✅ Callback deleted successfully:', { id, affectedRows: (result as any).affectedRows });
     return addCorsHeaders(NextResponse.json({ success: true, affected: (result as any).affectedRows }));
   } catch (error) {
-    console.error('Error deleting callback:', error);
+    console.error('❌ Error deleting callback:', error);
     return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to delete callback' }, { status: 502 }));
   }
 }

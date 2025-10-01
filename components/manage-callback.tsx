@@ -266,7 +266,14 @@ export default function ManageCallbacksPage() {
 
   const updateStatus = async (row: CallbackRow, next: CallbackRow["status"]) => {
     try {
-      await callbacksService.updateCallback(row.id, { status: next });
+      // Pass user context for role-based permissions
+      const userContext = {
+        userRole: user?.role,
+        userId: user?.id,
+        managedTeam: user?.managedTeam
+      };
+
+      await callbacksService.updateCallback(row.id, { status: next }, user, userContext);
       toast({ title: "Updated", description: `Callback marked as ${next}` });
       // Refresh current page (for team leaders, always refresh page 1)
       loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
@@ -301,10 +308,17 @@ export default function ManageCallbacksPage() {
     const followUpDate = tomorrow.toISOString().split('T')[0];
     
     try {
+      // Pass user context for role-based permissions
+      const userContext = {
+        userRole: user?.role,
+        userId: user?.id,
+        managedTeam: user?.managedTeam
+      };
+
       await callbacksService.updateCallback(callback.id, {
         status: "pending" as const,
         callbackNotes: `${callback.callback_notes || ''}\n\nFollow-up scheduled for ${followUpDate}`.trim()
-      });
+      }, user, userContext);
       toast({
         title: "Follow-up Scheduled",
         description: `Follow-up scheduled for ${followUpDate}`,
@@ -338,7 +352,14 @@ export default function ManageCallbacksPage() {
       if (editForm.callback_notes !== undefined) apiUpdates.callbackNotes = editForm.callback_notes;
       if (editForm.callback_reason !== undefined) apiUpdates.callbackReason = editForm.callback_reason;
 
-      await callbacksService.updateCallback(editingCallback.id, apiUpdates);
+      // Pass user context for role-based permissions
+      const userContext = {
+        userRole: user?.role,
+        userId: user?.id,
+        managedTeam: user?.managedTeam
+      };
+
+      await callbacksService.updateCallback(editingCallback.id, apiUpdates, user, userContext);
       setEditingCallback(null);
       setEditForm({});
       toast({
@@ -359,7 +380,14 @@ export default function ManageCallbacksPage() {
 
   const handleStatusUpdate = async (id: string, newStatus: CallbackRow["status"]) => {
     try {
-      await callbacksService.updateCallback(id, { status: newStatus });
+      // Pass user context for role-based permissions
+      const userContext = {
+        userRole: user?.role,
+        userId: user?.id,
+        managedTeam: user?.managedTeam
+      };
+
+      await callbacksService.updateCallback(id, { status: newStatus }, user, userContext);
       toast({
         title: "Success",
         description: `Callback status updated to ${newStatus}`,
@@ -378,7 +406,14 @@ export default function ManageCallbacksPage() {
 
   const handleDeleteCallback = async (callback: CallbackRow) => {
     try {
-      await callbacksService.deleteCallback(callback.id);
+      // Pass user context for role-based permissions
+      const userContext = {
+        userRole: user?.role,
+        userId: user?.id,
+        managedTeam: user?.managedTeam
+      };
+
+      await callbacksService.deleteCallback(callback.id, userContext);
       toast({
         title: "Success",
         description: "Callback deleted successfully",
@@ -498,7 +533,7 @@ export default function ManageCallbacksPage() {
                   <th className="py-2 pr-4">Same Phone Cnt</th>
                   <th className="py-2 pr-4">Priority</th>
                   <th className="py-2 pr-4">Status</th>
-                  {user?.role !== 'manager' && (
+                  {(user?.role === 'salesman' || user?.role === 'team_leader') && (
                     <th className="py-2 pr-4 text-right">Actions</th>
                   )}
                   <th className="py-2 pr-0 text-right">History</th>
@@ -556,7 +591,9 @@ export default function ManageCallbacksPage() {
                       <td className="py-3 pr-4">
                         <Badge className={statusColors[c.status]}>{c.status}</Badge>
                       </td>
-                      {user?.role !== 'manager' && (
+                      {/* Show actions for salesman (own callbacks) and team_leader (own + team callbacks) */}
+                      {((user?.role === 'salesman' && c.SalesAgentID === user?.id) || 
+                        (user?.role === 'team_leader' && (c.SalesAgentID === user?.id || c.sales_team === user?.managedTeam))) && (
                       <td className="py-3 pr-0 text-right">
                         <div className="flex gap-1 justify-end">
                           <Dialog>
@@ -982,3 +1019,4 @@ export default function ManageCallbacksPage() {
     </div>
   );
 }
+

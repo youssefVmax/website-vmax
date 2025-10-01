@@ -1,4 +1,4 @@
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 
 // Direct MySQL API Service - Bypasses ALL failing Next.js routes
 export interface User {

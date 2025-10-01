@@ -1,5 +1,5 @@
 import { Callback as ApiCallback } from './api-service';
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 import { databaseService } from './mysql-database-service';
 
 export interface Callback extends ApiCallback {
@@ -11,8 +11,8 @@ export interface Callback extends ApiCallback {
 
 export interface CallbacksService {
   addCallback: (callbackData: Omit<Callback, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
-  updateCallback: (id: string, updates: Partial<Callback>) => Promise<void>;
-  deleteCallback: (id: string) => Promise<void>;
+  updateCallback: (id: string, updates: Partial<Callback>, updatedBy?: any, userContext?: { userRole?: string; userId?: string; managedTeam?: string }) => Promise<void>;
+  deleteCallback: (id: string, userContext?: { userRole?: string; userId?: string; managedTeam?: string }) => Promise<void>;
   getCallbacks: (userRole?: string, userId?: string, userName?: string, managedTeam?: string) => Promise<Callback[]>;
   getCallbackById: (id: string) => Promise<Callback | null>;
   getCallbacksByTeam: (team: string) => Promise<Callback[]>;
@@ -59,13 +59,13 @@ class MySQLCallbacksService implements CallbacksService {
     }
   }
 
-  async updateCallback(id: string, updates: Partial<Callback>, updatedBy?: any): Promise<void> {
+  async updateCallback(id: string, updates: Partial<Callback>, updatedBy?: any, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<void> {
     try {
       // Get old callback for history tracking
       const oldCallbacks = await directMySQLService.getCallbacks({ id });
       const oldCallback = oldCallbacks.length > 0 ? oldCallbacks[0] : null;
 
-      await directMySQLService.updateCallback(id, updates);
+      await directMySQLService.updateCallback(id, updates, userContext);
 
       // Log callback history if significant changes
       if (oldCallback && updatedBy) {
@@ -102,9 +102,9 @@ class MySQLCallbacksService implements CallbacksService {
     }
   }
 
-  async deleteCallback(id: string): Promise<void> {
+  async deleteCallback(id: string, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<void> {
     try {
-      await directMySQLService.deleteCallback(id);
+      await directMySQLService.deleteCallback(id, userContext);
       
       // Trigger listeners
       this.notifyListeners();

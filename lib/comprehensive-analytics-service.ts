@@ -1,5 +1,5 @@
 // Comprehensive Analytics Service - Uses all API endpoints for complete dashboard
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 
 export interface ComprehensiveAnalytics {
   // Dashboard Stats

@@ -28,7 +28,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     const load = async () => {
       try {
-        if (!user?.id || !user?.role) return
+        if (!user?.id || !user?.role) {
+          console.log('⚠️ NotificationsProvider: No user or role available');
+          return;
+        }
+        
+        console.log('🔄 NotificationsProvider: Loading notifications for user:', user.id, 'role:', user.role);
         const data = await notificationService.getNotifications(user.id, user.role)
         // Notifications are already in the correct format from MySQL service
         const mapped: Notification[] = data.map((n: any) => ({
@@ -51,14 +56,20 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         }))
         if (mounted) setNotifications(mapped)
       } catch (e) {
-        console.error('Notifications fetch failed', e)
+        console.error('❌ NotificationsProvider: Failed to load notifications:', e)
+        // Don't show error to user, just log it and set empty array
         if (mounted) setNotifications([])
       }
     }
 
-    load()
+    // Add a small delay to prevent interference with initial page load
+    const initialTimeout = setTimeout(load, 1000)
     const id = setInterval(load, 15000)
-    return () => { mounted = false; clearInterval(id) }
+    return () => { 
+      mounted = false; 
+      clearTimeout(initialTimeout);
+      clearInterval(id) 
+    }
   }, [user?.id, user?.role])
 
   // Show toasts for new notifications (only show recent notifications, not old ones on login)

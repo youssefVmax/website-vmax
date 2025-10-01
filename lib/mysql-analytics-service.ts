@@ -57,7 +57,7 @@ export interface CallbackFilters {
   team?: string;
 }
 
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 
 export class MySQLAnalyticsService {
   private async fetchAnalytics(endpoint: string, params: Record<string, any> = {}): Promise<any> {

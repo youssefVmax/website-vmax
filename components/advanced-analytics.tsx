@@ -43,6 +43,113 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   const [selectedService, setSelectedService] = useState("all")
   const [viewType, setViewType] = useState<'revenue' | 'deals' | 'performance'>('revenue')
 
+  // Fetch salesman analytics directly from APIs
+  const fetchSalesmanAnalytics = async () => {
+    try {
+      if (userRole !== 'salesman') {
+        console.log('⚠️ Not a salesman user')
+        return null
+      }
+
+      setLoading(true)
+      setError(null)
+      console.log('🔄 Fetching salesman analytics for user:', user.id)
+
+      // Dynamic base URL for localhost development
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '';
+
+      // Get dashboard stats with salesman filtering
+      const dashboardParams = new URLSearchParams({
+        userRole,
+        userId: user.id,
+        dateRange
+      })
+
+      const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
+      console.log('➡️ Calling dashboard stats API for salesman:', dashboardUrl)
+      const dashboardResponse = await fetch(dashboardUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
+
+      let dashboardData = { success: false, data: {} }
+      if (dashboardResponse.ok) {
+        dashboardData = await dashboardResponse.json()
+      } else {
+        console.warn('⚠️ Dashboard API response not OK:', dashboardResponse.status)
+      }
+
+      // Sequential call - wait to avoid resource issues
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Get charts data with salesman filtering
+      const chartsParams = new URLSearchParams({
+        userRole,
+        userId: user.id,
+        chartType: 'all',
+        dateRange
+      })
+
+      const chartsUrl = `${baseUrl}/api/charts?${chartsParams.toString()}`
+      console.log('➡️ Calling charts API for salesman:', chartsUrl)
+      const chartsResponse = await fetch(chartsUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
+
+      let chartsData = { success: false, data: {} }
+      if (chartsResponse.ok) {
+        chartsData = await chartsResponse.json()
+      } else {
+        console.warn('⚠️ Charts API response not OK:', chartsResponse.status)
+      }
+
+      // Sequential call - wait to avoid resource issues
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Fetch salesman deals data for detailed analysis
+      const dealsParams = new URLSearchParams({
+        userRole,
+        userId: user.id,
+        limit: '200'
+      })
+
+      const dealsUrl = `${baseUrl}/api/deals?${dealsParams.toString()}`
+      console.log('➡️ Calling deals API for salesman:', dealsUrl)
+      const dealsResponse = await fetch(dealsUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000) // 15 second timeout for larger data
+      })
+
+      let dealsData = { success: false, deals: [] }
+      if (dealsResponse.ok) {
+        dealsData = await dealsResponse.json()
+      }
+
+      // Process the data similar to team leader logic
+      const processedData = {
+        dashboardStats: dashboardData.success ? dashboardData.data : {},
+        chartsData: chartsData.success ? chartsData.data : {},
+        dealsData: dealsData.success ? dealsData.deals : []
+      }
+
+      console.log('📊 Salesman analytics data processed:', processedData)
+      return processedData
+
+    } catch (error) {
+      console.error('❌ Error fetching salesman analytics:', error)
+      setError(`Failed to load salesman analytics: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Fetch team leader analytics directly from APIs
   const fetchTeamLeaderAnalytics = async () => {
     try {
@@ -51,31 +158,36 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         return null
       }
 
-      console.log('🔄 Fetching team leader analytics from direct APIs for team:', user.managedTeam)
+      setLoading(true)
+      setError(null)
+      console.log('🔄 Fetching team leader analytics for:', user.managedTeam)
 
-      // Get analytics data with proper team leader filtering
-      const analyticsParams = new URLSearchParams({
-        endpoint: 'dashboard-stats',
-        user_role: userRole,
-        user_id: user.id,
-        managed_team: user.managedTeam || '',
-        date_range: dateRange === '30' ? 'month' : dateRange === '7' ? 'week' : dateRange === '90' ? 'quarter' : 'all'
+      // Dynamic base URL for localhost development
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '';
+
+      // Get dashboard stats with team leader filtering
+      const dashboardParams = new URLSearchParams({
+        userRole,
+        userId: user.id,
+        managedTeam: user.managedTeam || '',
+        dateRange
       })
 
-      const analyticsUrl = `/api/analytics-api.php?${analyticsParams.toString()}`
-      console.log('➡️ Calling analytics API:', analyticsUrl)
-      const analyticsResponse = await fetch(analyticsUrl, {
+      const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
+      console.log('➡️ Calling dashboard stats API:', dashboardUrl)
+      const dashboardResponse = await fetch(dashboardUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         cache: 'no-store',
         signal: AbortSignal.timeout(10000) // 10 second timeout
       })
-      if (!analyticsResponse.ok) {
-        throw new Error(`Analytics API failed: ${analyticsResponse.status}`)
-      }
 
-      const analyticsData = await analyticsResponse.json()
-      if (!analyticsData.success) {
-        throw new Error(`Analytics API error: ${analyticsData.error}`)
+      let dashboardData = { success: false, data: {} }
+      if (dashboardResponse.ok) {
+        dashboardData = await dashboardResponse.json()
+      } else {
+        console.warn('⚠️ Dashboard API response not OK:', dashboardResponse.status)
       }
 
       // Sequential call - wait to avoid resource issues
@@ -90,7 +202,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         dateRange
       })
 
-      const chartsUrl = `/api/charts?${chartsParams.toString()}`
+      const chartsUrl = `${baseUrl}/api/charts?${chartsParams.toString()}`
       console.log('➡️ Calling charts API:', chartsUrl)
       const chartsResponse = await fetch(chartsUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
@@ -116,7 +228,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         limit: '200' // Reduced from 1000 to prevent resource issues
       })
 
-      const dealsUrl = `/api/deals?${dealsParams.toString()}`
+      const dealsUrl = `${baseUrl}/api/deals?${dealsParams.toString()}`
       console.log('➡️ Calling deals API:', dealsUrl)
       const dealsResponse = await fetch(dealsUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
@@ -140,7 +252,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         limit: '200' // Reduced from 1000 to prevent resource issues
       })
 
-      const callbacksUrl = `/api/callbacks?${callbacksParams.toString()}`
+      const callbacksUrl = `${baseUrl}/api/callbacks?${callbacksParams.toString()}`
       console.log('➡️ Calling callbacks API:', callbacksUrl)
       const callbacksResponse = await fetch(callbacksUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
@@ -341,14 +453,14 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       }
     }
     
-    // Process service tier data from deals if not available from charts API
-    if (userRole === 'team_leader' && dealsData && Array.isArray(dealsData) && (!chartsData.serviceTier || chartsData.serviceTier.length === 0)) {
-      console.log('🔄 Processing service tier data from deals...');
+    // Always process service tier data from deals for team leaders to ensure data is available
+    if (userRole === 'team_leader' && dealsData && Array.isArray(dealsData)) {
+      console.log('🔄 Processing service tier data from team leader deals...');
       const serviceStats = new Map()
       
       dealsData.forEach((deal: any) => {
-        const serviceTier = deal.service_tier || deal.product_type || deal.service_type || 'Unknown'
-        const amount = Number(deal.amount_paid || 0)
+        const serviceTier = deal.service_tier || deal.serviceTier || deal.product_type || deal.service_type || 'Unknown'
+        const amount = Number(deal.amount_paid || deal.amountPaid || 0)
         
         if (!serviceStats.has(serviceTier)) {
           serviceStats.set(serviceTier, {
@@ -364,7 +476,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       })
       
       const serviceTierData = Array.from(serviceStats.values())
-      console.log('📊 Setting service tier data from deals:', serviceTierData)
+      console.log('📊 Team leader service tier data calculated:', serviceTierData)
       
       // Update chartsData with service tier data
       setChartsData((prev: any) => ({
@@ -425,21 +537,77 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     setLastUpdated(new Date())
   }
 
+  // Process salesman analytics data from direct API
+  const setAnalyticsFromSalesmanAPI = (analyticsResult: any) => {
+    console.log('🔄 Processing salesman analytics data:', analyticsResult)
+    
+    // Set dashboard stats
+    setDashboardStats(analyticsResult.dashboardStats || {})
+    
+    // Process deals data for service distribution
+    const dealsData = analyticsResult.dealsData || []
+    console.log('📊 Processing salesman deals for service distribution:', dealsData.length)
+    
+    // Calculate service distribution from deals
+    const serviceStats = new Map()
+    dealsData.forEach((deal: any) => {
+      const serviceTier = deal.service_tier || deal.serviceTier || deal.product_type || 'Unknown'
+      const amount = Number(deal.amount_paid || deal.amountPaid || 0)
+      
+      if (!serviceStats.has(serviceTier)) {
+        serviceStats.set(serviceTier, {
+          service: serviceTier,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      
+      const stats = serviceStats.get(serviceTier)
+      stats.revenue += amount
+      stats.deals += 1
+    })
+    
+    const serviceTierData = Array.from(serviceStats.values())
+    console.log('📊 Calculated service tier data for salesman:', serviceTierData)
+    
+    // Set charts data with calculated service distribution
+    setChartsData({
+      salesTrend: analyticsResult.chartsData?.salesTrend || [],
+      salesByAgent: analyticsResult.chartsData?.salesByAgent || [],
+      salesByTeam: analyticsResult.chartsData?.salesByTeam || [],
+      serviceTier: serviceTierData
+    })
+    
+    // Set analytics data
+    setAnalyticsData({
+      totalRevenue: dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0),
+      totalDeals: dealsData.length,
+      serviceDistribution: serviceTierData
+    })
+    
+    setLastUpdated(new Date())
+  }
+
   // Fetch data using unified analytics service
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      console.log('🔄 Fetching analytics data for team leader', {
+      console.log('🔄 Fetching analytics data for user', {
         userId: user.id,
         userRole,
         managedTeam: user.managedTeam,
         dateRange
       })
 
-      // Use direct API calls for team leader analytics
-      const analyticsResult = await fetchTeamLeaderAnalytics()
+      // Use appropriate API calls based on user role
+      let analyticsResult = null
+      if (userRole === 'salesman') {
+        analyticsResult = await fetchSalesmanAnalytics()
+      } else if (userRole === 'team_leader') {
+        analyticsResult = await fetchTeamLeaderAnalytics()
+      }
       
       if (!analyticsResult) {
         // Direct APIs failed, try fallback
@@ -461,8 +629,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       }
 
       if (analyticsResult) {
-        console.log('✅ Team leader analytics loaded successfully:', analyticsResult)
-        setAnalyticsFromDirectAPI(analyticsResult)
+        console.log('✅ Analytics loaded successfully for', userRole, ':', analyticsResult)
+        if (userRole === 'salesman') {
+          setAnalyticsFromSalesmanAPI(analyticsResult)
+        } else if (userRole === 'team_leader') {
+          setAnalyticsFromDirectAPI(analyticsResult)
+        }
       }
 
     } catch (err) {
@@ -516,8 +688,11 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       serviceTier: charts.serviceTier?.length || 0,
       salesByTeam: charts.salesByTeam?.length || 0,
       salesTrendSample: charts.salesTrend?.slice(0, 2),
-      salesByAgentSample: charts.salesByAgent?.slice(0, 2)
+      salesByAgentSample: charts.salesByAgent?.slice(0, 2),
+      serviceTierSample: charts.serviceTier?.slice(0, 2)
     })
+    
+    console.log('🎯 Service Performance for', userRole, ':', charts.serviceTier)
 
     return {
       totalRevenue: stats.total_revenue || overview.totalRevenue || 0,

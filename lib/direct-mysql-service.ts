@@ -4,7 +4,9 @@ import { requestManager } from './request-manager';
 class DirectMySQLService {
   // Force all requests through Next.js API on same origin so they show in Network tab
   // and avoid direct calls to external PHP host.
-  private baseUrl = `/api`;
+  private baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+    ? `http://localhost:3001/api` 
+    : `https://vmaxcom.org`;
 
   // Create a timeout signal that works across browsers
   private createTimeoutSignal(ms: number): AbortSignal | undefined {
@@ -31,7 +33,7 @@ class DirectMySQLService {
   async createNotification(notificationData: any): Promise<any> {
     try {
       console.log('🔄 DirectMySQLService: Creating notification via notifications API');
-      const response = await requestManager.fetch('/api/notifications', {
+      const response = await requestManager.fetch(`${this.baseUrl}/notifications`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -75,19 +77,27 @@ class DirectMySQLService {
       return data;
     } catch (error) {
       // Avoid error overlay spam; warn instead, and include endpoint for context
-      console.warn(`Direct MySQL ${endpoint} error:`, error);
       throw error;
     }
   }
 
   // Updated to use unified API to prevent connection issues
-  async getDeals(filters: Record<string, string> = {}): Promise<any> {
+  async getDeals(filters: Record<string, string> = {}, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<any> {
     try {
       console.log('🔄 DirectMySQLService: Fetching deals via Next.js deals API');
+      
+      // Build query parameters including user context for role-based filtering
       const queryParams = new URLSearchParams({
         limit: '1000',
         ...filters
       });
+      
+      // Add user context for role-based filtering
+      if (userContext?.userRole) queryParams.set('userRole', userContext.userRole);
+      if (userContext?.userId) queryParams.set('userId', userContext.userId);
+      if (userContext?.managedTeam) queryParams.set('managedTeam', userContext.managedTeam);
+      
+      console.log('🔒 Fetching deals with role context:', { userContext, filters });
       
       const response = await requestManager.fetch(`${this.baseUrl}/deals?${queryParams.toString()}`, {
         headers: {
@@ -98,7 +108,7 @@ class DirectMySQLService {
       });
 
       if (!response.ok) {
-        throw new Error(`Deals API responded with status: ${response.status}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result = await response.json();
@@ -121,7 +131,7 @@ class DirectMySQLService {
       });
       
       // Use direct fetch instead of requestManager to avoid caching issues
-      const response = await fetch(`/api/callbacks?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/callbacks?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -170,7 +180,7 @@ class DirectMySQLService {
         ...filters,
       });
       
-      const response = await fetch(`/api/notifications?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/notifications?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -207,7 +217,7 @@ class DirectMySQLService {
         ...filters
       });
 
-      const response = await fetch(`/api/users?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/users?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -235,7 +245,7 @@ class DirectMySQLService {
       console.log('🔄 DirectMySQLService: Fetching dashboard stats via Next.js analytics API');
 
       // Use Next.js analytics API instead of PHP
-      const response = await fetch('/api/analytics', {
+      const response = await fetch(`${this.baseUrl}/analytics`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -265,7 +275,7 @@ class DirectMySQLService {
       });
 
       // Use Next.js analytics API instead of PHP
-      const response = await fetch(`/api/analytics?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/analytics?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -289,7 +299,9 @@ class DirectMySQLService {
   async createDeal(dealData: any): Promise<any> {
     try {
       console.log('🔄 DirectMySQLService: Creating deal via deals API');
-      const response = await requestManager.fetch('/api/deals', {
+      console.log('🔍 Deal data being sent:', dealData);
+      
+      const response = await requestManager.fetch(`${this.baseUrl}/deals`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -309,12 +321,14 @@ class DirectMySQLService {
   async updateDeal(id: string, dealData: any): Promise<any> {
     try {
       console.log('🔄 DirectMySQLService: Updating deal via deals API');
-      const response = await requestManager.fetch(`/api/deals?id=${id}`, {
+      console.log('🔍 Deal data being sent:', dealData);
+      
+      const response = await requestManager.fetch(`${this.baseUrl}/deals?id=${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(dealData)
+        body: JSON.stringify({ id, ...dealData })
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -346,19 +360,37 @@ class DirectMySQLService {
     }
   }
 
-  async updateCallback(id: string, callbackData: any): Promise<any> {
+  async updateCallback(id: string, callbackData: any, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<any> {
     try {
       console.log('🔄 DirectMySQLService: Updating callback via callbacks API');
-      const response = await requestManager.fetch(`/api/callbacks?id=${id}`, {
+      
+      // Build query parameters for role-based permissions
+      const queryParams = new URLSearchParams();
+      if (userContext?.userRole) queryParams.set('userRole', userContext.userRole);
+      if (userContext?.userId) queryParams.set('userId', userContext.userId);
+      if (userContext?.managedTeam) queryParams.set('managedTeam', userContext.managedTeam);
+      
+      const queryString = queryParams.toString();
+      const url = `${this.baseUrl}/callbacks${queryString ? `?${queryString}` : ''}`;
+      
+      console.log('🔒 Update callback with role context:', { url, userContext, baseUrl: this.baseUrl });
+      
+      const response = await requestManager.fetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        // API currently requires ID in the JSON body
-        body: JSON.stringify({ id, ...callbackData })
+        // Include role information in body as well for API compatibility
+        body: JSON.stringify({ 
+          id, 
+          ...callbackData,
+          ...(userContext || {})
+        })
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('❌ Update callback failed:', { status: response.status, statusText: response.statusText, body: errorText });
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
       }
       return await response.json();
     } catch (error) {
@@ -372,7 +404,7 @@ class DirectMySQLService {
   async deleteDeal(id: string): Promise<any> {
     try {
       console.log('🔄 DirectMySQLService: Deleting deal via deals API');
-      const response = await requestManager.fetch(`/api/deals?id=${id}`, {
+      const response = await requestManager.fetch(`${this.baseUrl}/deals?id=${id}`, {
         method: 'DELETE'
       });
       
@@ -387,15 +419,28 @@ class DirectMySQLService {
     }
   }
 
-  async deleteCallback(id: string): Promise<any> {
+  async deleteCallback(id: string, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<any> {
     try {
       console.log('🔄 DirectMySQLService: Deleting callback via callbacks API');
-      const response = await requestManager.fetch(`/api/callbacks?id=${id}`, {
+      
+      // Build query parameters for role-based permissions
+      const queryParams = new URLSearchParams();
+      queryParams.set('id', id);
+      if (userContext?.userRole) queryParams.set('userRole', userContext.userRole);
+      if (userContext?.userId) queryParams.set('userId', userContext.userId);
+      if (userContext?.managedTeam) queryParams.set('managedTeam', userContext.managedTeam);
+      
+      const url = `${this.baseUrl}/callbacks?${queryParams.toString()}`;
+      console.log('🔒 Delete callback with role context:', { url, userContext, baseUrl: this.baseUrl });
+      
+      const response = await requestManager.fetch(url, {
         method: 'DELETE'
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('❌ Delete callback failed:', { status: response.status, statusText: response.statusText, body: errorText });
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
       }
       
       return await response.json();
@@ -406,5 +451,5 @@ class DirectMySQLService {
   }
 }
 
-export const directMySQLService = new DirectMySQLService();
+const directMySQLService = new DirectMySQLService();
 export default directMySQLService;

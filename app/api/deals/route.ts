@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const userRole = searchParams.get("userRole");
     const userId = searchParams.get("userId");
+    const managedTeam = searchParams.get("managedTeam");
     const search = searchParams.get("search");
     const monthParam = searchParams.get("month");
     const yearParam = searchParams.get("year");
@@ -46,33 +47,41 @@ export async function GET(request: NextRequest) {
 
     // Role-based filtering
     if (userRole === "salesman" && userId) {
-      where.push("`SalesAgentID` = ?");
+      where.push("d.`SalesAgentID` = ?");
       params.push(userId);
     } else if (userRole === "team_leader" && userId) {
-      const [userRows] = await query<any>("SELECT `managedTeam` FROM `users` WHERE `id` = ?", [userId]);
-      const managedTeam = userRows[0]?.managedTeam;
-      if (managedTeam) {
+      let teamToFilter = managedTeam;
+      
+      // If managedTeam not provided in params, query from database
+      if (!teamToFilter) {
+        const [userRows] = await query<any>("SELECT `managedTeam` FROM `users` WHERE `id` = ?", [userId]);
+        teamToFilter = userRows[0]?.managedTeam;
+      }
+      
+      if (teamToFilter) {
         // Team leaders: own deals OR managed team deals
-        where.push("(`SalesAgentID` = ? OR `sales_team` = ?)");
-        params.push(userId, managedTeam);
+        where.push("(d.`SalesAgentID` = ? OR d.`sales_team` = ?)");
+        params.push(userId, teamToFilter);
+        console.log('🔍 Team leader filtering:', { userId, teamToFilter });
       } else {
         // Fallback to personal deals only
-        where.push("`SalesAgentID` = ?");
+        where.push("d.`SalesAgentID` = ?");
         params.push(userId);
+        console.log('🔍 Team leader fallback to personal deals only:', { userId });
       }
     }
 
     // Optional filters
     if (salesAgentId) {
-      where.push("`SalesAgentID` = ?");
+      where.push("d.`SalesAgentID` = ?");
       params.push(salesAgentId);
     }
     if (salesTeam) {
-      where.push("`sales_team` = ?");
+      where.push("d.`sales_team` = ?");
       params.push(salesTeam);
     }
     if (status) {
-      where.push("`status` = ?");
+      where.push("d.`status` = ?");
       params.push(status);
     }
 
@@ -80,27 +89,40 @@ export async function GET(request: NextRequest) {
     const month = monthParam ? parseInt(monthParam, 10) : undefined;
     const year = yearParam ? parseInt(yearParam, 10) : undefined;
     if (month && year) {
-      where.push("((`data_month` = ? AND `data_year` = ?) OR (MONTH(`signup_date`) = ? AND YEAR(`signup_date`) = ?))");
+      where.push("((d.`data_month` = ? AND d.`data_year` = ?) OR (MONTH(d.`signup_date`) = ? AND YEAR(d.`signup_date`) = ?))");
       params.push(month, year, month, year);
     } else if (year && !month) {
       // Year-only filter
-      where.push("((`data_year` = ?) OR (YEAR(`signup_date`) = ?))");
+      where.push("((d.`data_year` = ?) OR (YEAR(d.`signup_date`) = ?))");
       params.push(year, year);
     }
     
     // Search functionality
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
-      where.push('(`customer_name` LIKE ? OR `phone_number` LIKE ? OR `email` LIKE ? OR `sales_agent_name` LIKE ? OR `closing_agent_name` LIKE ?)');
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      where.push('(d.`customer_name` LIKE ? OR d.`phone_number` LIKE ? OR d.`email` LIKE ? OR u1.`name` LIKE ? OR u1.`username` LIKE ? OR u2.`name` LIKE ?)');
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      console.log('🔍 Search applied:', { search: search.trim(), searchTerm });
     }
 
     const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    // Run queries
-    // Build the complete SQL query with proper parameter handling
-    const baseSql = `SELECT * FROM deals ${whereClause} ORDER BY created_at DESC`;
-    const countSql = `SELECT COUNT(*) as c FROM deals ${whereClause}`;
+    // Run queries with JOINs to get agent names
+    // Build the complete SQL query with proper parameter handling and JOINs
+    const baseSql = `
+      SELECT 
+        d.*,
+        COALESCE(u1.name, u1.username, d.sales_agent) as sales_agent_name,
+        u1.username as sales_agent_username,
+        COALESCE(u2.name, u2.username, d.closing_agent) as closing_agent_name,
+        u2.username as closing_agent_username
+      FROM deals d
+      LEFT JOIN users u1 ON d.SalesAgentID = u1.id
+      LEFT JOIN users u2 ON d.ClosingAgentID = u2.id
+      ${whereClause} 
+      ORDER BY d.created_at DESC
+    `;
+    const countSql = `SELECT COUNT(*) as c FROM deals d ${whereClause}`;
 
     // For pagination, we need to append LIMIT and OFFSET to the query string
     // since MySQL has issues with prepared statements for LIMIT/OFFSET
@@ -108,6 +130,7 @@ export async function GET(request: NextRequest) {
 
     console.log('📝 Executing deals query:', paginatedSql);
     console.log('📝 With params:', params);
+    console.log('📝 Request context:', { userRole, userId, managedTeam, search, page, limit });
 
     const [rows] = await query<any>(paginatedSql, params);
 
@@ -152,6 +175,10 @@ export async function POST(request: NextRequest) {
     const dealId = body.dealId || body.DealID || `D${Date.now()}`;
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
+    // Normalize customer name to ensure consistency
+    const customerName = body.customerName || body.customer_name || 'Unknown Customer';
+    console.log('🔍 Creating deal with customer name:', customerName);
+
     // Insert deal - Using correct column names and parameter count
     await query<any>(
       `INSERT INTO deals (
@@ -162,7 +189,7 @@ export async function POST(request: NextRequest) {
       [
         id,
         dealId,
-        body.customerName || body.customer_name || 'Unknown Customer',
+        customerName,
         body.email || '',
         body.phoneNumber || body.phone_number || '',
         body.amountPaid || body.amount_paid || 0,
@@ -270,8 +297,16 @@ export async function PUT(request: NextRequest) {
 
     Object.entries(updates).forEach(([key, value]) => {
       const dbField = fieldMap[key] || key;
-      setClauses.push(` ${dbField}  = ?`);
-      params.push(value);
+      
+      // Special handling for customer name to ensure consistency
+      if (key === 'customerName' || key === 'customer_name') {
+        console.log('🔍 Updating customer name:', value);
+        setClauses.push('`customer_name` = ?');
+        params.push(value);
+      } else {
+        setClauses.push(`\`${dbField}\` = ?`);
+        params.push(value);
+      }
     });
 
     setClauses.push("`updated_at` = ?");

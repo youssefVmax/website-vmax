@@ -1,4 +1,4 @@
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 import { SalesTarget } from './api-service';
 
 export interface TargetsService {

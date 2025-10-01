@@ -55,9 +55,9 @@ export default function ManagerDealsDashboard() {
   // Filter deals based on search and filters
   const filteredDeals = deals.filter(deal => {
     const matchesSearch = 
-      deal.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (deal.customer_name || deal.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       deal.dealId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      deal.salesAgentName.toLowerCase().includes(searchTerm.toLowerCase())
+      (deal.salesAgentName ).toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesTeam = teamFilter === "all" || deal.salesTeam === teamFilter
     const matchesService = serviceFilter === "all" || deal.serviceTier === serviceFilter
@@ -337,7 +337,7 @@ export default function ManagerDealsDashboard() {
                   {filteredDeals.map((deal) => (
                     <TableRow key={deal.dealId}>
                       <TableCell className="font-medium">{deal.dealId}</TableCell>
-                      <TableCell>{deal.customerName}</TableCell>
+                      <TableCell>{deal.customer_name || deal.customerName}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{deal.salesAgentName}</Badge>
                       </TableCell>
@@ -378,7 +378,7 @@ export default function ManagerDealsDashboard() {
                 <Card key={deal.dealId} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-medium">{deal.customerName}</h4>
+                      <h4 className="font-medium">{deal.customer_name || deal.customerName}</h4>
                       <Badge variant="outline">{deal.serviceTier}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground mb-2">ID: {deal.dealId}</p>

@@ -280,9 +280,9 @@ export default function EnhancedTeamLeaderDashboard({ user, userRole }: TeamLead
   )
 
   // Resolve the display name for the sales agent of a deal
-  const getAgentName = (deal: any): string => {
-    const explicit = deal.sales_agent_name || deal.sales_agent || deal.salesAgentName
-    if (explicit) return String(explicit)
+  const getAgentName = (deal: any) => {
+    const byName = deal.sales_agent_name || deal.salesAgentName || deal.sales_agent || deal.salesAgent
+    if (byName) return String(byName)
     const byCreator = deal.created_by || deal.createdByName
     if (byCreator) return String(byCreator)
     const id = deal.salesAgentId || deal.SalesAgentID || deal.createdById || deal.created_by_id
@@ -294,8 +294,8 @@ export default function EnhancedTeamLeaderDashboard({ user, userRole }: TeamLead
   const filterData = (items: any[], searchTerm: string, statusFilter: string) => {
     return items.filter(item => {
       const matchesSearch = !searchTerm || 
-        (item.customerName || item.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.salesAgentName || item.sales_agent || '').toLowerCase().includes(searchTerm.toLowerCase())
+        (item.customer_name || item.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.sales_agent_name || item.salesAgentName || item.sales_agent || '').toLowerCase().includes(searchTerm.toLowerCase())
       
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter
       
@@ -566,7 +566,7 @@ export default function EnhancedTeamLeaderDashboard({ user, userRole }: TeamLead
                   {teamDeals.slice(0, 5).map((deal: any, index: number) => (
                     <div key={deal.id || index} className="flex justify-between items-center p-2 border rounded">
                       <div>
-                        <div className="font-medium">{deal.customerName || deal.customer_name}</div>
+                        <div className="font-medium">{deal.customer_name || deal.customerName}</div>
                         <div className="text-sm text-muted-foreground">{deal.salesAgentName || deal.sales_agent}</div>
                       </div>
                       <div className="text-right">
@@ -595,7 +595,7 @@ export default function EnhancedTeamLeaderDashboard({ user, userRole }: TeamLead
                   {personalDeals.slice(0, 5).map((deal: any, index: number) => (
                     <div key={deal.id || index} className="flex justify-between items-center p-2 border rounded">
                       <div>
-                        <div className="font-medium">{deal.customerName || deal.customer_name}</div>
+                        <div className="font-medium">{deal.customer_name || deal.customerName}</div>
                         <div className="text-sm text-muted-foreground">Your deal</div>
                       </div>
                       <div className="text-right flex items-center gap-2">
@@ -837,7 +837,7 @@ export default function EnhancedTeamLeaderDashboard({ user, userRole }: TeamLead
                       {teamCallbacks.map((callback, index) => (
                         <TableRow key={callback.id || index}>
                           <TableCell className="font-medium">
-                            {callback.customerName || callback.customer_name}
+                            {callback.customer_name || callback.customerName}
                           </TableCell>
                           <TableCell>{callback.salesAgentName || callback.sales_agent || callback.created_by}</TableCell>
                           <TableCell>{callback.phoneNumber || callback.phone_number || callback.phone}</TableCell>
@@ -911,7 +911,7 @@ export default function EnhancedTeamLeaderDashboard({ user, userRole }: TeamLead
                     <TableBody>
                       {personalDeals.map((deal: any, index: number) => (
                         <TableRow key={deal.id || index}>
-                          <TableCell>{deal.customerName || deal.customer_name}</TableCell>
+                          <TableCell>{deal.customer_name || deal.customerName}</TableCell>
                           <TableCell>${(deal.amountPaid || 0).toLocaleString()}</TableCell>
                           <TableCell>
                             <Badge variant="outline">{deal.status}</Badge>
@@ -986,7 +986,7 @@ export default function EnhancedTeamLeaderDashboard({ user, userRole }: TeamLead
                       {personalCallbacks.map((callback: any, index: number) => (
                         <TableRow key={callback.id || index}>
                           <TableCell className="font-medium">
-                            {callback.customerName || callback.customer_name}
+                            {callback.customer_name || callback.customerName}
                           </TableCell>
                           <TableCell>{callback.phoneNumber || callback.phone_number || callback.phone}</TableCell>
                           <TableCell>

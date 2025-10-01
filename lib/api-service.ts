@@ -1,5 +1,5 @@
 // DIRECT MYSQL API SERVICE - BYPASSES ALL FAILING NEXT.JS ROUTES
-import { directMySQLService } from './direct-mysql-service';
+import directMySQLService from './direct-mysql-service';
 
 // Type definitions - Updated to match database schema
 export interface User {

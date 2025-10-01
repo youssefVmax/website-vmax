@@ -3,7 +3,7 @@ import { dealsService } from '@/lib/mysql-deals-service';
 import { callbacksService } from '@/lib/mysql-callbacks-service';
 import { targetsService } from '@/lib/mysql-targets-service';
 import { unifiedDataService } from '@/lib/unified-data-service';
-import { directMySQLService } from '@/lib/direct-mysql-service';
+import directMySQLService from '@/lib/direct-mysql-service';
 import { Deal, Callback, SalesTarget } from '@/lib/api-service';
 
 export interface SalesDataHookReturn {

@@ -73,6 +73,9 @@ export default function DealsTablePage() {
       if (user?.role === 'team_leader') {
         params.set('userRole', 'team_leader')
         params.set('userId', String(user.id))
+        if (user.managedTeam) {
+          params.set('managedTeam', user.managedTeam)
+        }
       } else if (user?.role === 'salesman') {
         params.set('userRole', 'salesman')
         params.set('userId', String(user.id))
@@ -103,8 +106,16 @@ export default function DealsTablePage() {
         }
       }
       
-      // Fetch from API
-      const response = await fetch(`/api/deals?${params.toString()}`, {
+      // Fetch from API - use localhost in development
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '';
+      const apiUrl = `${baseUrl}/api/deals?${params.toString()}`;
+      
+      console.log('🔍 DealsTable: Fetching deals from:', apiUrl);
+      console.log('🔍 DealsTable: Search params:', { search, statusFilterParam, stageFilterParam, teamFilterParam });
+      
+      const response = await fetch(apiUrl, {
         headers: {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache'
@@ -126,19 +137,19 @@ export default function DealsTablePage() {
         console.log('🔍 DealsTable: Sample deal data structure:', result.deals[0])
       }
       
-      // Normalize deals data
+      // Normalize deals data - prioritize database field customer_name
       const normalizedDeals = (result.deals || []).map((deal: any) => ({
         id: deal.id ?? `deal-${Math.random()}`,
-        customerName: deal.customerName ?? deal.customer_name ?? 'Unknown Customer',
+        customerName: deal.customer_name ?? deal.customerName ?? 'Unknown Customer',
         email: deal.email ?? '',
         phoneNumber: deal.phoneNumber ?? deal.phone_number ?? '',
         country: deal.country ?? '',
         amountPaid: deal.amountPaid ?? deal.amount_paid ?? 0,
         serviceTier: deal.serviceTier ?? deal.service_tier ?? 'Silver',
         salesAgentId: deal.salesAgentId ?? deal.SalesAgentID ?? deal.sales_agent_id ?? '',
-        salesAgentName: deal.salesAgentName ?? deal.sales_agent_name ?? deal.salesAgent ?? 'Unknown Agent',
+        salesAgentName: deal.sales_agent_name ?? deal.salesAgentName ?? deal.salesAgent ?? deal.sales_agent ?? 'Unknown Agent',
         closingAgentId: deal.closingAgentId ?? deal.closing_agent_id ?? deal.ClosingAgentID ?? '',
-        closingAgentName: deal.closingAgentName ?? deal.closing_agent_name ?? deal.closingAgent ?? '',
+        closingAgentName: deal.closing_agent_name ?? deal.closingAgentName ?? deal.closingAgent ?? deal.closing_agent ?? '',
         salesTeam: deal.salesTeam ?? deal.sales_team ?? 'Unknown Team',
         stage: deal.stage ?? 'prospect',
         status: deal.status ?? 'active',
