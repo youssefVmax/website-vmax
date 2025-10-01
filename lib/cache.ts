@@ -39,7 +39,7 @@ const updateStats = () => {
   let keySize = 0;
   let valueSize = 0;
   
-  keys.forEach(key => {
+  keys.forEach((key: string) => {
     keySize += Buffer.byteLength(JSON.stringify(key), 'utf8');
     const val = cache.get(key);
     if (val !== undefined) {
@@ -110,7 +110,7 @@ const cacheMiddleware = (ttl: number = DEFAULT_TTL) => {
 // Clear cache by key pattern
 const clearCacheByPattern = (pattern: string | RegExp): number => {
   const keys = cache.keys();
-  const matchedKeys = keys.filter(key => 
+  const matchedKeys = keys.filter((key: string) => 
     typeof pattern === 'string' 
       ? key.includes(pattern) 
       : pattern.test(key)

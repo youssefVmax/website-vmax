@@ -4,7 +4,7 @@
  */
 
 // Standardized role enum - this is the single source of truth
-export type UserRole = 'manager' | 'team_leader' | 'salesman';
+export type UserRole = 'manager' | 'team_leader' | 'salesman' 
 
 // Role constants for consistent usage
 export const USER_ROLES = {
@@ -18,6 +18,7 @@ export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   manager: 'Manager',
   team_leader: 'Team Leader',
   salesman: 'Salesman',
+
 };
 
 // Role permissions
@@ -58,7 +59,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewTeamData: false,
     canEditOwnData: true,
     canCreateNotifications: false,
-  },
+  }
 };
 
 // User interface

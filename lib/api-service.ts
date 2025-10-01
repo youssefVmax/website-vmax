@@ -200,7 +200,7 @@ class DirectApiService {
 
   private async handleAnalyticsRequest(endpoint: string, options: RequestInit): Promise<any> {
     try {
-      const url = new URL(`http://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
+      const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
       const params = url.searchParams;
       
       if (params.get('endpoint') === 'dashboard-stats') {
@@ -225,7 +225,7 @@ class DirectApiService {
       const filters: Record<string, string> = {};
       
       if (endpoint.includes('?')) {
-        const url = new URL(`http://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         url.searchParams.forEach((value, key) => {
           filters[key] = value;
         });
@@ -245,7 +245,7 @@ class DirectApiService {
 
   private async handleMySQLServiceRequest(endpoint: string, options: RequestInit): Promise<any> {
     try {
-      const url = new URL(`http://localhost:3000${endpoint}`);
+      const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
       const path = url.searchParams.get('path');
       const filters: Record<string, string> = {};
       
@@ -360,7 +360,7 @@ class DirectApiService {
     try {
       const filters: Record<string, string> = {};
       if (endpoint.includes('?')) {
-        const url = new URL(`http ://localhost:3000${endpoint}`);
+        const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
         url.searchParams.forEach((value, key) => {
           filters[key] = value;
         });

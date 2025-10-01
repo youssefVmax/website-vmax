@@ -145,12 +145,12 @@ export default function ManageCallbacksPage() {
         search: search.trim(),
         status: statusFilter === 'all' ? '' : statusFilter,
         // CRITICAL: provide role context so API applies correct filtering
-        userRole: user.role,
-        userId: user.id,
+        userRole: user?.role || '',
+        userId: user?.id || '',
       };
 
       // Optional hints for some views (backend primarily uses userRole/userId)
-      if (user.role === 'team_leader' && user.managedTeam) {
+      if (user?.role === 'team_leader' && user?.managedTeam) {
         params.team = user.managedTeam;
       }
 

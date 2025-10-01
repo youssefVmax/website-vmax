@@ -21,6 +21,8 @@ export interface Notification {
   // MySQL storage fields
   salesAgentId?: string
   salesAgent?: string
+  closingAgentId?: string
+  closingAgent?: string
   customerName?: string
   customerPhone?: string
   customerEmail?: string

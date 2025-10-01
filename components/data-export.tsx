@@ -149,18 +149,18 @@ export default function DataExportPage() {
                 <TableBody>
                   {deals.map((d, idx) => (
                     <TableRow key={d.id || idx}>
-                      <TableCell>{d.DealID || ""}</TableCell>
-                      <TableCell>{d.customer_name}</TableCell>
+                      <TableCell>{d.dealId || ""}</TableCell>
+                      <TableCell>{d.customerName}</TableCell>
                       <TableCell>{d.email}</TableCell>
-                      <TableCell>{d.phone_number}</TableCell>
-                      <TableCell>{d.service_tier}</TableCell>
-                      <TableCell>{d.amount_paid}</TableCell>
-                      <TableCell>{d.sales_agent}</TableCell>
-                      <TableCell>{d.closing_agent}</TableCell>
-                      <TableCell>{d.sales_team}</TableCell>
+                      <TableCell>{d.phoneNumber}</TableCell>
+                      <TableCell>{d.serviceTier}</TableCell>
+                      <TableCell>{d.amountPaid}</TableCell>
+                      <TableCell>{d.salesAgentName}</TableCell>
+                      <TableCell>{d.closingAgentName}</TableCell>
+                      <TableCell>{d.salesTeam}</TableCell>
                       <TableCell className="capitalize">{d.status}</TableCell>
                       <TableCell className="capitalize">{d.stage}</TableCell>
-                      <TableCell>{d.signup_date}</TableCell>
+                      <TableCell>{d.signupDate}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -194,14 +194,14 @@ export default function DataExportPage() {
                 <TableBody>
                   {callbacks.map((c, idx) => (
                     <TableRow key={c.id || idx}>
-                      <TableCell>{c.customer_name}</TableCell>
-                      <TableCell>{c.phone_number}</TableCell>
+                      <TableCell>{c.customerName}</TableCell>
+                      <TableCell>{c.phoneNumber}</TableCell>
                       <TableCell>{c.email}</TableCell>
-                      <TableCell>{c.sales_agent}</TableCell>
-                      <TableCell>{c.sales_team}</TableCell>
-                      <TableCell>{c.first_call_date}</TableCell>
-                      <TableCell>{c.first_call_time}</TableCell>
-                      <TableCell>{c.callback_reason}</TableCell>
+                      <TableCell>{c.salesAgentId}</TableCell>
+                      <TableCell>{c.salesTeam}</TableCell>
+                      <TableCell>{c.firstCallDate}</TableCell>
+                      <TableCell>{c.firstCallTime}</TableCell>
+                      <TableCell>{c.callbackReason}</TableCell>
                       <TableCell className="capitalize">{c.status}</TableCell>
                     </TableRow>
                   ))}

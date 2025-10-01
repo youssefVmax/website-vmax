@@ -6,6 +6,17 @@
 import { unifiedApiService } from './unified-api-service';
 import { unifiedAnalyticsService } from './unified-analytics-service';
 
+// Helper function to convert IntegrationConfig to UserContext
+function integrationConfigToUserContext(config: IntegrationConfig) {
+  return {
+    id: config.userId,
+    name: config.userName,
+    username: config.userName, // Use userName as username
+    role: config.userRole,
+    managedTeam: config.managedTeam
+  };
+}
+
 export interface IntegrationConfig {
   userRole: 'manager' | 'team_leader' | 'salesman';
   userId: string;
@@ -110,7 +121,7 @@ export class FrontendApiIntegration {
 
       if (needs.analytics) {
         promises.push(
-          this.getCachedData('analytics', () => unifiedAnalyticsService.getAnalytics(this.config!))
+          this.getCachedData('analytics', () => unifiedAnalyticsService.getAnalytics(integrationConfigToUserContext(this.config!)))
             .then(data => { result.analytics = data; })
             .catch(error => console.error('Error fetching analytics:', error))
         );
@@ -156,8 +167,8 @@ export class FrontendApiIntegration {
 
     try {
       const [kpis, chartData, deals, callbacks, notifications] = await Promise.all([
-        unifiedAnalyticsService.getQuickKPIs(this.config),
-        unifiedAnalyticsService.getChartData(this.config),
+        unifiedAnalyticsService.getQuickKPIs(integrationConfigToUserContext(this.config)),
+        unifiedAnalyticsService.getChartData(integrationConfigToUserContext(this.config)),
         unifiedApiService.getDeals({ ...this.buildFilters(), limit: '10' }),
         unifiedApiService.getCallbacks({ ...this.buildFilters(), limit: '10' }),
         unifiedApiService.getNotifications({ ...this.buildFilters(), limit: '5' })

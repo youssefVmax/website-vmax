@@ -71,7 +71,7 @@ function EnhancedAnalytics({ userRole, user }: EnhancedAnalyticsProps) {
 
     // Group by date
     const dailyData = filteredDeals.reduce((acc, deal) => {
-      const dealDate = new Date(deal.createdAt || deal.signupDate || deal.created_at);
+      const dealDate = new Date(deal.createdAt || deal.signupDate || deal.created_at || new Date());
       const dateStr = dealDate.toISOString().split('T')[0];
       
       if (!acc[dateStr]) {

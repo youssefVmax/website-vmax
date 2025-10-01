@@ -1,20 +1,19 @@
-import { Request, Response, NextFunction } from 'express';
-import { validationResult, ValidationChain } from 'express-validator';
+import { z } from 'zod';
 import { logger } from './logger';
 import { ApiResponseHandler } from './api-response';
 import { ApiError, BadRequestError, ValidationError } from './error-handler';
 
 type AsyncRequestHandler = (
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: any,
+  res: any,
+  next: any
 ) => Promise<any>;
 
 /**
  * Wraps an async route handler to catch any unhandled promise rejections
  */
 export const asyncHandler = (fn: AsyncRequestHandler) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: any, res: any, next: any) => {
     return Promise.resolve(fn(req, res, next)).catch(next);
   };
 };
@@ -22,31 +21,29 @@ export const asyncHandler = (fn: AsyncRequestHandler) => {
 /**
  * Validates request against validation rules and handles validation errors
  */
-export const validateRequest = (validations: ValidationChain[]) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+export const validateRequest = (schema: z.ZodSchema) => {
+  return async (req: any, res: any, next: any) => {
     try {
-      await Promise.all(validations.map(validation => validation.run(req)));
-      
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
+      const result = schema.parse(req.body);
+      req.validatedData = result;
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
         logger.warn('Request validation failed', { 
           path: req.path,
           method: req.method,
-          errors: errors.array() 
+          errors: error.errors 
         });
         
-        return ApiResponseHandler.sendValidationError(res, errors.array(), {
+        return ApiResponseHandler.sendValidationError(res, error.errors, {
           message: 'Validation failed',
           logInfo: {
             action: 'validation_failed',
             userId: (req as any).user?.id,
-            resourceId: req.params.id,
+            resourceId: req.params?.id,
           },
         });
       }
-      
-      next();
-    } catch (error) {
       next(error);
     }
   };
@@ -56,18 +53,18 @@ export const validateRequest = (validations: ValidationChain[]) => {
  * Handles controller actions with proper error handling and response formatting
  */
 export const apiAction = (
-  handler: (req: Request, res: Response, next: NextFunction) => Promise<any>,
+  handler: (req: any, res: any, next: any) => Promise<any>,
   options: {
     successMessage?: string;
     successStatus?: number;
     logInfo?: {
       action: string;
-      resourceId?: string | ((req: Request) => string);
-      metadata?: (req: Request) => any;
+      resourceId?: string | ((req: any) => string);
+      metadata?: (req: any) => any;
     };
   } = {}
 ) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: any, res: any, next: any) => {
     try {
       const result = await handler(req, res, next);
       
@@ -117,7 +114,7 @@ export const apiAction = (
 /**
  * Middleware to handle 404 Not Found errors
  */
-export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
+export const notFoundHandler = (req: any, res: any, next: any) => {
   const error = new ApiError(404, `Not Found - ${req.originalUrl}`);
   next(error);
 };
@@ -127,9 +124,9 @@ export const notFoundHandler = (req: Request, res: Response, next: NextFunction)
  */
 export const errorHandler = (
   err: Error | ApiError,
-  req: Request,
-  res: Response,
-  next: NextFunction
+  req: any,
+  res: any,
+  next: any
 ) => {
   // Log the error for debugging
   logger.error('API Error:', {
@@ -201,7 +198,7 @@ export const errorHandler = (
 /**
  * Middleware to ensure user is authenticated
  */
-export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+export const requireAuth = (req: any, res: any, next: any) => {
   if (!req.user) {
     return ApiResponseHandler.sendUnauthorized(res, 'Authentication required', {
       logInfo: {
@@ -220,7 +217,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
 export const requireRole = (roles: string | string[]) => {
   const requiredRoles = Array.isArray(roles) ? roles : [roles];
   
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: any, res: any, next: any) => {
     if (!req.user) {
       return ApiResponseHandler.sendUnauthorized(res, 'Authentication required', {
         logInfo: {
@@ -256,7 +253,7 @@ export const requireRole = (roles: string | string[]) => {
  * Middleware to parse pagination query parameters
  */
 export const pagination = (defaultLimit = 10, maxLimit = 100) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: any, res: any, next: any) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(
       maxLimit,

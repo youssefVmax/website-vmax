@@ -37,5 +37,5 @@ export default function CompleteApp() {
   }
 
   console.log('CompleteApp: Authenticated user found, rendering dashboard for:', user.name)
-  return <FullPageDashboard user={user} onLogout={handleLogout} />
+  return <FullPageDashboard />
 }

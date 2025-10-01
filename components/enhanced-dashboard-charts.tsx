@@ -43,7 +43,7 @@ export function EnhancedDashboardCharts({ userRole, user }: DashboardChartsProps
     lastUpdated,
     refresh
   } = useUnifiedData({
-    userRole: user.role || userRole,
+    userRole: userRole,
     userId: user.id,
     userName: user.full_name || user.name || user.username,
     managedTeam: user.managedTeam || user.team_name,

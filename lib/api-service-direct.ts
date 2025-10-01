@@ -149,7 +149,7 @@ class DirectApiService {
 
   private async handleNotificationsRequest(endpoint: string, options: RequestInit): Promise<any> {
     const filters: Record<string, string> = {};
-    const url = new URL(`http://vmaxcom.org/api/${endpoint}`);
+    const url = new URL(`https://vmaxcom.org/api/${endpoint}`);
     url.searchParams.forEach((value, key) => {
       filters[key] = value;
     });
@@ -158,7 +158,7 @@ class DirectApiService {
   }
 
   private async handleMySQLServiceRequest(endpoint: string, options: RequestInit): Promise<any> {
-    const url = new URL(`http://localhost:3000/api/${endpoint}`);
+    const url = new URL(`https://vmaxcom.org/api/${endpoint}`);
     const path = url.searchParams.get('path');
     const filters: Record<string, string> = {};
     
@@ -189,12 +189,12 @@ class DirectApiService {
       const dealData = JSON.parse(options.body as string);
       return await directMySQLService.createDeal(dealData);
     } else if (options.method === 'PUT') {
-      const url = new URL(`http://localhost:3000/api/${endpoint}`);
+      const url = new URL(`https://vmaxcom.org/api/${endpoint}`);
       const id = url.searchParams.get('id');
       const dealData = JSON.parse(options.body as string);
       return await directMySQLService.updateDeal(id!, dealData);
     } else if (options.method === 'DELETE') {
-      const url = new URL(`http://localhost:3000/api/${endpoint}`);
+      const url = new URL(`https://vmaxcom.org/api/${endpoint}`);
       const id = url.searchParams.get('id');
       return await directMySQLService.deleteDeal(id!);
     }
@@ -207,12 +207,12 @@ class DirectApiService {
       const callbackData = JSON.parse(options.body as string);
       return await directMySQLService.createCallback(callbackData);
     } else if (options.method === 'PUT') {
-      const url = new URL(`http://localhost:3000/api/${endpoint}`);
+      const url = new URL(`https://vmaxcom.org/api/${endpoint}`);
       const id = url.searchParams.get('id');
       const callbackData = JSON.parse(options.body as string);
       return await directMySQLService.updateCallback(id!, callbackData);
     } else if (options.method === 'DELETE') {
-      const url = new URL(`http://localhost:3000/api/${endpoint}`);
+      const url = new URL(`https://vmaxcom.org/api/${endpoint}`);
       const id = url.searchParams.get('id');
       return await directMySQLService.deleteCallback(id!);
     }
@@ -335,4 +335,4 @@ export const apiService = new DirectApiService();
 export default apiService;
 
 // Export types for compatibility
-export type { User, Deal, Callback, SalesTarget, Notification };
+// All types are exported as interfaces above

@@ -1,12 +1,12 @@
 import swaggerJsdoc from 'swagger-jsdoc';
-import swaggerUi from 'swagger-ui-express';
+import * as swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
 import path from 'path';
-import fs from 'fs';
+import { readFileSync } from 'fs';
 import { logger } from './logger';
 
 // Load package.json for version and other metadata
-const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
+const packageJson = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
 
 // Define common response schemas
 const commonSchemas = {

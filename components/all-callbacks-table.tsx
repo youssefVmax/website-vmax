@@ -476,9 +476,9 @@ export default function AllCallbacksTable() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getStatusBadgeVariant(cb.status)} className="gap-1">
-                        <span>{getStatusIcon(cb.status)}</span>
-                        {cb.status}
+                      <Badge variant={getStatusBadgeVariant(cb.status || 'pending')} className="gap-1">
+                        <span>{getStatusIcon(cb.status || 'pending')}</span>
+                        {cb.status || 'pending'}
                       </Badge>
                     </TableCell>
                     <TableCell>

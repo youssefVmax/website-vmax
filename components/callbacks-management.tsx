@@ -227,7 +227,7 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
     }
   };
 
-  if (loading) {
+  if (paginationState.isLoading && callbacks.length === 0) {
     return (
       <Card>
         <CardContent className="p-6">

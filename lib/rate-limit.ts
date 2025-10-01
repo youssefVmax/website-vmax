@@ -20,9 +20,9 @@ export const createRateLimiter = (options: RateLimitOptions = {}) => {
     windowMs = 15 * 60 * 1000, // 15 minutes
     max = 100, // limit each IP to 100 requests per windowMs
     message = 'Too many requests, please try again later.',
-    keyGenerator = (req) => req.ip, // default to IP-based limiting
+    keyGenerator = (req: Request) => req.ip || 'unknown', // default to IP-based limiting
     skip = () => false, // function to skip rate limiting
-    onLimitReached = (req, res, options) => {
+    onLimitReached = (req: Request, res: Response, options: any) => {
       logger.warn('Rate limit reached', {
         ip: req.ip,
         method: req.method,
@@ -39,17 +39,22 @@ export const createRateLimiter = (options: RateLimitOptions = {}) => {
     message,
     keyGenerator,
     skip,
-    onLimitReached,
-    handler: (req, res) => {
+    handler: (req: Request, res: Response) => {
+      // Log the rate limit event
+      logger.warn('Rate limit exceeded', {
+        ip: req.ip,
+        method: req.method,
+        path: req.path,
+        action: 'rate_limit_exceeded'
+      });
+
       return ApiResponseHandler.sendError(res, {
         statusCode: 429,
         errorCode: 'RATE_LIMIT_EXCEEDED',
         message: message,
         logInfo: {
           action: 'rate_limit_exceeded',
-          ip: req.ip,
-          method: req.method,
-          path: req.path,
+          error: new Error(`Rate limit exceeded for IP: ${req.ip}`),
         },
       });
     },
@@ -74,10 +79,10 @@ export const authRateLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5, // limit each IP to 5 requests per hour
   message: 'Too many login attempts, please try again after an hour',
-  keyGenerator: (req) => {
+  keyGenerator: (req: Request) => {
     // Use both IP and username for rate limiting auth endpoints
     const username = req.body.username || 'unknown';
-    return `${req.ip}:${username}`;
+    return `${req.ip || 'unknown'}:${username}`;
   },
 });
 
@@ -88,9 +93,9 @@ export const sensitiveOperationRateLimiter = createRateLimiter({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   max: 3, // limit each user to 3 requests per day
   message: 'Too many attempts, please try again tomorrow',
-  keyGenerator: (req) => {
+  keyGenerator: (req: Request) => {
     // Use user ID if authenticated, otherwise use IP
-    return (req as any).user?.id || req.ip;
+    return (req as any).user?.id || req.ip || 'unknown';
   },
 });
 
@@ -110,7 +115,7 @@ export const apiKeyRateLimiter = (apiKey: string, options: RateLimitOptions = {}
   return createRateLimiter({
     windowMs: 60 * 60 * 1000, // 1 hour
     max: 1000, // 1000 requests per hour per API key
-    keyGenerator: (req) => {
+    keyGenerator: (req: Request) => {
       // Extract API key from header, query param, or body
       const apiKey = 
         req.headers['x-api-key'] || 
@@ -118,7 +123,7 @@ export const apiKeyRateLimiter = (apiKey: string, options: RateLimitOptions = {}
         (req.body && req.body.api_key);
       return `api-key:${apiKey || 'unknown'}`;
     },
-    skip: (req) => {
+    skip: (req: Request) => {
       // Skip rate limiting for requests with a valid API key
       const reqApiKey = 
         req.headers['x-api-key'] || 
@@ -136,7 +141,7 @@ export const apiKeyRateLimiter = (apiKey: string, options: RateLimitOptions = {}
 export const adminRateLimiter = createRateLimiter({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 50, // limit to 50 requests per 5 minutes
-  skip: (req) => {
+  skip: (req: Request) => {
     // Skip rate limiting for admin users
     return !!(req as any).user?.isAdmin;
   },
@@ -149,14 +154,6 @@ export const publicEndpointRateLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 500, // limit each IP to 500 requests per hour
   message: 'Too many requests from this IP, please try again later',
-  onLimitReached: (req, res, options) => {
-    logger.warn('Public endpoint rate limit reached', {
-      ip: req.ip,
-      method: req.method,
-      path: req.path,
-      userAgent: req.get('user-agent'),
-    });
-  },
 });
 
 // Export rate limit store for distributed environments

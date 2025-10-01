@@ -84,15 +84,15 @@ export default function NotificationDetailsModal({
               amount: deal.amount || 0,
               sales_agent: deal.sales_agent || 'Unknown',
               closing_agent: deal.closing_agent || 'Unknown',
-              type_service: deal.type_service || 'Unknown',
-              product_type: deal.product_type || 'Unknown',
+              type_service: deal.serviceTier || deal.service_tier || (deal as any).type_service || 'Unknown',
+              product_type: (deal as any).type_program || (deal as any).product_type || 'Unknown',
               team: deal.team || 'Unknown',
               date: deal.date || new Date().toISOString(),
               duration_months: deal.duration_months || 0,
               status: deal.status || 'Active',
-              phone: deal.phone,
-              email: deal.email,
-              address: deal.address
+              phone: deal.phoneNumber || (deal as any).phone,
+              email: (deal as any).email,
+              address: (deal as any).address
             })
           }
         }

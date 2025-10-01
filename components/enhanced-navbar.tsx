@@ -147,7 +147,7 @@ export function EnhancedNavbar() {
 
         {/* Navigation Links */}
         <nav className="flex items-center space-x-6 mx-6">
-          {(user?.role === 'manager' ? managerNavItems : navItems).map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}

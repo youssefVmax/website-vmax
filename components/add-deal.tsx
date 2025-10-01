@@ -637,6 +637,8 @@ export function AddDealPage() {
                         />
                         <span className="text-sm font-medium text-gray-900 dark:text-gray-300">{service}</span>
                       </label>
+                    ))}
+                  </div>
                 </div>
               </div>
 

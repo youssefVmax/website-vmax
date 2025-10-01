@@ -85,8 +85,8 @@ export class TeamLeaderApiService {
 
   constructor() {
     this.baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://your-domain.com' 
-      : 'http://localhost:3000';
+      ? 'https://vmaxcom.org' 
+      : 'http://localhost:3001';
   }
 
   /**

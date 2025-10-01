@@ -96,7 +96,7 @@ export class DataCenterService {
     const isServer = typeof window === 'undefined';
     const isProd = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production';
     this.baseUrl = isServer
-      ? (envBase || (isProd ? 'https://vmaxcom.org' : 'http://localhost:3000'))
+      ? (envBase || (isProd ? 'https://vmaxcom.org' : 'http://localhost:3001'))
       : '';
   }
 

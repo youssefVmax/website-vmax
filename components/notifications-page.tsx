@@ -18,80 +18,43 @@ import type { DealDetails } from "./DealDetailsModal"
 import NotificationDetailsModal from "./notification-details-modal"
 import { useNotifications } from "@/hooks/use-notifications"
 import { useAuth } from "@/hooks/useAuth"
+import type { NotificationType, PriorityType, Notification } from "@/types/notification"
+import type { UserRole } from "@/types/user"
 
 // Safe timestamp conversion helper
 function safeToDate(timestamp: any): Date | null {
   if (!timestamp) return null;
-  
-  try {
-    // If it's already a Date object
-    if (timestamp instanceof Date) {
-      return timestamp;
-    }
-    
-    // If it's a Firestore timestamp with toDate method
-    if (timestamp && typeof timestamp.toDate === 'function') {
-      return timestamp.toDate();
-    }
-    
-    // If it's a Firestore timestamp with seconds property
-    if (timestamp && typeof timestamp === 'object' && typeof timestamp.seconds === 'number') {
-      return new Date(timestamp.seconds * 1000);
-    }
-    
-    // If it's a string, try to parse it
-    if (typeof timestamp === 'string') {
-      return new Date(timestamp);
-    }
-    
-    // If it's a number (milliseconds)
-    if (typeof timestamp === 'number') {
-      return new Date(timestamp);
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error converting timestamp:', error, timestamp);
-    return null;
+
+  // If it's already a Date object
+  if (timestamp instanceof Date) {
+    return timestamp;
   }
+
+  if (timestamp && typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
+  }
+
+  // If it's a Firestore timestamp with seconds property
+  if (timestamp && typeof timestamp === 'object' && typeof timestamp.seconds === 'number') {
+    return new Date(timestamp.seconds * 1000);
+  }
+
+  // If it's a string, try to parse it
+  if (typeof timestamp === 'string') {
+    return new Date(timestamp);
+  }
+
+  // If it's a number (milliseconds)
+  if (typeof timestamp === 'number') {
+    return new Date(timestamp);
+  }
+
+  return null;
 }
-
-type NotificationType = "info" | "warning" | "success" | "error" | "deal" | "message"
-type PriorityType = "low" | "medium" | "high"
-type UserRole = "manager" | "salesman" | "customer-service"
-
-interface Notification {
-  id: string
-  title: string
-  message: string
-  type: NotificationType
-  priority: PriorityType
-  from: string
-  fromAvatar?: string
-  to: string[]
-  timestamp: Date
-  read: boolean
-  dealId?: string
-  dealName?: string
-  dealStage?: string
-  dealValue?: number
-  salesAgent?: string
-  salesAgentId?: string
-  closingAgent?: string
-  closingAgentId?: string
-  isManagerMessage?: boolean
-  actionRequired?: boolean
-  isRead?: boolean
-  created_at?: any
-  dealDetails?: Partial<DealDetails> // For storing additional deal info
-}
-
 interface NotificationsPageProps {
   userRole: UserRole
   user?: { name: string; username: string } | null
 }
-
-
 export default function NotificationsPage({ userRole = 'salesman', user }: NotificationsPageProps) {
   const currentUser = user || { name: "Mohsen Sayed", username: "mohsen.sayed" }
   const { toast } = useToast()
@@ -110,10 +73,6 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     priority: "medium" as PriorityType,
   })
 
-  // Load notifications from hook on component mount
-  useEffect(() => {
-    setLoading(false) // Use notifications from hook instead
-  }, [notifications])
 
   const handleViewDetailsModal = (notification: any) => {
     setSelectedNotification(notification)
@@ -133,7 +92,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
       if (userRole === "manager") {
         // Managers see all deals
         // Optionally allow filtering by team or agent via UI in future
-      } else if (userRole === 'team_leader') {
+      } else if (userRole === "team_leader") {
         // Team leaders see deals for their team members or deals they made
         const managedTeam = (authUser as any)?.managedTeam || (authUser as any)?.team
         const isOwn = notification.salesAgentId === authUser?.id || notification.closingAgentId === authUser?.id
@@ -141,7 +100,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
         // If teamName is not present, fall back to recipients list containing TL id
         const isAddressed = Array.isArray(notification.to) && (notification.to.includes('all') || notification.to.includes(authUser?.id || ''))
         if (!(isOwn || isTeamDeal || isAddressed)) return false
-      } else {
+      } else if (userRole === "salesman" || userRole === "customer-service") {
         // Salesman: only deals where they are involved or addressed to them
         const isOwn = notification.salesAgentId === authUser?.id || notification.closingAgentId === authUser?.id
         const isAddressed = Array.isArray(notification.to) && (notification.to.includes('all') || notification.to.includes(authUser?.id || ''))
@@ -187,6 +146,7 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
     switch (type) {
       case 'deal': return <Briefcase className="h-4 w-4 text-blue-500" />
       case 'message': return <MessageSquare className="h-4 w-4 text-green-500" />
+      case 'callback': return <AlertCircle className="h-4 w-4 text-orange-500" />
       case 'success': return <CheckCircle className="h-4 w-4 text-green-500" />
       case 'warning': return <AlertCircle className="h-4 w-4 text-yellow-500" />
       case 'error': return <AlertCircle className="h-4 w-4 text-red-500" />
@@ -216,17 +176,17 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
         userRole: userRole
       }
 
-      const notificationId = await notificationService.addNotification(notificationData)
-      
+      const result = await apiService.createNotification(notificationData)
+
       // Add to local state for immediate UI update
       const newNotification: Notification = {
-        id: notificationId,
+        id: result.id,
         ...notificationData,
         timestamp: new Date(),
         read: false
       }
 
-      setNotifications(prev => [newNotification, ...prev])
+      // Since notifications are managed by useNotifications hook, we don't need to update local state
       setNewMessage({
         message: "",
         priority: "medium"

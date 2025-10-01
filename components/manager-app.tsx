@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import ManagerLogin from "@/components/manager-login"
+import ManagerLogin from "@/components/unified-login"
 import FullPageDashboard from "@/components/full-page-dashboard"
 import { MANAGER_USER } from "@/lib/auth"
 
@@ -28,10 +28,11 @@ export default function ManagerApp() {
     setLoading(false)
   }, [])
 
-  const handleLogin = (loggedInUser: any) => {
-    setUser(loggedInUser)
+  const handleLogin = () => {
+    // For manager app, we use the predefined manager user
+    setUser(MANAGER_USER)
     // Save to localStorage for persistence
-    localStorage.setItem('manager-user', JSON.stringify(loggedInUser))
+    localStorage.setItem('manager-user', JSON.stringify(MANAGER_USER))
   }
 
   const handleLogout = () => {
@@ -54,5 +55,5 @@ export default function ManagerApp() {
     return <ManagerLogin onLogin={handleLogin} />
   }
 
-  return <FullPageDashboard user={user} onLogout={handleLogout} />
+  return <FullPageDashboard />
 }
