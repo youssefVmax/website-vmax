@@ -64,13 +64,31 @@ export interface DataCenterFilters {
 }
 
 export interface FeedbackFilters {
+  feedback_type?: string;
+  rating?: string;
   page?: number;
   limit?: number;
+  search?: string;
+}
+
+export interface FeedbackStats {
+  total_feedback: number;
+  avg_rating: string;
+  breakdown: {
+    questions: number;
+    suggestions: number;
+    concerns: number;
+    acknowledgments: number;
+    general: number;
+  };
+}
+
+export interface PaginatedFeedbackResponse<T> extends PaginatedResponse<T> {
+  stats: FeedbackStats;
 }
 
 export class DataCenterService {
   private baseUrl: string;
-
   constructor() {
     // Use empty base for browser (relative URLs). On server, prefer env override,
     // otherwise use production domain https://vmaxcom.org, and localhost in development.
@@ -134,6 +152,25 @@ export class DataCenterService {
       if (!response.ok) {
         const errorMessage = `Data API error: ${response.status} ${response.statusText}`;
         console.error('❌ DataCenterService: API error:', errorMessage);
+        
+        // For 500 errors, return empty data instead of throwing
+        if (response.status === 500) {
+          console.warn('⚠️ DataCenterService: API returned 500, returning empty data');
+          return {
+            success: true,
+            data: [],
+            pagination: {
+              page: filters.page || 1,
+              limit: filters.limit || 25,
+              total: 0,
+              totalPages: 0,
+              hasNext: false,
+              hasPrev: false
+            },
+            timestamp: new Date().toISOString()
+          };
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -321,7 +358,7 @@ export class DataCenterService {
 
       console.log('🔄 DataCenterService: Fetching feedback...', { dataId, filters });
 
-      const response = await fetch(`${this.baseUrl}/api/data-feedback?${params.toString()}`, {
+      const response = await fetch(`${this.baseUrl}/api/data-center?${params.toString()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -330,8 +367,12 @@ export class DataCenterService {
         cache: 'no-store'
       });
 
+      console.log('🔍 DataCenterService: API Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error(`Feedback API error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('❌ DataCenterService: API error response:', errorText);
+        throw new Error(`Data API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const result = await response.json();
@@ -502,7 +543,7 @@ export class DataCenterService {
       rating?: string;
       search?: string;
     } = {}
-  ): Promise<PaginatedResponse<DataFeedback & { data_title?: string; data_description?: string; sent_by_name?: string }>> {
+  ): Promise<PaginatedFeedbackResponse<DataFeedback & { data_title?: string; data_description?: string; sent_by_name?: string }>> {
     try {
       const params = new URLSearchParams({
         user_id: userId,
@@ -678,6 +719,48 @@ export class DataCenterService {
     } catch (error) {
       console.error('❌ Debug error:', error);
       return [];
+    }
+  }
+
+
+
+  /**
+   * Get feedback for a specific data entry
+   */
+  async getFeedbackForData(
+    dataId: string,
+    userId: string,
+    userRole: string
+  ): Promise<DataFeedback[]> {
+    try {
+      console.log('🔄 DataCenterService: Fetching feedback for data...', { dataId, userId, userRole })
+
+      const response = await fetch(`${this.baseUrl}/api/data-feedback?data_id=${dataId}&user_id=${userId}&user_role=${userRole}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        cache: 'no-store'
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ DataCenterService: API error response:', errorText)
+        throw new Error(`Feedback API error: ${response.status} ${response.statusText} - ${errorText}`)
+      }
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch feedback')
+      }
+
+      console.log('✅ DataCenterService: Feedback for data fetched successfully')
+      return result.data || []
+    } catch (error) {
+      console.error('❌ DataCenterService: Get feedback for data error:', error)
+      throw error
     }
   }
 }

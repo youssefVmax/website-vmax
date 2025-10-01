@@ -211,3 +211,77 @@ export async function GET(request: NextRequest) {
     return addCorsHeaders(response);
   }
 }
+
+// Handle POST requests for creating new feedback
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { 
+      data_id,
+      user_id,
+      user_role,
+      feedback_text,
+      rating,
+      feedback_type
+    } = body;
+
+    console.log('🔄 Data Feedback API - POST:', body);
+
+    // All roles can submit feedback
+    if (!['manager', 'team_leader', 'salesman'].includes(user_role)) {
+      const response = NextResponse.json({
+        success: false,
+        error: 'Invalid user role'
+      }, { status: 403 });
+      return addCorsHeaders(response);
+    }
+
+    if (!data_id || !user_id || !feedback_text) {
+      const response = NextResponse.json({
+        success: false,
+        error: 'Missing required fields: data_id, user_id, feedback_text'
+      }, { status: 400 });
+      return addCorsHeaders(response);
+    }
+
+    // Generate unique ID
+    const feedbackId = `feedback_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const insertQuery = `
+      INSERT INTO data_feedback (
+        id, data_id, user_id, feedback_text, rating, 
+        feedback_type, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'active', NOW(), NOW())
+    `;
+
+    const params = [
+      feedbackId,
+      data_id,
+      user_id,
+      feedback_text,
+      rating || null,
+      feedback_type || 'general'
+    ];
+
+    console.log('🔄 Executing feedback insert:', insertQuery, params);
+
+    await query(insertQuery, params);
+
+    const response = NextResponse.json({
+      success: true,
+      message: 'Feedback submitted successfully',
+      feedback_id: feedbackId
+    });
+
+    return addCorsHeaders(response);
+
+  } catch (error) {
+    console.error('❌ Data Feedback POST Error:', error);
+    const response = NextResponse.json({
+      success: false,
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+    return addCorsHeaders(response);
+  }
+}

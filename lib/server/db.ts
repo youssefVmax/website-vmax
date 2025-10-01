@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 // Create connection pool for better performance and reliability
 const pool = mysql.createPool({
   host: "vmaxcom.org",
+  port: 3306,
   user: "youssef",
   password: "Vmaxllc#2004youssef",
   database: "vmax",

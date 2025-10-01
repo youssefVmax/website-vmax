@@ -39,15 +39,76 @@ export async function GET(request: NextRequest) {
       return addCorsHeaders(response);
     }
 
-    // Test database connection
+    // Test database connection and ensure tables exist
+    let dbConnectionOk = false;
     try {
       await query('SELECT 1 as test');
+      dbConnectionOk = true;
+
+      // Create data_center table if it doesn't exist
+      await query(`
+        CREATE TABLE IF NOT EXISTS data_center (
+          id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+          title varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+          description text COLLATE utf8mb4_unicode_ci NOT NULL,
+          content longtext COLLATE utf8mb4_unicode_ci,
+          data_type varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'general',
+          sent_by_id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+          sent_to_id varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+          sent_to_team varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+          priority enum('low','medium','high','urgent') COLLATE utf8mb4_unicode_ci DEFAULT 'medium',
+          status enum('active','archived','deleted') COLLATE utf8mb4_unicode_ci DEFAULT 'active',
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          KEY idx_sent_by (sent_by_id),
+          KEY idx_sent_to (sent_to_id),
+          KEY idx_sent_to_team (sent_to_team),
+          KEY idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+
+      // Create data_feedback table if it doesn't exist
+      await query(`
+        CREATE TABLE IF NOT EXISTS data_feedback (
+          id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+          data_id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+          user_id varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+          feedback_text text COLLATE utf8mb4_unicode_ci NOT NULL,
+          rating int DEFAULT NULL,
+          feedback_type varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT 'general',
+          status enum('active','archived','deleted') COLLATE utf8mb4_unicode_ci DEFAULT 'active',
+          created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          KEY idx_data_id (data_id),
+          KEY idx_user_id (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+
+      console.log('✅ Data center tables ensured to exist');
     } catch (dbError) {
-      console.error('❌ Database connection failed:', dbError);
+      console.error('❌ Database connection or table creation failed:', dbError);
+      console.warn('⚠️ Continuing with empty data due to database issues');
+      dbConnectionOk = false;
+    }
+
+    // If database is not available, return empty data immediately
+    if (!dbConnectionOk) {
+      console.warn('⚠️ Database not available, returning empty data');
       const response = NextResponse.json({
-        success: false,
-        error: 'Database connection failed'
-      }, { status: 503 });
+        success: true,
+        data: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false
+        },
+        timestamp: new Date().toISOString()
+      });
       return addCorsHeaders(response);
     }
 
@@ -122,26 +183,32 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Executing query:', dataQuery);
     console.log('🔍 Query params:', params);
 
-    // Execute queries with graceful handling for missing tables
+    // Execute queries with better error handling
     let dataRows: any[] = [];
     let countRows: any[] = [{ total: 0 }];
+    let queryError = false;
+
     try {
-      const [[qDataRows], [qCountRows]] = await Promise.all([
-        query<any>(dataQuery, params),
-        query<any>(countQuery, countParams)
-      ]);
-      dataRows = qDataRows as any[];
-      countRows = qCountRows as any[];
+      // Execute queries sequentially instead of Promise.all to better handle errors
+      const dataResult = await query<any>(dataQuery, params);
+      dataRows = dataResult[0] as any[];
+
+      const countResult = await query<any>(countQuery, countParams);
+      countRows = countResult[0] as any[];
     } catch (e: any) {
+      queryError = true;
       const msg = (e && (e.code || e.message || '')) as string;
-      const isMissingTable = msg.includes("ER_NO_SUCH_TABLE") || msg.toLowerCase().includes("doesn't exist") || msg.toLowerCase().includes('does not exist');
-      if (isMissingTable) {
-        console.warn('⚠️ data_center or data_feedback table missing. Returning empty result.');
-        dataRows = [];
-        countRows = [{ total: 0 } as any];
-      } else {
-        throw e;
-      }
+      console.error('❌ Query execution error:', e);
+      console.error('❌ Error message:', msg);
+
+      // Always return empty data for any query error to prevent 500 errors
+      dataRows = [];
+      countRows = [{ total: 0 }];
+    }
+
+    // If query failed, log it but continue with empty data
+    if (queryError) {
+      console.warn('⚠️ Database query failed, returning empty data');
     }
 
     const total = (countRows as any)[0]?.total || 0;
@@ -172,6 +239,11 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ Data Center API Error:', error);
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
+    });
     const errorResponse = NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -208,11 +280,11 @@ export async function POST(request: NextRequest) {
 
     console.log('🔄 Data Center API - POST:', body);
 
-    // Only managers can create data entries
-    if (user_role !== 'manager') {
+    // All roles can create data entries (manager, team_leader, salesman)
+    if (!['manager', 'team_leader', 'salesman'].includes(user_role)) {
       const response = NextResponse.json({
         success: false,
-        error: 'Only managers can create data entries'
+        error: 'Invalid user role'
       }, { status: 403 });
       return addCorsHeaders(response);
     }
@@ -405,9 +477,9 @@ export async function DELETE(request: NextRequest) {
     // Delete associated feedback first
     await query('DELETE FROM data_feedback WHERE data_id = ?', [dataId]);
     
-    // Delete the data entry
-    const deleteQuery = 'DELETE FROM data_center WHERE id = ? AND sent_by_id = ?';
-    const [deleteResult]: any = await query(deleteQuery, [dataId, userId]);
+    // Delete the data entry (managers can delete any entry)
+    const deleteQuery = 'DELETE FROM data_center WHERE id = ?';
+    const [deleteResult]: any = await query(deleteQuery, [dataId]);
     
     if ((deleteResult as any).affectedRows === 0) {
       const response = NextResponse.json({

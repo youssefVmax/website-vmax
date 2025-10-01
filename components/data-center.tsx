@@ -8,8 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
   Upload, Download, Database, FileText, Users, Trash2, Plus, X, 
   Send, MessageCircle, Star, Eye, Edit, Calendar, User, AlertCircle,
@@ -18,8 +17,8 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { apiService } from "@/lib/api-service"
 import { dataCenterService, DataCenterEntry, DataFeedback } from "@/lib/data-center-service"
-import { showInfo } from "@/lib/sweetalert"
 import { formatDisplayDate, sanitizeObject } from "@/lib/timestamp-utils"
+import { showInfo } from "@/lib/sweetalert"
 
 interface DataFile {
   id: string
@@ -41,7 +40,6 @@ interface NumberAssignment {
   status: 'assigned' | 'used' | 'available'
   dealId?: string
 }
-
 interface DataCenterProps {
   userRole: 'manager' | 'salesman' | 'team_leader'
   user: { name: string; username: string; id: string }
@@ -55,8 +53,30 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [uploadedFiles, setUploadedFiles] = useState<DataFile[]>([])
   const [numberAssignments, setNumberAssignments] = useState<NumberAssignment[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<any[]>([])
+  
+  // Data Center shared data states
+  const [dataEntries, setDataEntries] = useState<DataCenterEntry[]>([])
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createDataForm, setCreateDataForm] = useState({
+    title: '',
+    description: '',
+    content: '',
+    data_type: 'general',
+    sent_to_team: '',
+    sent_to_id: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent'
+  });
+
+  // Feedback state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [selectedDataId, setSelectedDataId] = useState<string>('');
+  const [feedbackForm, setFeedbackForm] = useState({
+    feedback_text: '',
+    rating: 5,
+    feedback_type: 'general'
+  })
 
   // Add error boundary for timestamp issues
   const [renderError, setRenderError] = useState<string | null>(null)
@@ -64,26 +84,36 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
   useEffect(() => {
     // Reset render error when data changes
     setRenderError(null)
-  }, [uploadedFiles, numberAssignments])
+  }, [uploadedFiles, numberAssignments, dataEntries])
 
-  // Load data files and assignments
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true)
-        // For now, initialize with empty arrays since we don't have data file APIs yet
-        setUploadedFiles([])
-        setNumberAssignments([])
-        setError(null)
-      } catch (err) {
-        console.error('Error loading data:', err)
-        setError('Failed to load data')
-      } finally {
-        setLoading(false)
-      }
+  // Load data files and assignments + Data Center entries
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Load shared data entries
+      const result = await dataCenterService.getDataEntries(user.id, userRole, {
+        page: 1,
+        limit: 50,
+        data_type: 'all'
+      })
+      setDataEntries(result.data || [])
+      
+      // For now, initialize with empty arrays since we don't have data file APIs yet
+      setUploadedFiles([])
+      setNumberAssignments([])
+    } catch (err) {
+      console.error('Error loading data:', err)
+      setError('Failed to load data')
+    } finally {
+      setLoading(false)
     }
+  }
+
+  useEffect(() => {
     loadData()
-  }, [])
+  }, [user.id, userRole])
 
   // Defensive: sanitize incoming arrays one more time before usage in JSX
   const sanitizedFiles = (uploadedFiles || []).map((f: any) => sanitizeObject(f))
@@ -98,8 +128,8 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     try { return JSON.stringify(val) } catch { return String(val) }
   }
 
-  // Role-based access control - salespeople can view their assigned data
-  const hasDataAccess = userRole === 'manager' || userRole === 'salesman';
+  // Role-based access control - salespeople and team leaders can view their assigned data
+  const hasDataAccess = userRole === 'manager' || userRole === 'salesman' || userRole === 'team_leader';
   
   if (!hasDataAccess) {
     return (
@@ -107,7 +137,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         <CardHeader>
           <CardTitle className="text-center text-red-600">Access Restricted</CardTitle>
           <CardDescription className="text-center">
-            Data Center access is limited to managers and sales team members.
+            Data Center access is limited to managers, team leaders, and sales team members.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -152,19 +182,140 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
           variant: "destructive"
         })
       } finally {
-        setUserLoading(false)
       }
     }
     loadUsers()
   }, [])
 
-  // Use the centralized timestamp formatting utility
-  const formatTimestamp = formatDisplayDate;
+  // Handle creating shared data entry
+  const handleCreateDataEntry = async () => {
+    if (!createDataForm.title.trim() || !createDataForm.description.trim()) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await dataCenterService.createDataEntry(user.id, userRole, createDataForm);
+      
+      toast({
+        title: "Success",
+        description: "Data shared successfully",
+      });
+
+      // Reset form and close modal
+      setCreateDataForm({
+        title: '',
+        description: '',
+        content: '',
+        data_type: 'general',
+        sent_to_team: '',
+        sent_to_id: '',
+        priority: 'medium'
+      });
+      setShowCreateModal(false);
+
+      // Reload data
+      loadData();
+    } catch (error) {
+      console.error('Error creating data entry:', error);
+      toast({
+        title: "Error",
+        description: "Failed to share data",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle deleting data entry (manager only)
+  const handleDeleteDataEntry = async (dataId: string) => {
+    if (!isManager) {
+      toast({
+        title: "Access Denied",
+        description: "Only managers can delete shared data.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      await dataCenterService.deleteDataEntry(dataId, user.id, userRole)
+      
+      toast({
+        title: "Data Deleted",
+        description: "The shared data has been removed."
+      })
+      
+      // Reload data
+      const result = await dataCenterService.getDataEntries(user.id, userRole, {
+        data_type: 'all',
+        limit: 50
+      })
+      setDataEntries(result.data || [])
+      
+    } catch (error) {
+      console.error('Error deleting data entry:', error)
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete data. Please try again.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Handle feedback submission
+  const handleSubmitFeedback = async () => {
+    if (!feedbackForm.feedback_text.trim()) {
+      toast({
+        title: "Missing Feedback",
+        description: "Please provide your feedback text.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      await dataCenterService.submitFeedback(
+        selectedDataId,
+        user.id,
+        userRole,
+        {
+          feedback_text: feedbackForm.feedback_text,
+          rating: feedbackForm.rating,
+          feedback_type: feedbackForm.feedback_type
+        }
+      )
+      
+      toast({
+        title: "Feedback Submitted",
+        description: "Thank you for your feedback!"
+      })
+      
+      // Reset form
+      setFeedbackForm({
+        feedback_text: '',
+        rating: 5,
+        feedback_type: 'general'
+      })
+      setShowFeedbackModal(false)
+      setSelectedDataId('')
+      
+    } catch (error) {
+      console.error('Error submitting feedback:', error)
+      toast({
+        title: "Submission Failed",
+        description: "Failed to submit feedback. Please try again.",
+        variant: "destructive"
+      })
+    }
+  }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     if (!isManager) {
       toast({
         title: "Access Denied",
@@ -418,7 +569,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     return false;
   })
 
-  // Show error state if Firebase connection fails or render error occurs
+  // Show error state if connection fails or render error occurs
   if (error || renderError) {
     return (
       <Card className="w-full max-w-2xl mx-auto mt-8">
@@ -427,7 +578,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
             {renderError ? 'Render Error' : 'Connection Error'}
           </CardTitle>
           <CardDescription className="text-center">
-            {renderError || `Failed to connect to Firebase: ${error}`}
+            {renderError || `Failed to connect to database: ${error}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center">
@@ -553,6 +704,188 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         </div>
       )}
 
+      {/* Create Data Modal */}
+      {showCreateModal && (
+        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Share Data</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  value={createDataForm.title}
+                  onChange={(e) => setCreateDataForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Enter title..."
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={createDataForm.description}
+                  onChange={(e) => setCreateDataForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Enter description..."
+                  rows={3}
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="content">Content (Optional)</Label>
+                <Textarea
+                  id="content"
+                  value={createDataForm.content}
+                  onChange={(e) => setCreateDataForm(prev => ({ ...prev, content: e.target.value }))}
+                  placeholder="Enter detailed content..."
+                  rows={4}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Data Type</Label>
+                  <Select value={createDataForm.data_type} onValueChange={(value) => setCreateDataForm(prev => ({ ...prev, data_type: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="announcement">Announcement</SelectItem>
+                      <SelectItem value="training">Training</SelectItem>
+                      <SelectItem value="policy">Policy</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Priority</Label>
+                  <Select value={createDataForm.priority} onValueChange={(value: 'low' | 'medium' | 'high' | 'urgent') => setCreateDataForm(prev => ({ ...prev, priority: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label>Share with Team</Label>
+                <Select value={createDataForm.sent_to_team} onValueChange={(value) => setCreateDataForm(prev => ({ ...prev, sent_to_team: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select team (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
+                    <SelectItem value="CS TEAM">CS TEAM</SelectItem>
+                    <SelectItem value="Sales Team">Sales Team</SelectItem>
+                    <SelectItem value="Management">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Share with Individual</Label>
+                <Select value={createDataForm.sent_to_id} onValueChange={(value) => setCreateDataForm(prev => ({ ...prev, sent_to_id: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select user (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.name} ({user.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateDataEntry}>
+                  Share Data
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <Dialog open={showFeedbackModal} onOpenChange={setShowFeedbackModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Submit Feedback</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="feedback_text">Your Feedback</Label>
+                <Textarea
+                  id="feedback_text"
+                  value={feedbackForm.feedback_text}
+                  onChange={(e) => setFeedbackForm(prev => ({ ...prev, feedback_text: e.target.value }))}
+                  placeholder="Share your thoughts, questions, or suggestions..."
+                  rows={4}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Feedback Type</Label>
+                  <Select value={feedbackForm.feedback_type} onValueChange={(value) => setFeedbackForm(prev => ({ ...prev, feedback_type: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="question">Question</SelectItem>
+                      <SelectItem value="suggestion">Suggestion</SelectItem>
+                      <SelectItem value="concern">Concern</SelectItem>
+                      <SelectItem value="acknowledgment">Acknowledgment</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Rating (1-5)</Label>
+                  <Select value={feedbackForm.rating.toString()} onValueChange={(value) => setFeedbackForm(prev => ({ ...prev, rating: parseInt(value) }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 - Poor</SelectItem>
+                      <SelectItem value="2">2 - Fair</SelectItem>
+                      <SelectItem value="3">3 - Good</SelectItem>
+                      <SelectItem value="4">4 - Very Good</SelectItem>
+                      <SelectItem value="5">5 - Excellent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setShowFeedbackModal(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmitFeedback}>
+                  Submit Feedback
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
@@ -566,25 +899,136 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               : 'Access your assigned data and download resources'}
           </p>
         </div>
-        {isManager && (
-          <div className="flex gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
-            />
+        <div className="flex gap-2">
+          {isManager && (
+            <>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".csv,.xlsx,.xls"
+                className="hidden"
+              />
+              <Button 
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload File
+              </Button>
+            </>
+          )}
+          <Button 
+            onClick={() => setShowCreateModal(true)}
+            className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Share Data
+          </Button>
+          {isManager && (
             <Button 
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+              onClick={() => {
+                // Navigate to feedback management or show feedback modal
+                window.open('/feedback-management', '_blank')
+              }}
+              variant="outline"
+              className="border-purple-200 text-purple-700 hover:bg-purple-50"
             >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload File
+              <Eye className="h-4 w-4 mr-2" />
+              View All Feedback
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Shared Data Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <MessageCircle className="h-5 w-5 mr-2" />
+            Shared Data ({dataEntries.length})
+          </CardTitle>
+          <CardDescription>
+            {isManager ? 'Manage shared data and communications' : 'View data shared with you'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {dataEntries.length === 0 ? (
+            <div className="text-center py-8">
+              <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium">No Shared Data</h3>
+              <p className="text-sm text-muted-foreground">
+                {isManager ? 'Start sharing data with your team members.' : 'No data has been shared with you yet.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {dataEntries.map((entry) => (
+                <Card key={entry.id} className="border-l-4 border-l-blue-500">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <h4 className="font-semibold text-lg">{entry.title}</h4>
+                          <Badge className={`${
+                            entry.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                            entry.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                            entry.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {entry.priority}
+                          </Badge>
+                        </div>
+                        <p className="text-muted-foreground mb-3">{entry.description}</p>
+                        {entry.content && (
+                          <div className="bg-muted/50 p-3 rounded-md mb-3">
+                            <p className="text-sm">{entry.content}</p>
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+                          <span>Type: {entry.data_type}</span>
+                          <span>•</span>
+                          <span>Created: {safeDisplay(formatDisplayDate(entry.created_at))}</span>
+                          {entry.sent_to_team && (
+                            <>
+                              <span>•</span>
+                              <span>Team: {entry.sent_to_team}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedDataId(entry.id)
+                            setShowFeedbackModal(true)
+                          }}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <MessageCircle className="h-4 w-4 mr-1" />
+                          Feedback
+                        </Button>
+                        {isManager && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDeleteDataEntry(entry.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* File Management */}
       <Card>
@@ -612,7 +1056,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                         <span>•</span>
                         <span>{safeDisplay(file.recordCount?.toLocaleString?.() ?? file.recordCount)}</span>
                         <span>•</span>
-                        <span>Uploaded {safeDisplay(formatTimestamp(file.uploadDate))}</span>
+                        <span>Uploaded {safeDisplay(formatDisplayDate(file.uploadDate))}</span>
                       </div>
                       <div className="flex items-center space-x-2 mt-1">
                         <Badge className={getStatusColor(file.status)}>
@@ -686,7 +1130,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Uploaded:</span>
-                                  <p className="font-medium">{safeDisplay(formatTimestamp(file.uploadDate))}</p>
+                                  <p className="font-medium">{safeDisplay(formatDisplayDate(file.uploadDate))}</p>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Status:</span>
@@ -809,7 +1253,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                             {safeDisplay(assignment.numbers.length)} numbers assigned to {safeDisplay(assignment.assignedTo)}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Assigned by {safeDisplay(assignment.assignedBy)} on {safeDisplay(formatTimestamp(assignment.assignDate))}
+                            Assigned by {safeDisplay(assignment.assignedBy)} on {safeDisplay(formatDisplayDate(assignment.assignDate))}
                           </p>
                         </div>
                       </div>
@@ -1027,11 +1471,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
           </CardContent>
         </Card>
       )}
-        </div>
+      </div>
       </>
     )
-  } catch (renderErr: any) {
-    console.error('Data Center render error:', renderErr);
+  } catch (renderError: any) {
+    console.error('Data Center render error:', renderError);
     setRenderError('Failed to render data. This may be due to timestamp serialization issues.');
     return (
       <Card className="w-full max-w-2xl mx-auto mt-8">

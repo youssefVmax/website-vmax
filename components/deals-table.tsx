@@ -121,6 +121,11 @@ export default function DealsTablePage() {
         throw new Error(result.error || 'Failed to fetch deals')
       }
       
+      // Debug: Log the first deal to see the data structure
+      if (result.deals && result.deals.length > 0) {
+        console.log('🔍 DealsTable: Sample deal data structure:', result.deals[0])
+      }
+      
       // Normalize deals data
       const normalizedDeals = (result.deals || []).map((deal: any) => ({
         id: deal.id ?? `deal-${Math.random()}`,
@@ -130,23 +135,33 @@ export default function DealsTablePage() {
         country: deal.country ?? '',
         amountPaid: deal.amountPaid ?? deal.amount_paid ?? 0,
         serviceTier: deal.serviceTier ?? deal.service_tier ?? 'Silver',
-        salesAgentId: deal.salesAgentId ?? deal.SalesAgentID ?? '',
-        salesAgentName: deal.salesAgentName ?? deal.sales_agent_name ?? 'Unknown Agent',
-        closingAgentId: deal.closingAgentId ?? deal.closing_agent_id ?? '',
-        closingAgentName: deal.closingAgentName ?? deal.closing_agent_name ?? '',
+        salesAgentId: deal.salesAgentId ?? deal.SalesAgentID ?? deal.sales_agent_id ?? '',
+        salesAgentName: deal.salesAgentName ?? deal.sales_agent_name ?? deal.salesAgent ?? 'Unknown Agent',
+        closingAgentId: deal.closingAgentId ?? deal.closing_agent_id ?? deal.ClosingAgentID ?? '',
+        closingAgentName: deal.closingAgentName ?? deal.closing_agent_name ?? deal.closingAgent ?? '',
         salesTeam: deal.salesTeam ?? deal.sales_team ?? 'Unknown Team',
         stage: deal.stage ?? 'prospect',
         status: deal.status ?? 'active',
         priority: deal.priority ?? 'medium',
         signupDate: deal.signupDate ?? deal.signup_date ?? '',
-        durationYears: deal.durationYears ?? deal.duration_years ?? 1,
-        durationMonths: deal.durationMonths ?? deal.duration_months ?? 12,
+        durationYears: deal.durationYears ?? deal.duration_years ?? deal.DurationYears ?? 1,
+        durationMonths: deal.durationMonths ?? deal.duration_months ?? deal.DurationMonths ?? 12,
         numberOfUsers: deal.numberOfUsers ?? deal.number_of_users ?? 1,
         notes: deal.notes ?? '',
         createdBy: deal.createdBy ?? deal.created_by ?? '',
         createdAt: deal.createdAt ?? deal.created_at ?? '',
         updatedAt: deal.updatedAt ?? deal.updated_at ?? '',
       }))
+      
+      // Debug: Log the first normalized deal to see what we're displaying
+      if (normalizedDeals.length > 0) {
+        console.log('🔍 DealsTable: Sample normalized deal:', {
+          salesAgentName: normalizedDeals[0].salesAgentName,
+          closingAgentName: normalizedDeals[0].closingAgentName,
+          durationMonths: normalizedDeals[0].durationMonths,
+          durationYears: normalizedDeals[0].durationYears
+        })
+      }
       
       setDeals(normalizedDeals)
       setTotalDeals(result.total || 0)

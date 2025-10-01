@@ -152,11 +152,11 @@ export async function POST(request: NextRequest) {
     const dealId = body.dealId || body.DealID || `D${Date.now()}`;
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-    // Insert deal - Only essential columns first to test
+    // Insert deal - Using correct column names and parameter count
     await query<any>(
       `INSERT INTO deals (
         id, DealID, customer_name, email, phone_number, amount_paid, 
-        SalesAgentID, sales_agent, sales_team, ClosingAgentID, closing_agent,
+        sales_agent, SalesAgentID, sales_team, closing_agent, ClosingAgentID,
         stage, status, priority, signup_date, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -166,11 +166,11 @@ export async function POST(request: NextRequest) {
         body.email || '',
         body.phoneNumber || body.phone_number || '',
         body.amountPaid || body.amount_paid || 0,
-        body.salesAgentId || body.SalesAgentID || '',
         body.salesAgentName || body.sales_agent || 'Unknown Agent',
+        body.salesAgentId || body.SalesAgentID || '',
         body.salesTeam || body.sales_team || '',
-        body.closingAgentId || body.ClosingAgentID || '',
         body.closingAgent || body.closing_agent || 'Unknown Agent',
+        body.closingAgentId || body.ClosingAgentID || '',
         body.stage || "prospect",
         body.status || "active",
         body.priority || "medium",

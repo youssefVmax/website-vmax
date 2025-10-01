@@ -42,6 +42,7 @@ export function FeedbackManagementTable({
   
   // State management
   const [feedback, setFeedback] = useState<DataFeedback[]>([])
+  const [stats, setStats] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editingFeedback, setEditingFeedback] = useState<DataFeedback | null>(null)
@@ -75,8 +76,22 @@ export function FeedbackManagementTable({
     try {
       setLoading(true)
       setError(null)
+      
+      // Import the data center service
+      const { dataCenterService } = await import('@/lib/data-center-service')
+      
       // Managers: show all feedback across data entries
       if (showAllFeedback) {
+        const result = await dataCenterService.getAllFeedback(user.id, userRole, {
+          page: currentPage,
+          limit: itemsPerPage,
+          feedback_type: filterType !== 'all' ? filterType : undefined,
+          search: searchTerm || undefined
+        })
+        
+        setFeedback(result.data || [])
+        setStats(result.stats || {})
+      } else {
         const result = await dataCenterService.getAllFeedback(user.id, userRole, { limit: 100 })
         // result.data already in DataFeedback shape
         setFeedback(result.data)
