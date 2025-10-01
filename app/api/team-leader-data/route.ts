@@ -171,12 +171,13 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Query params:', params);
 
     // Execute queries
-    const [data, countResult] = await Promise.all([
+    const [dataResult, countResult] = await Promise.all([
       query<any>(fullQuery, params),
       query<any>(fullCountQuery, countParams)
     ]);
 
-    const total = countResult[0]?.total || 0;
+    const data = dataResult[0] || [];
+    const total = countResult[0][0]?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
     // Format the data based on type
