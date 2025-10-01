@@ -82,6 +82,7 @@
     "swagger-ui-express": "^5.0.1",
     "sweetalert2": "^11.15.1",
     "tailwind-merge": "^2.5.5",
+    "tailwindcss-animate": "^1.0.7",
     "vaul": "latest",
     "winston": "^3.15.0",
     "winston-daily-rotate-file": "^5.0.0",

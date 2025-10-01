@@ -289,7 +289,7 @@ export default function EditableDataTable({
               <SelectValue placeholder={`Select ${column.label}`} />
             </SelectTrigger>
             <SelectContent>
-              {column.options?.map((option) => (
+              {column.options?.map((option: any) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -348,7 +348,7 @@ export default function EditableDataTable({
 
   const renderCellValue = (column: any, value: any) => {
     if (column.type === 'select' && column.options) {
-      const option = column.options.find(opt => opt.value === value)
+      const option = column.options.find((opt: any) => opt.value === value)
       return option ? option.label : value
     }
     
@@ -410,7 +410,7 @@ export default function EditableDataTable({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">All {filter.label}</SelectItem>
-                    {filter.options?.map((option) => (
+                    {filter.options?.map((option: any) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
