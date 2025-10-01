@@ -264,13 +264,16 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
         }
       }
 
-      // Direct API call to MySQL
-      const response = await fetch(`/api/users?id=${editingUser.id}`, {
+      // Direct API call to MySQL - include ID in the body as required by the API
+      const response = await fetch(`/api/users`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          id: editingUser.id,
+          ...formData
+        })
       })
 
       if (!response.ok) {

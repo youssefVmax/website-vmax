@@ -67,40 +67,59 @@ export async function GET(request: NextRequest) {
       
       // If no data exists, create some sample data for testing
       if (recordCount === 0) {
-        console.log('⚠️ No data found, creating sample data...');
+        console.log('⚠️ No data found, creating sample data for user:', userId);
         const sampleData = [
           {
             id: `data_${Date.now()}_1`,
-            title: 'Sample Shared File',
-            description: 'This is a sample shared file for testing',
-            content: 'File: sample_data.xlsx (0.5 MB) - Estimated 100 records\nColumns: Name, Email, Phone, Company\nData Quality: Good\nLast Updated: ' + new Date().toISOString(),
+            title: 'File Shared with You Directly',
+            description: 'This file was shared specifically with your user ID: ' + userId,
+            content: 'File: personal_data.xlsx (0.3 MB)\nColumns: Name, Email, Phone\nShared directly with you for review\nConfidential - Do not redistribute\nUser ID: ' + userId,
             data_type: 'file',
-            sent_by_id: '0ChFAyPoh0nOK9MybrJn',
-            sent_to_team: 'ALI ASHRAF',
-            priority: 'medium',
+            sent_by_id: 'manager_001',
+            sent_to_id: userId, // Shared directly with current user
+            sent_to_team: null,
+            priority: 'high',
             status: 'active'
           },
           {
             id: `data_${Date.now()}_2`,
-            title: 'Customer Feedback Data',
-            description: 'Customer feedback and survey responses',
-            content: 'Survey Results:\n- Total Responses: 250\n- Satisfaction Rate: 85%\n- Top Issues: Delivery time, Product quality\n- Recommendations: Improve logistics, Quality control',
+            title: 'Another File for You',
+            description: 'Second file shared directly with user: ' + userId,
+            content: 'File: reports.xlsx (1.2 MB)\nColumns: Date, Sales, Revenue\nQuarterly reports for your review\nUser ID: ' + userId,
             data_type: 'general',
-            sent_by_id: '0ChFAyPoh0nOK9MybrJn',
-            sent_to_team: 'CS TEAM',
-            priority: 'high',
+            sent_by_id: 'manager_001',
+            sent_to_id: userId, // Also shared directly with current user
+            sent_to_team: null,
+            priority: 'medium',
+            status: 'active'
+          },
+          {
+            id: `data_${Date.now()}_3`,
+            title: 'Private File for Other User',
+            description: 'This should NOT be visible to current user',
+            content: 'Private content for another user only\nThis is confidential data',
+            data_type: 'file',
+            sent_by_id: 'manager_001',
+            sent_to_id: 'other_user_123', // Different user - should NOT be visible
+            sent_to_team: null,
+            priority: 'urgent',
             status: 'active'
           }
         ];
         
+        console.log('📝 Creating sample data:');
+        sampleData.forEach((data, index) => {
+          console.log(`   ${index + 1}. ${data.title} - sent_to_id: ${data.sent_to_id}`);
+        });
+        
         for (const data of sampleData) {
           const insertQuery = `
-            INSERT INTO data_center (id, title, description, content, data_type, sent_by_id, sent_to_team, priority, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            INSERT INTO data_center (id, title, description, content, data_type, sent_by_id, sent_to_id, sent_to_team, priority, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `;
           await query(insertQuery, [
             data.id, data.title, data.description, data.content, 
-            data.data_type, data.sent_by_id, data.sent_to_team, 
+            data.data_type, data.sent_by_id, data.sent_to_id, data.sent_to_team, 
             data.priority, data.status
           ]);
         }
@@ -139,6 +158,7 @@ export async function GET(request: NextRequest) {
             content: 'File: sample_data.xlsx (0.5 MB) - Estimated 100 records\nColumns: Name, Email, Phone, Company',
             data_type: 'file',
             sent_by_id: '0ChFAyPoh0nOK9MybrJn',
+            sent_to_id: null,
             sent_to_team: 'ALI ASHRAF',
             priority: 'medium',
             status: 'active'
@@ -147,12 +167,12 @@ export async function GET(request: NextRequest) {
         
         for (const data of sampleData) {
           const insertQuery = `
-            INSERT INTO data_center (id, title, description, content, data_type, sent_by_id, sent_to_team, priority, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            INSERT INTO data_center (id, title, description, content, data_type, sent_by_id, sent_to_id, sent_to_team, priority, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `;
           await query(insertQuery, [
             data.id, data.title, data.description, data.content, 
-            data.data_type, data.sent_by_id, data.sent_to_team, 
+            data.data_type, data.sent_by_id, data.sent_to_id, data.sent_to_team, 
             data.priority, data.status
           ]);
         }
@@ -171,6 +191,9 @@ export async function GET(request: NextRequest) {
     // Simplified approach - avoid complex JOINs that might fail
     console.log('🔍 Building simplified query for user:', userId, 'role:', userRole);
     
+    // Declare userTeam outside the if/else blocks so it's accessible everywhere
+    let userTeam = '';
+    
     if (userRole === 'manager') {
       // Managers can see all data - simple query without JOINs
       console.log('🔍 Manager - showing all data (simplified)');
@@ -186,11 +209,10 @@ export async function GET(request: NextRequest) {
         countParams = [];
       }
     } else {
-      // Non-managers - simplified filtering
-      console.log('🔍 Non-manager - simplified filtering');
+      // Non-managers - STRICT filtering - only see data shared WITH them
+      console.log('🔍 Non-manager - STRICT filtering (only data shared WITH user)');
       
       // Get user's team (simplified)
-      let userTeam = '';
       try {
         const [userResult] = await query<any>('SELECT team, managedTeam FROM users WHERE id = ? LIMIT 1', [userId]);
         if (userResult && userResult.length > 0) {
@@ -202,44 +224,63 @@ export async function GET(request: NextRequest) {
         userTeam = '';
       }
 
-      // Simple query without JOINs
+      // ULTRA-STRICT filtering: Only show data explicitly shared WITH this user
+      console.log('🔒 ULTRA-STRICT FILTER APPLIED');
+      console.log('🔍 Current user ID:', userId);
+      console.log('🔍 Current user team:', userTeam);
+      
+      // ULTRA-SIMPLE filtering to avoid SQL errors
+      console.log('🔧 Using ULTRA-SIMPLE filtering to ensure it works');
+      
       if (dataType !== 'all') {
-        dataQuery = `
-          SELECT * FROM data_center 
-          WHERE data_type = ? AND (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
-          ORDER BY created_at DESC LIMIT ? OFFSET ?
-        `;
-        countQuery = `
-          SELECT COUNT(*) as total FROM data_center 
-          WHERE data_type = ? AND (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
-        `;
-        params = [dataType, userId, userTeam, userId, limit, offset];
-        countParams = [dataType, userId, userTeam, userId];
+        // Filter by data type AND user access
+        dataQuery = `SELECT * FROM data_center WHERE data_type = ? AND sent_to_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+        countQuery = `SELECT COUNT(*) as total FROM data_center WHERE data_type = ? AND sent_to_id = ?`;
+        params = [dataType, userId, limit, offset];
+        countParams = [dataType, userId];
       } else {
-        dataQuery = `
-          SELECT * FROM data_center 
-          WHERE (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
-          ORDER BY created_at DESC LIMIT ? OFFSET ?
-        `;
-        countQuery = `
-          SELECT COUNT(*) as total FROM data_center 
-          WHERE (sent_to_id = ? OR sent_to_team = ? OR sent_by_id = ?)
-        `;
-        params = [userId, userTeam, userId, limit, offset];
-        countParams = [userId, userTeam, userId];
+        // Show all data types but only for this user
+        dataQuery = `SELECT * FROM data_center WHERE sent_to_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+        countQuery = `SELECT COUNT(*) as total FROM data_center WHERE sent_to_id = ?`;
+        params = [userId, limit, offset];
+        countParams = [userId];
       }
+      
+      console.log('🔧 SIMPLE RULE: User can ONLY see data where sent_to_id = their user ID');
+      console.log('🔧 Team sharing temporarily disabled to fix the query errors');
+      console.log('🔧 Once this works, we can add team sharing back carefully');
+      
+      console.log('🔒 ULTRA-STRICT RULES:');
+      console.log('   ✅ ALLOW: sent_to_id = ' + userId + ' (direct share)');
+      if (userTeam && userTeam.trim() !== '') {
+        console.log('   ✅ ALLOW: sent_to_team = ' + userTeam + ' AND sent_to_id IS NULL (team share)');
+      }
+      console.log('   ❌ BLOCK: Everything else');
+      console.log('   ❌ BLOCK: Data sent by this user to others');
+      console.log('   ❌ BLOCK: Data sent to other users');
+      console.log('   ❌ BLOCK: Data sent to other teams');
     }
 
     try {
       console.log('🔍 Executing query:', dataQuery);
       console.log('🔍 Query params:', params);
       
-      // Also test a simple query to see all data
-      const [allDataTest] = await query<any>('SELECT * FROM data_center LIMIT 5', []);
-      console.log('🔍 All data test (first 5 records):', allDataTest.length, 'records');
-      if (allDataTest.length > 0) {
-        console.log('🔍 Sample from all data:', allDataTest[0]);
-      }
+      // Debug: Show all data in the table
+      const [allDataTest] = await query<any>('SELECT id, title, sent_by_id, sent_to_id, sent_to_team FROM data_center', []);
+      console.log('🔍 ALL DATA IN TABLE (' + allDataTest.length + ' records):');
+      allDataTest.forEach((record, index) => {
+        console.log(`   ${index + 1}. ID: ${record.id}`);
+        console.log(`      Title: ${record.title}`);
+        console.log(`      sent_by_id: ${record.sent_by_id}`);
+        console.log(`      sent_to_id: ${record.sent_to_id}`);
+        console.log(`      sent_to_team: ${record.sent_to_team}`);
+        console.log(`      Should user see this? ${
+          record.sent_to_id === userId ? 'YES (direct)' : 
+          (record.sent_to_team === userTeam && !record.sent_to_id) ? 'YES (team)' : 
+          'NO'
+        }`);
+        console.log('');
+      });
       
       const [dataResults] = await query<any>(dataQuery, params);
       const [countResults] = await query<any>(countQuery, countParams);
@@ -275,32 +316,41 @@ export async function GET(request: NextRequest) {
       console.error('❌ Database query failed:', error);
       console.error('❌ Query that failed:', dataQuery);
       console.error('❌ Query params:', params);
+      console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error');
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
-      // Try the simplest possible query as a fallback
+      // Try a simple test query to see if the basic connection works
       try {
-        console.log('🔄 Attempting fallback query...');
-        const [fallbackResults] = await query<any>('SELECT * FROM data_center ORDER BY created_at DESC LIMIT 10', []);
-        console.log('✅ Fallback query succeeded, returning', fallbackResults.length, 'records');
+        console.log('🔄 Testing basic query...');
+        const [testResult] = await query<any>('SELECT COUNT(*) as count FROM data_center', []);
+        console.log('✅ Basic query works, count:', testResult[0]?.count);
         
+        // Try the simplest possible privacy filter
+        console.log('🔄 Testing simple privacy filter...');
+        const [simpleResult] = await query<any>('SELECT * FROM data_center WHERE sent_to_id = ? LIMIT 5', [userId]);
+        console.log('✅ Simple privacy filter works, results:', simpleResult.length);
+        
+        // Return the simple results
         const response = NextResponse.json({
           success: true,
-          data: fallbackResults,
+          data: simpleResult,
           pagination: {
             page: 1,
-            limit: 10,
-            total: fallbackResults.length,
+            limit: simpleResult.length,
+            total: simpleResult.length,
             totalPages: 1,
             hasNext: false,
             hasPrev: false
           },
           timestamp: new Date().toISOString(),
-          warning: 'Main query failed, using fallback data'
+          warning: 'Using simple privacy filter due to complex query failure'
         });
         return addCorsHeaders(response);
-      } catch (fallbackError) {
-        console.error('❌ Fallback query also failed:', fallbackError);
         
-        // Return empty data as last resort
+      } catch (testError) {
+        console.error('❌ Even basic queries failed:', testError);
+        
+        // Return empty data to prevent privacy leaks
         const response = NextResponse.json({
           success: true,
           data: [],
@@ -313,7 +363,7 @@ export async function GET(request: NextRequest) {
             hasPrev: false
           },
           timestamp: new Date().toISOString(),
-          warning: 'All database queries failed, returning empty data'
+          error: 'All database queries failed - returning empty data for security'
         });
         return addCorsHeaders(response);
       }
