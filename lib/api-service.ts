@@ -200,7 +200,10 @@ class DirectApiService {
 
   private async handleAnalyticsRequest(endpoint: string, options: RequestInit): Promise<any> {
     try {
-      const url = new URL(`https://vmaxcom.org/api/${endpoint.replace('/api/', '')}`);
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : 'https://vmaxcom.org';
+      const url = new URL(`${baseUrl}/api/${endpoint.replace('/api/', '')}`);
       const params = url.searchParams;
       
       if (params.get('endpoint') === 'dashboard-stats') {

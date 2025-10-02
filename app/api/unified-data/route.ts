@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const managedTeam = searchParams.get('managedTeam');
   const dataTypesParam = searchParams.get('dataTypes') || 'deals,callbacks,targets';
   const dateRange = searchParams.get('dateRange') || 'all';
-  const limit = parseInt(searchParams.get('limit') || '100');
+  const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500); // Max 500 records
   const offset = parseInt(searchParams.get('offset') || '0');
 
   if (!userRole) {
@@ -269,8 +269,8 @@ export async function GET(request: NextRequest) {
       try {
         console.log('🔄 Unified Data API: Starting users query...');
         
-        const usersQuery = 'SELECT id, username, name, email, role, team, phone, managedTeam, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        const [usersResult] = await query(usersQuery, [limit, offset]);
+        const usersQuery = `SELECT id, username, name, email, role, team, phone, managedTeam, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+        const [usersResult] = await query(usersQuery, []);
         result.data.users = Array.isArray(usersResult) ? usersResult : [];
         console.log('✅ Unified Data API: Fetched', result.data.users.length, 'users');
       } catch (error) {

@@ -100,25 +100,21 @@ export async function GET(request: NextRequest) {
     // Search functionality
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
-      where.push('(d.`customer_name` LIKE ? OR d.`phone_number` LIKE ? OR d.`email` LIKE ? OR u1.`name` LIKE ? OR u1.`username` LIKE ? OR u2.`name` LIKE ?)');
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      where.push('(d.`customer_name` LIKE ? OR d.`phone_number` LIKE ? OR d.`email` LIKE ? OR d.`sales_agent` LIKE ? OR d.`SalesAgentID` LIKE ?)');
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
       console.log('🔍 Search applied:', { search: search.trim(), searchTerm });
     }
 
     const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    // Run queries with JOINs to get agent names
-    // Build the complete SQL query with proper parameter handling and JOINs
+    // Simplified query without JOINs for better performance
+    // Use existing sales_agent field or fallback to SalesAgentID
     const baseSql = `
       SELECT 
         d.*,
-        COALESCE(u1.name, u1.username, d.sales_agent) as sales_agent_name,
-        u1.username as sales_agent_username,
-        COALESCE(u2.name, u2.username, d.closing_agent) as closing_agent_name,
-        u2.username as closing_agent_username
+        COALESCE(d.sales_agent, d.SalesAgentID, 'Unknown Agent') as sales_agent_name,
+        COALESCE(d.closing_agent, d.ClosingAgentID, 'Unknown Agent') as closing_agent_name
       FROM deals d
-      LEFT JOIN users u1 ON d.SalesAgentID = u1.id
-      LEFT JOIN users u2 ON d.ClosingAgentID = u2.id
       ${whereClause} 
       ORDER BY d.created_at DESC
     `;

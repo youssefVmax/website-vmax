@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const team = searchParams.get('team');
     const managedTeam = searchParams.get('managedTeam');
     const page = parseInt(searchParams.get('page') || '1', 10) || 1;
-    const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 200);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 100); // Max 100 users per page
     const offset = (page - 1) * limit;
 
     const where: string[] = [];
@@ -73,14 +73,19 @@ export async function GET(request: NextRequest) {
      ORDER BY created_at DESC`;
     const countSql = `SELECT COUNT(*) as c FROM users ${whereSql}`;
     
-    // For pagination, we need to append LIMIT and OFFSET to the query string
-    // since MySQL has issues with prepared statements for LIMIT/OFFSET
+    // Use string interpolation for LIMIT and OFFSET to avoid MySQL prepared statement issues
     const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
+    
+    console.log('📝 Executing users query:', paginatedSql);
+    console.log('📝 With params:', params);
+    console.log('📝 Pagination values:', { limit, offset, page });
     
     const [rows] = await query<any>(paginatedSql, params);
 
     // Get total count
     const [totals] = await query<any>(countSql, params);
+    
+    console.log('✅ Users query executed successfully, returned', rows.length, 'rows');
 
     // Transform data for frontend compatibility
     const users = rows.map((user: any) => ({

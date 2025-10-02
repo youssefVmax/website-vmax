@@ -25,16 +25,14 @@ export default function DealsTablePage() {
   const [stageFilter, setStageFilter] = useState<string>('all')
   const [teamFilter, setTeamFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('created_at')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-
   // Server pagination hook
   const [paginationState, paginationActions] = useServerPagination({
     initialPage: 1,
     initialItemsPerPage: 25,
-    onPageChange: (page, itemsPerPage) => {
-      fetchDeals(page, itemsPerPage, debouncedSearchTerm, statusFilter, stageFilter, teamFilter);
-    }
-  });
+  })
+
+  const { page, limit } = paginationState
+  const { setPage, setItemsPerPage } = paginationActions
 
   // Debounce search term
   useEffect(() => {
@@ -189,8 +187,15 @@ export default function DealsTablePage() {
     }
   }, [paginationState.currentPage, paginationState.itemsPerPage, debouncedSearchTerm, statusFilter, stageFilter, teamFilter, paginationActions])
 
+  // Fetch deals with debouncing for search
   useEffect(() => {
-    fetchDeals()
+    if (debouncedSearchTerm.trim()) {
+      // Debounce search - already handled by debouncedSearchTerm
+      fetchDeals()
+    } else {
+      // Immediate fetch for non-search changes
+      fetchDeals()
+    }
   }, [fetchDeals])
 
 

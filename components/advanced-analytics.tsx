@@ -644,10 +644,24 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       setLoading(false)
     }
   }
-  // Load data on mount and when parameters change
+  // Load data on mount and refresh every 2 minutes
+  // Only refetch when user changes, not on every filter change
   useEffect(() => {
     fetchAnalyticsData()
-  }, [userRole, user.id, user.managedTeam, dateRange])
+    const interval = setInterval(fetchAnalyticsData, 120000) // 2 minutes
+    return () => clearInterval(interval)
+  }, [user?.id, userRole]) // Removed frequent changing dependencies
+  
+  // Separate effect for filter changes with debouncing
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (user?.id) {
+        fetchAnalyticsData()
+      }
+    }, 1000) // 1 second debounce
+    
+    return () => clearTimeout(timeoutId)
+  }, [dateRange, selectedTeam, selectedService])
 
   // Refresh function
   const refresh = () => {

@@ -84,8 +84,10 @@ export class TeamLeaderApiService {
   private baseUrl: string;
 
   constructor() {
-    // Force use of production URL https://vmaxcom.org for all API calls
-    this.baseUrl = 'https://vmaxcom.org';
+    // Use localhost for development, production URL for production
+    this.baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+      ? 'http://localhost:3001' 
+      : 'https://vmaxcom.org';
   }
 
   /**

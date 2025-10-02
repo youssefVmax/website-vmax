@@ -8,9 +8,16 @@ const pool = mysql.createPool({
   password: "Vmaxllc#2004youssef",
   database: "vmax",
   waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+  connectionLimit: 5, // Reduced for better stability
+  queueLimit: 0,
+  // Connection timeout settings
+  connectTimeout: 30000, // 30 seconds to establish connection
+  acquireTimeout: 30000, // 30 seconds to acquire connection from pool
+  idleTimeout: 300000, // 5 minutes idle timeout
+  // Keep alive settings
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+} as any); // Use 'as any' to bypass TypeScript strict checking for mysql2 options
 
 // Test connection on startup
 pool.getConnection()
@@ -22,22 +29,39 @@ pool.getConnection()
     console.error("❌ Database connection failed:", err);
   });
 
-// Helper function for queries with better error handling
+// Helper function for queries with better error handling and retry logic
 export async function query<T = any>(sql: string, params: any[] = []): Promise<[T[], any]> {
-  try {
-    console.log(`🔍 Executing query: ${sql.substring(0, 100)}...`);
-    console.log(`📝 With params:`, params);
-    
-    const [results, fields] = await pool.execute(sql, params);
-    
-    console.log(`✅ Query executed successfully, returned ${Array.isArray(results) ? results.length : 1} rows`);
-    return [results as T[], fields];
-  } catch (error) {
-    console.error('❌ MySQL Query Error:', error);
-    console.error('SQL:', sql);
-    console.error('Params:', params);
-    throw error;
+  const maxRetries = 3;
+  let lastError: any;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔍 Executing query (attempt ${attempt}/${maxRetries}): ${sql.substring(0, 100)}...`);
+      console.log(`📝 With params:`, params);
+      
+      const [results, fields] = await pool.execute(sql, params);
+      
+      console.log(`✅ Query executed successfully, returned ${Array.isArray(results) ? results.length : 1} rows`);
+      return [results as T[], fields];
+    } catch (error: any) {
+      lastError = error;
+      console.error(`❌ MySQL Query Error (attempt ${attempt}/${maxRetries}):`, error);
+      
+      // If it's a connection error and we have retries left, wait and retry
+      if (attempt < maxRetries && (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'PROTOCOL_CONNECTION_LOST')) {
+        console.log(`⏳ Retrying in ${attempt * 1000}ms...`);
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        continue;
+      }
+      
+      // If it's the last attempt or a non-retryable error, log and throw
+      console.error('SQL:', sql);
+      console.error('Params:', params);
+      break;
+    }
   }
+  
+  throw lastError;
 }
 
 export async function testConnection(): Promise<boolean> {
