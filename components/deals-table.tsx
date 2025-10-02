@@ -25,14 +25,15 @@ export default function DealsTablePage() {
   const [stageFilter, setStageFilter] = useState<string>('all')
   const [teamFilter, setTeamFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('created_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   // Server pagination hook
   const [paginationState, paginationActions] = useServerPagination({
     initialPage: 1,
     initialItemsPerPage: 25,
   })
 
-  const { page, limit } = paginationState
-  const { setPage, setItemsPerPage } = paginationActions
+  const { currentPage: page, itemsPerPage: limit } = paginationState
+  const { setCurrentPage: setPage, setItemsPerPage } = paginationActions
 
   // Debounce search term
   useEffect(() => {
@@ -107,7 +108,7 @@ export default function DealsTablePage() {
       // Fetch from API - use localhost in development
       const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
         ? 'http://localhost:3001' 
-        : '';
+        : 'https://vmaxcom.org';
       const apiUrl = `${baseUrl}/api/deals?${params.toString()}`;
       
       console.log('🔍 DealsTable: Fetching deals from:', apiUrl);
