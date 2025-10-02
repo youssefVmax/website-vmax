@@ -101,24 +101,28 @@ export async function GET(request: NextRequest) {
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
       where.push('(d.`customer_name` LIKE ? OR d.`phone_number` LIKE ? OR d.`email` LIKE ? OR d.`sales_agent` LIKE ? OR d.`SalesAgentID` LIKE ?)');
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
       console.log('🔍 Search applied:', { search: search.trim(), searchTerm });
     }
 
     const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    // Simplified query without JOINs for better performance
-    // Use existing sales_agent field or fallback to SalesAgentID
+    // Query with JOINs to get actual user names for sales and closing agents
     const baseSql = `
       SELECT 
         d.*,
-        COALESCE(d.sales_agent, d.SalesAgentID, 'Unknown Agent') as sales_agent_name,
-        COALESCE(d.closing_agent, d.ClosingAgentID, 'Unknown Agent') as closing_agent_name
-      FROM deals d
+        COALESCE(u1.name, 'Unknown Agent') as sales_agent_name,
+        COALESCE(u2.name, d.closing_agent, 'Unknown Agent') as closing_agent_name,
+        COALESCE(u1.name, 'Unknown Agent') as sales_agent
+      FROM deals d 
+      LEFT JOIN users u1 ON d.SalesAgentID = u1.id
+      LEFT JOIN users u2 ON d.ClosingAgentID = u2.id
       ${whereClause} 
       ORDER BY d.created_at DESC
     `;
-    const countSql = `SELECT COUNT(*) as c FROM deals d ${whereClause}`;
+    const countSql = `SELECT COUNT(*) as c FROM deals d 
+      LEFT JOIN users u1 ON d.SalesAgentID = u1.id
+      LEFT JOIN users u2 ON d.ClosingAgentID = u2.id
+      ${whereClause}`;
 
     // For pagination, we need to append LIMIT and OFFSET to the query string
     // since MySQL has issues with prepared statements for LIMIT/OFFSET

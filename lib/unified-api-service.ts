@@ -168,7 +168,7 @@ export class UnifiedApiService {
       dateRange: filters.dateRange || 'today'
     });
     
-    const result = await this.cachedRequest(`/api/analytics?${params.toString()}`);
+    const result = await this.cachedRequest(`/api/analytics-api.php?${params.toString()}`);
     
     if (!result.success) {
       throw new Error('Failed to fetch dashboard stats');

@@ -266,7 +266,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       }
 
       return {
-        analytics: analyticsData,
+        analytics: dashboardData.success ? dashboardData.data : {},
         charts: chartsData.success ? chartsData.data : {},
         deals: dealsData.success ? dealsData.deals : [],
         callbacks: callbacksData.success ? callbacksData.callbacks : []
@@ -279,7 +279,13 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   
   // Set analytics data from direct API response
   const setAnalyticsFromDirectAPI = (result: any) => {
-    const { analytics: analyticsData, charts: chartsData, deals: dealsData, callbacks: callbacksData } = result
+    console.log('🔍 Processing analytics result:', result)
+    
+    // Safely extract data with fallbacks
+    const analyticsData = result?.analytics || {}
+    const chartsData = result?.charts || {}
+    const dealsData = result?.deals || []
+    const callbacksData = result?.callbacks || []
     
     console.log('🔍 Charts data received:', {
       salesByAgent: chartsData.salesByAgent,
@@ -290,15 +296,16 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       callbacksCount: callbacksData?.length || 0
     })
     
-    // Set dashboard stats
+    // Set dashboard stats with proper null checks
+    const safeAnalyticsData = analyticsData || {};
     setDashboardStats({
-      total_revenue: analyticsData.total_revenue || 0,
-      total_deals: analyticsData.total_deals || 0,
-      avg_deal_size: analyticsData.avg_deal_size || 0,
-      today_revenue: analyticsData.today_revenue || 0,
-      total_callbacks: analyticsData.total_callbacks || 0,
-      pending_callbacks: analyticsData.pending_callbacks || 0,
-      completed_callbacks: analyticsData.completed_callbacks || 0,
+      total_revenue: safeAnalyticsData.total_revenue || 0,
+      total_deals: safeAnalyticsData.total_deals || 0,
+      avg_deal_size: safeAnalyticsData.avg_deal_size || 0,
+      today_revenue: safeAnalyticsData.today_revenue || 0,
+      total_callbacks: safeAnalyticsData.total_callbacks || 0,
+      pending_callbacks: safeAnalyticsData.pending_callbacks || 0,
+      completed_callbacks: safeAnalyticsData.completed_callbacks || 0,
     })
     
     setChartsData((prevChartsData: any) => {
@@ -630,10 +637,15 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       if (analyticsResult) {
         console.log('✅ Analytics loaded successfully for', userRole, ':', analyticsResult)
-        if (userRole === 'salesman') {
-          setAnalyticsFromSalesmanAPI(analyticsResult)
-        } else if (userRole === 'team_leader') {
-          setAnalyticsFromDirectAPI(analyticsResult)
+        try {
+          if (userRole === 'salesman') {
+            setAnalyticsFromSalesmanAPI(analyticsResult)
+          } else if (userRole === 'team_leader') {
+            setAnalyticsFromDirectAPI(analyticsResult)
+          }
+        } catch (processingError) {
+          console.error('❌ Error processing analytics data:', processingError)
+          setError('Error processing analytics data: ' + (processingError instanceof Error ? processingError.message : 'Unknown error'))
         }
       }
 

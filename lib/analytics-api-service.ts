@@ -49,7 +49,7 @@ interface AnalyticsResponse {
 }
 
 class AnalyticsApiService {
-  private baseUrl = '/api/analytics';
+  private baseUrl = '/api/analytics-api.php';
 
   async getAnalytics(filters: AnalyticsFilters): Promise<AnalyticsResponse> {
     try {

@@ -6,7 +6,7 @@ class DirectMySQLService {
   // and avoid direct calls to external PHP host.
   private baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
     ? `http://localhost:3001/api` 
-    : `https://vmaxcom.org`;
+    : `/api`; // Use relative API routes for production
 
   // Create a timeout signal that works across browsers
   private createTimeoutSignal(ms: number): AbortSignal | undefined {
