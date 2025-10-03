@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '../../../lib/server/db';
-
 // Force dynamic rendering - NO CACHING
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,8 +18,21 @@ function addCorsHeaders(res: NextResponse) {
   return res;
 }
 
-export async function OPTIONS() {
-  return addCorsHeaders(new NextResponse(null, { status: 200 }));
+// Helper function to format dates for MySQL DATE columns
+function formatDateForMySQL(dateValue: any): string | null {
+  if (!dateValue) return null;
+  
+  try {
+    const dateValueTyped = typeof dateValue === 'string' || typeof dateValue === 'number' || dateValue instanceof Date ? dateValue : String(dateValue);
+    const dateObj = new Date(dateValueTyped);
+    if (!isNaN(dateObj.getTime())) {
+      return dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
+    }
+  } catch (dateError) {
+    console.warn('⚠️ Failed to format date for MySQL:', dateValue, dateError);
+  }
+  
+  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -183,10 +195,10 @@ export async function POST(request: NextRequest) {
     // Map request body to database fields based on the table structure
     const insertData = {
       id,
-      first_call_date: body.firstCallDate || body.first_call_date || null,
+      first_call_date: formatDateForMySQL(body.firstCallDate || body.first_call_date),
       phone_number: body.phoneNumber || body.phone_number || null,
       first_call_time: body.firstCallTime || body.first_call_time || null,
-      scheduled_date: body.scheduledDate || body.scheduled_date || null,
+      scheduled_date: formatDateForMySQL(body.scheduledDate || body.scheduled_date),
       status: body.status || 'pending',
       customer_name: body.customerName || body.customer_name || null,
       created_by_id: body.createdById || body.created_by_id || null,
@@ -239,6 +251,42 @@ export async function POST(request: NextRequest) {
     );
 
     console.log('✅ Callback created successfully:', { id, affectedRows: (result as any).affectedRows });
+
+    // Create notification for managers about new callback
+    try {
+      const notificationId = `callback-${id}-${Date.now()}`;
+      await query(`
+        INSERT INTO notifications (
+          id, title, message, type, priority, \`from\`, \`to\`, 
+          timestamp, isRead, salesAgentId, userRole, callbackId,
+          customerName, customerPhone, customerEmail, isManagerMessage, actionRequired, teamName
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        notificationId,
+        '📞 New Callback Scheduled!',
+        `${insertData.customer_name || 'New customer'} callback scheduled for ${formatDateForMySQL(insertData.scheduled_date)} by ${insertData.sales_agent || 'agent'}`,
+        'info',
+        insertData.priority === 'high' ? 'high' : 'medium',
+        insertData.sales_agent || 'Sales Agent',
+        JSON.stringify(['ALL', 'manager', 'team_leader']),
+        now,
+        0,
+        insertData.SalesAgentID || 'unknown',
+        'manager',
+        id,
+        insertData.customer_name || 'New Customer',
+        insertData.phone_number || null,
+        insertData.email || null,
+        false,
+        insertData.priority === 'high',
+        insertData.sales_team || 'Unknown Team'
+      ]);
+      console.log('✅ Callback notification created successfully');
+    } catch (notificationError) {
+      console.error('❌ Failed to create callback notification:', notificationError);
+      // Don't fail the callback creation if notification fails
+    }
+
     return addCorsHeaders(NextResponse.json({ success: true, id }, { status: 201 }));
   } catch (error) {
     console.error('❌ Error creating callback:', error);
@@ -259,6 +307,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    console.log('🔄 PUT /api/callbacks - Starting callback update');
     const body = await request.json();
     const { id, ...updates } = body;
     const { searchParams } = new URL(request.url);
@@ -268,18 +317,24 @@ export async function PUT(request: NextRequest) {
     const userId = searchParams.get('userId') || body.userId;
     const managedTeam = searchParams.get('managedTeam') || body.managedTeam;
 
+    console.log('📋 PUT Request details:', { id, updates, userRole, userId, managedTeam, searchParams: Object.fromEntries(searchParams.entries()) });
+
     if (!id) {
       return addCorsHeaders(NextResponse.json({ success: false, error: 'Callback ID is required' }, { status: 400 }));
     }
 
     console.log('🔒 PUT /api/callbacks - Role-based update check:', { userRole, userId, managedTeam, callbackId: id });
+    console.log('📋 PUT Request body updates:', updates);
 
     // First, check if the callback exists and get its details for permission check
+    console.log('🔍 Checking if callback exists:', id);
     const [existingCallback] = await query<any>(`
       SELECT SalesAgentID, sales_team, created_by_id 
       FROM callbacks 
       WHERE id = ?
     `, [id]);
+
+    console.log('📋 Existing callback query result:', existingCallback);
 
     if (!existingCallback || existingCallback.length === 0) {
       return addCorsHeaders(NextResponse.json({ success: false, error: 'Callback not found' }, { status: 404 }));
@@ -324,6 +379,9 @@ export async function PUT(request: NextRequest) {
     const fieldMap: Record<string, string> = {
       customerName: 'customer_name', customer_name: 'customer_name',
       phoneNumber: 'phone_number', phone_number: 'phone_number',
+      email: 'email',
+      status: 'status',
+      priority: 'priority',
       salesAgentId: 'SalesAgentID', SalesAgentID: 'SalesAgentID',
       salesAgentName: 'sales_agent', sales_agent: 'sales_agent',
       salesTeam: 'sales_team', sales_team: 'sales_team',
@@ -339,8 +397,25 @@ export async function PUT(request: NextRequest) {
     Object.entries(updates).forEach(([key, value]) => {
       if (key === 'id' || key === 'userRole' || key === 'userId' || key === 'managedTeam') return;
       const dbField = fieldMap[key] || key;
+
+      // Format DATE columns to MySQL DATE format (YYYY-MM-DD)
+      let processedValue = value;
+      if ((dbField === 'scheduled_date' || dbField === 'first_call_date') && value) {
+        try {
+          // Convert ISO timestamp or date string to MySQL DATE format
+          const dateValue = typeof value === 'string' || typeof value === 'number' || value instanceof Date ? value : String(value);
+          const dateObj = new Date(dateValue);
+          if (!isNaN(dateObj.getTime())) {
+            processedValue = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD format
+            console.log(`📅 Formatted ${dbField} from '${value}' to '${processedValue}'`);
+          }
+        } catch (dateError) {
+          console.warn(`⚠️ Failed to format date for ${dbField}:`, value, dateError);
+        }
+      }
+
       setClauses.push(`\`${dbField}\` = ?`);
-      params.push(value);
+      params.push(processedValue);
     });
 
     if (setClauses.length === 0) {
@@ -353,16 +428,30 @@ export async function PUT(request: NextRequest) {
     console.log('📝 Executing UPDATE with clauses:', setClauses.join(', '));
     console.log('📝 Update params:', params);
 
+    console.log('🔄 Executing database update...');
     const [result] = await query<any>(
       `UPDATE callbacks SET ${setClauses.join(', ')} WHERE id = ?`,
       params
     );
 
+    console.log('✅ Database update result:', result);
     console.log('✅ Callback updated successfully:', { id, affectedRows: (result as any).affectedRows });
     return addCorsHeaders(NextResponse.json({ success: true, affected: (result as any).affectedRows }));
   } catch (error) {
     console.error('❌ Error updating callback:', error);
-    return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to update callback' }, { status: 502 }));
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      sqlState: (error as any)?.sqlState,
+      errno: (error as any)?.errno,
+      code: (error as any)?.code
+    });
+    return addCorsHeaders(NextResponse.json({ 
+      success: false, 
+      error: 'Failed to update callback', 
+      details: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    }, { status: 502 }));
   }
 }
 

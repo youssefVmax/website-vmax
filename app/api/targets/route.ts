@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
   
 
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
     const agentId = searchParams.get('agentId');
     const managerId = searchParams.get('managerId');
     const period = searchParams.get('period');
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
 
     const where: string[] = [];
     const params: any[] = [];
+    if (id) { where.push('id = ?'); params.push(id); }
     if (agentId) { where.push('agentId = ?'); params.push(agentId); }
     if (managerId) { where.push('managerId = ?'); params.push(managerId); }
     if (period) { where.push('period = ?'); params.push(period); }
@@ -101,7 +103,11 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, ...updates } = body;
+    const { searchParams } = new URL(request.url);
+    // Accept id from either query string or request body for flexibility
+    const idFromQuery = searchParams.get('id');
+    const id = idFromQuery || body.id;
+    const { id: _ignore, ...updates } = body;
 
     if (!id) {
       return addCorsHeaders(NextResponse.json({ success: false, error: 'Target ID is required' }, { status: 400 }));

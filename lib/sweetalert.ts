@@ -477,33 +477,297 @@ export const showLoginSuccess = async (userName: string, userRole: string) => {
   return Promise.resolve();
 };
 
-// Manager notification for new deals
+// Manager notification for new deals (enhanced with right positioning)
 export const showManagerNotification = async (salesmanName: string, dealAmount: number, customerName: string) => {
-  const customSwal = await getCustomSwal();
-  setTimeout(() => { customSwal.fire({
-    title: `💰 New Deal Alert!`,
-    html: `
-      <div class="text-center space-y-2">
-        <div class="text-lg text-green-400 font-bold">$${dealAmount.toLocaleString()}</div>
-        <div class="text-sm text-slate-300">by ${salesmanName}</div>
-        <div class="text-xs text-slate-400">Customer: ${customerName}</div>
-      </div>
-    `,
-    icon: 'success',
-    timer: 3000,
-    timerProgressBar: true,
-    showConfirmButton: false,
-    position: 'center',
-    background: 'linear-gradient(135deg, #064e3b 0%, #059669 100%)',
-    color: '#ffffff',
-    customClass: {
-      popup: 'animate__animated animate__zoomIn animate__faster border border-green-500/30 shadow-xl shadow-green-500/20',
-      title: 'text-lg font-bold text-green-400',
-      htmlContainer: 'text-slate-200',
-      timerProgressBar: 'bg-gradient-to-r from-green-400 to-emerald-500',
-    }
-  }); }, 0);
+  return showNotificationToast(
+    '💰 New Deal Created!',
+    `$${dealAmount.toLocaleString()} deal by ${salesmanName} for ${customerName}`,
+    'success'
+  );
+};
+
+// Manager notification for new callbacks
+export const showCallbackNotification = async (customerName: string, salesmanName: string, scheduledDate: string) => {
+  return showNotificationToast(
+    '📞 New Callback Scheduled!',
+    `${customerName} callback scheduled for ${scheduledDate} by ${salesmanName}`,
+    'info'
+  );
+};
+
+// Manager notification for new feedback
+export const showFeedbackNotification = async (feedbackType: string, customerName?: string, salesmanName?: string) => {
+  return showNotificationToast(
+    '💬 New Feedback Received!',
+    `${feedbackType} feedback${customerName ? ` from ${customerName}` : ''}${salesmanName ? ` via ${salesmanName}` : ''}`,
+    'warning'
+  );
+};
+
+// Real-time notification toast (small, positioned right, clickable)
+export const showNotificationToast = async (
+  title: string, 
+  message: string, 
+  type: 'info' | 'success' | 'warning' | 'error' = 'info',
+  options: any = {}
+) => {
+  try {
+    const customSwal = await getCustomSwal();
+    
+    // Color scheme based on notification type
+    const typeColors = {
+      info: {
+        border: 'border-blue-500/30',
+        shadow: 'shadow-blue-500/20',
+        title: 'text-blue-400',
+        bg: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+        icon: '📢'
+      },
+      success: {
+        border: 'border-green-500/30',
+        shadow: 'shadow-green-500/20', 
+        title: 'text-green-400',
+        bg: 'linear-gradient(135deg, #065f46 0%, #10b981 100%)',
+        icon: '✅'
+      },
+      warning: {
+        border: 'border-yellow-500/30',
+        shadow: 'shadow-yellow-500/20',
+        title: 'text-yellow-400', 
+        bg: 'linear-gradient(135deg, #92400e 0%, #f59e0b 100%)',
+        icon: '⚠️'
+      },
+      error: {
+        border: 'border-red-500/30',
+        shadow: 'shadow-red-500/20',
+        title: 'text-red-400',
+        bg: 'linear-gradient(135deg, #991b1b 0%, #ef4444 100%)',
+        icon: '❌'
+      }
+    };
+
+    const colors = typeColors[type];
+    
+    setTimeout(() => {
+      customSwal.fire({
+        title: `${colors.icon} ${title}`,
+        html: `
+          <div class="text-left space-y-2">
+            <div class="text-sm text-slate-200 leading-relaxed">${message}</div>
+            <div class="text-xs text-slate-400 mt-3 text-right">Click to dismiss</div>
+          </div>
+        `,
+        toast: false,
+        position: 'top-end',
+        background: colors.bg,
+        color: '#ffffff',
+        width: '320px',
+        timer: 8000,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: {
+          popup: `animate__animated animate__slideInRight animate__faster ${colors.border} ${colors.shadow} border shadow-2xl rounded-lg`,
+          title: `text-sm font-bold ${colors.title}`,
+          htmlContainer: 'text-slate-200 text-left',
+          timerProgressBar: 'bg-white/30',
+          closeButton: 'text-white/70 hover:text-white text-lg'
+        },
+        showClass: {
+          popup: 'animate__animated animate__slideInRight animate__faster'
+        },
+        hideClass: {
+          popup: 'animate__animated animate__slideOutRight animate__faster'
+        },
+        // Make it clickable to dismiss
+        didOpen: (popup: any) => {
+          popup.addEventListener('click', () => {
+            customSwal.close();
+          });
+          // Add hover effect
+          popup.style.cursor = 'pointer';
+          popup.addEventListener('mouseenter', () => {
+            popup.style.transform = 'scale(1.02)';
+            popup.style.transition = 'transform 0.2s ease';
+          });
+          popup.addEventListener('mouseleave', () => {
+            popup.style.transform = 'scale(1)';
+          });
+        },
+        willClose: () => {
+          // Clean up any lingering modal state
+          const modal = document.querySelector('.swal2-container');
+          if (modal) {
+            modal.remove();
+          }
+        },
+        ...options
+      });
+    }, 100);
+  } catch (error) {
+    console.error('Error showing notification toast:', error);
+    // Fallback to simple notification
+    setTimeout(() => {
+      const fallbackDiv = document.createElement('div');
+      fallbackDiv.innerHTML = `
+        <div style="
+          position: fixed; 
+          top: 20px; 
+          right: 20px; 
+          background: #1e3a8a; 
+          color: white; 
+          padding: 12px 16px; 
+          border-radius: 8px; 
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          z-index: 9999;
+          max-width: 320px;
+          cursor: pointer;
+        ">
+          <div style="font-weight: bold; margin-bottom: 4px;">${title}</div>
+          <div style="font-size: 14px; opacity: 0.9;">${message}</div>
+        </div>
+      `;
+      document.body.appendChild(fallbackDiv);
+      
+      // Auto remove after 5 seconds or on click
+      const removeDiv = () => {
+        if (fallbackDiv.parentNode) {
+          fallbackDiv.parentNode.removeChild(fallbackDiv);
+        }
+      };
+      fallbackDiv.addEventListener('click', removeDiv);
+      setTimeout(removeDiv, 5000);
+    }, 100);
+  }
   return Promise.resolve();
+};
+
+// Enhanced validation error notification for missing fields
+export const showValidationError = async (missingFields: string[], formType: 'deal' | 'callback' = 'deal') => {
+  try {
+    const customSwal = await getCustomSwal();
+    
+    // Create formatted list of missing fields
+    const fieldsList = missingFields.map(field => `• ${field}`).join('<br>');
+    const fieldCount = missingFields.length;
+    const fieldWord = fieldCount === 1 ? 'field' : 'fields';
+    
+    setTimeout(() => {
+      customSwal.fire({
+        title: '⚠️ Missing Required Information',
+        html: `
+          <div class="text-left space-y-4">
+            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+              <div class="text-sm text-red-300 mb-3">
+                Please fill in the following required ${fieldWord} to ${formType === 'deal' ? 'create the deal' : 'schedule the callback'}:
+              </div>
+              <div class="text-sm font-medium text-red-200 leading-relaxed">
+                ${fieldsList}
+              </div>
+            </div>
+            <div class="text-xs text-slate-400 text-center">
+              <strong>Note:</strong> Only "Comments/Notes" fields are optional
+            </div>
+          </div>
+        `,
+        icon: 'warning',
+        showConfirmButton: true,
+        confirmButtonText: 'Got it, I\'ll fill them',
+        position: 'center',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: '#ffffff',
+        width: '480px',
+        customClass: {
+          popup: 'animate__animated animate__shake animate__faster border border-red-500/30 shadow-2xl shadow-red-500/20',
+          title: 'text-xl font-bold text-red-400',
+          htmlContainer: 'text-slate-200 text-left',
+          confirmButton: 'bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition-colors',
+        },
+        showClass: {
+          popup: 'animate__animated animate__shake animate__faster'
+        },
+        hideClass: {
+          popup: 'animate__animated animate__fadeOut animate__faster'
+        },
+        willClose: () => {
+          // Clean up any lingering modal state
+          const modal = document.querySelector('.swal2-container');
+          if (modal) {
+            modal.remove();
+          }
+        }
+      });
+    }, 100);
+  } catch (error) {
+    console.error('Error showing validation error:', error);
+    // Fallback to simple alert
+    setTimeout(() => {
+      alert(`Missing Required Fields:\n${missingFields.join('\n')}\n\nPlease fill in all required fields before submitting.`);
+    }, 100);
+  }
+  return Promise.resolve();
+};
+
+// Beautiful Target Added notification - Simplified for reliability
+export const showTargetAdded = async (opts: {
+  type: 'individual' | 'team'
+  name: string
+  amount: number
+  deals: number
+  period: string
+}) => {
+  try {
+    const swal = await ensureSwal(); // Use ensureSwal directly instead of custom wrapper
+    const { type, name, amount, deals, period } = opts;
+    const title = type === 'team' ? '🎯 Team Target Created!' : '🎯 Target Created!';
+
+    // Simple, reliable SweetAlert configuration
+    return swal.fire({
+      title: title,
+      html: `
+        <div style="text-align: center; padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
+          <div style="font-size: 20px; font-weight: 600; color: #0891b2; margin-bottom: 20px;">
+            ${name}
+          </div>
+          <div style="display: flex; justify-content: space-around; margin-bottom: 15px;">
+            <div style="text-align: center; padding: 15px; background: #f0f9ff; border-radius: 8px; border: 1px solid #0891b2;">
+              <div style="font-size: 18px; font-weight: bold; color: #065f46;">$${(amount || 0).toLocaleString()}</div>
+              <div style="font-size: 12px; color: #059669;">Revenue Target</div>
+            </div>
+            <div style="text-align: center; padding: 15px; background: #eff6ff; border-radius: 8px; border: 1px solid #2563eb;">
+              <div style="font-size: 18px; font-weight: bold; color: #1d4ed8;">${deals || 0}</div>
+              <div style="font-size: 12px; color: #2563eb;">Deals Target</div>
+            </div>
+          </div>
+          <div style="font-size: 14px; color: #6b7280; margin-top: 10px;">
+            Period: ${period || 'N/A'}
+          </div>
+        </div>
+      `,
+      icon: 'success',
+      confirmButtonText: 'Awesome! 🎉',
+      confirmButtonColor: '#0891b2',
+      allowOutsideClick: true,
+      allowEscapeKey: true,
+      focusConfirm: true,
+      width: 450,
+      padding: '2em',
+      background: '#ffffff',
+      backdrop: `
+        rgba(0,0,0,0.4)
+        left top
+        no-repeat
+      `
+    }).then((result: any) => {
+      console.log('SweetAlert closed:', result);
+      return result;
+    });
+  } catch (error) {
+    console.error('Error showing target added notification:', error);
+    // Immediate fallback to browser alert
+    alert(`🎯 Target Created!\n\n${opts.name}\n💰 Revenue: $${(opts.amount || 0).toLocaleString()}\n📊 Deals: ${opts.deals || 0}\n📅 Period: ${opts.period || 'N/A'}`);
+    return Promise.resolve({ isConfirmed: true });
+  }
 };
 
 // Export a function that returns the custom swal instance

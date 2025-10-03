@@ -101,6 +101,39 @@ export async function POST(request: NextRequest) {
     );
 
     console.log('✅ Feedback created successfully:', { id });
+
+    // Create notification for managers about new feedback
+    try {
+      const notificationId = `feedback-${id}-${Date.now()}`;
+      await query(`
+        INSERT INTO notifications (
+          id, title, message, type, priority, \`from\`, \`to\`, 
+          timestamp, isRead, salesAgentId, userRole, 
+          customerName, isManagerMessage, actionRequired, teamName
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        notificationId,
+        '💬 New Feedback Received!',
+        `${body.feedbackType || body.feedback_type || 'General'} feedback: "${body.subject}" from ${body.userName || body.user_name || 'user'}`,
+        'warning',
+        body.priority === 'high' ? 'high' : 'medium',
+        body.userName || body.user_name || 'User',
+        JSON.stringify(['ALL', 'manager', 'team_leader']),
+        now,
+        0,
+        body.userId || body.user_id || 'unknown',
+        'manager',
+        body.userName || body.user_name || 'User',
+        false,
+        body.priority === 'high',
+        body.userTeam || body.user_team || 'Unknown Team'
+      ]);
+      console.log('✅ Feedback notification created successfully');
+    } catch (notificationError) {
+      console.error('❌ Failed to create feedback notification:', notificationError);
+      // Don't fail the feedback creation if notification fails
+    }
+
     return addCorsHeaders(NextResponse.json({ success: true, id }, { status: 201 }));
   } catch (error) {
     console.error('❌ Error creating feedback:', error);

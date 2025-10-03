@@ -11,7 +11,7 @@ export interface Callback extends ApiCallback {
 
 export interface CallbacksService {
   addCallback: (callbackData: Omit<Callback, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
-  updateCallback: (id: string, updates: Partial<Callback>, updatedBy?: any, userContext?: { userRole?: string; userId?: string; managedTeam?: string }) => Promise<void>;
+  updateCallback: (id: string, updates: Partial<Callback> & Record<string, any>, updatedBy?: any, userContext?: { userRole?: string; userId?: string; managedTeam?: string }) => Promise<void>;
   deleteCallback: (id: string, userContext?: { userRole?: string; userId?: string; managedTeam?: string }) => Promise<void>;
   getCallbacks: (userRole?: string, userId?: string, userName?: string, managedTeam?: string) => Promise<Callback[]>;
   getCallbackById: (id: string) => Promise<Callback | null>;
@@ -59,7 +59,7 @@ class MySQLCallbacksService implements CallbacksService {
     }
   }
 
-  async updateCallback(id: string, updates: Partial<Callback>, updatedBy?: any, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<void> {
+  async updateCallback(id: string, updates: Partial<Callback> & Record<string, any>, updatedBy?: any, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<void> {
     try {
       // Get old callback for history tracking
       const oldCallbacks = await directMySQLService.getCallbacks({ id });
@@ -75,8 +75,8 @@ class MySQLCallbacksService implements CallbacksService {
           change_type: 'UPDATE',
           old_status: oldCallback.status,
           new_status: updates.status,
-          old_scheduled_date: oldCallback.scheduledDate,
-          new_scheduled_date: updates.scheduledDate,
+          old_scheduled_date: oldCallback.scheduled_date,
+          new_scheduled_date: updates.scheduled_date,
           notes: `Updated by ${updatedBy.name}`
         });
 
@@ -91,7 +91,7 @@ class MySQLCallbacksService implements CallbacksService {
         });
 
         // Update team metrics
-        await databaseService.updateTeamMetrics(oldCallback.salesTeam);
+        await databaseService.updateTeamMetrics(oldCallback.sales_team);
       }
       
       // Trigger listeners

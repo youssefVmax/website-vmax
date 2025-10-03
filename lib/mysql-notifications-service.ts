@@ -43,7 +43,7 @@ export interface Notification {
 }
 
 export interface NotificationService {
-  getNotifications: (userId: string, userRole: string) => Promise<Notification[]>;
+  getNotifications: (userId: string, userRole: string, userTeam?: string) => Promise<Notification[]>;
   addNotification: (notification: any) => Promise<string>;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: (userId: string) => Promise<void>;
@@ -54,12 +54,16 @@ class MySQLNotificationService implements NotificationService {
   private listeners: { [key: string]: (notifications: Notification[]) => void } = {};
   private pollInterval: NodeJS.Timeout | null = null;
 
-  async getNotifications(userId: string, userRole: string): Promise<Notification[]> {
+  async getNotifications(userId: string, userRole: string, userTeam?: string): Promise<Notification[]> {
     try {
       const filters: Record<string, string> = {
         userRole,
         userId,
       };
+      // Add team information for team leader filtering
+      if (userTeam) {
+        filters.userTeam = userTeam;
+      }
       // Filter notifications based on user role and targeting
       if (userRole !== 'manager') {
         // API supports userRole/userId filtering; no need to send 'to' explicitly, but keep as hint
@@ -73,7 +77,21 @@ class MySQLNotificationService implements NotificationService {
           return true; // Managers see all notifications
         }
         
-        // Check if notification is targeted to this user
+        if (userRole === 'team_leader') {
+          // Team leaders see notifications from their team members
+          const targetArray = Array.isArray(notification.to) ? notification.to : [];
+          const isTargetedToTeamLeaders = targetArray.includes('ALL') || targetArray.includes('team_leader');
+          
+          if (isTargetedToTeamLeaders) {
+            // Get user's team from filters (should be passed from frontend)
+            const userTeam = filters.userTeam;
+            // Show notification if it's from the same team or if no team info available (fallback)
+            return !notification.teamName || notification.teamName === userTeam || notification.teamName === 'Unknown Team';
+          }
+          return false;
+        }
+        
+        // For salesmen, check if notification is targeted to this specific user
         const targetArray = Array.isArray(notification.to) ? notification.to : [];
         return targetArray.includes('ALL') || targetArray.includes(userId);
       });

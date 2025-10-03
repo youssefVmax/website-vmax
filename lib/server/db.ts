@@ -36,12 +36,7 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<[
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🔍 Executing query (attempt ${attempt}/${maxRetries}): ${sql.substring(0, 100)}...`);
-      console.log(`📝 With params:`, params);
-      
       const [results, fields] = await pool.execute(sql, params);
-      
-      console.log(`✅ Query executed successfully, returned ${Array.isArray(results) ? results.length : 1} rows`);
       return [results as T[], fields];
     } catch (error: any) {
       lastError = error;
@@ -49,7 +44,6 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<[
       
       // If it's a connection error and we have retries left, wait and retry
       if (attempt < maxRetries && (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'PROTOCOL_CONNECTION_LOST')) {
-        console.log(`⏳ Retrying in ${attempt * 1000}ms...`);
         await new Promise(resolve => setTimeout(resolve, attempt * 1000));
         continue;
       }
@@ -66,9 +60,7 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<[
 
 export async function testConnection(): Promise<boolean> {
   try {
-    console.log('Testing database connection...');
     await query('SELECT 1 as test');
-    console.log('✅ Database connection successful');
     return true;
   } catch (error) {
     console.error('❌ Database connection failed:', error);

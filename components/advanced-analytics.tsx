@@ -1,28 +1,72 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis, 
-  CartesianGrid
-} from 'recharts'
-import { 
-  TrendingUp, DollarSign, Target, Download, BarChart3, Activity, RefreshCw,
-  ChevronLeft, ChevronRight, Users, Phone
-} from "lucide-react"
-import { format as formatDate } from "date-fns"
-import { unifiedAnalyticsService } from "@/lib/unified-analytics-service"
-import { mysqlAnalyticsService } from "@/lib/mysql-analytics-service"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { BarChart3, TrendingUp, RefreshCw, Download, Users, Phone, ChevronLeft, ChevronRight, Target, Activity, DollarSign } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, ZAxis } from 'recharts'
+import { useAuth } from '@/hooks/useAuth'
+import { unifiedAnalyticsService } from '@/lib/unified-analytics-service'
+import { formatDate } from 'date-fns'
 
+// Define props interface
 interface AdvancedAnalyticsProps {
-  userRole: 'manager' | 'salesman' | 'team_leader'
-  user: { full_name?: string; username?: string; id: string; managedTeam?: string }
+  userRole: 'manager' | 'salesman' | 'team_leader';
+  user: {
+    id: string;
+    username?: string;
+    full_name?: string;
+    managedTeam?: string;
+  };
 }
+
+// Helper function to format dates robustly
+const formatChartDate = (dateValue: any): string => {
+  if (!dateValue) return 'No Date';
+
+  try {
+    // Handle different date formats
+    let date: Date;
+
+    if (typeof dateValue === 'string') {
+      // Try ISO format first (YYYY-MM-DDTHH:mm:ss.sssZ)
+      if (dateValue.includes('T') || dateValue.includes('-')) {
+        date = new Date(dateValue);
+      } else {
+        // Try parsing as timestamp
+        const timestamp = parseInt(dateValue);
+        if (!isNaN(timestamp)) {
+          date = new Date(timestamp);
+        } else {
+          return 'Invalid Date';
+        }
+      }
+    } else if (typeof dateValue === 'number') {
+      date = new Date(dateValue);
+    } else if (dateValue instanceof Date) {
+      date = dateValue;
+    } else {
+      return 'Invalid Date';
+    }
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'Invalid Date';
+    }
+
+    // Format as month day (e.g., "Jan 15")
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch (error) {
+    console.warn('Date formatting error:', error, dateValue);
+    return 'Invalid Date';
+  }
+};
 
 export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   const [loading, setLoading] = useState(true)
@@ -58,7 +102,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       // Dynamic base URL for localhost development
       const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
         ? 'http://localhost:3001' 
-        : '';
+        : 'https://vmaxcom.org';
 
       // Get dashboard stats with salesman filtering
       const dashboardParams = new URLSearchParams({
@@ -67,7 +111,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         dateRange
       })
 
-      const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
+      const dashboardUrl = `${baseUrl}/api/analytics/dashboard-stats?${dashboardParams.toString()}`
       console.log('➡️ Calling dashboard stats API for salesman:', dashboardUrl)
       const dashboardResponse = await fetch(dashboardUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
@@ -175,7 +219,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         dateRange
       })
 
-      const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
+      const dashboardUrl = `${baseUrl}/api/analytics/dashboard-stats?${dashboardParams.toString()}`
       console.log('➡️ Calling dashboard stats API:', dashboardUrl)
       const dashboardResponse = await fetch(dashboardUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },

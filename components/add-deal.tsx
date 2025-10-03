@@ -11,7 +11,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { showDealAdded, showError } from "@/lib/sweetalert";
+import { showDealAdded, showError, showValidationError } from "@/lib/sweetalert";
 import { useAuth } from "@/hooks/useAuth";
 import type { User } from "@/types/user";
 import { apiService, Deal } from "@/lib/api-service";
@@ -643,14 +643,17 @@ export function AddDealPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="invoice">Invoice Type</Label>
-                <Input
-                  id="invoice"
-                  name="invoice"
-                  type="text"
+                <Label htmlFor="invoice">Invoice Website</Label>
+                <Combobox
+                  options={[
+                    "PayPal",
+                    "Website"
+                  ]}
                   value={formData.invoice}
-                  onChange={handleChange}
-                  placeholder="Enter invoice link or reference"
+                  onValueChange={(value) => handleSelectChange("invoice", value)}
+                  placeholder="Select or type invoice website"
+                  searchPlaceholder="Search invoice websites..."
+                  allowCustom={true}
                 />
               </div>
 

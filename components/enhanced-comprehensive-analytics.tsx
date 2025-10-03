@@ -57,7 +57,7 @@ export function EnhancedComprehensiveAnalytics({
     
     // Revenue trends (monthly)
     const revenueTrends = deals.reduce((acc: any[], deal) => {
-      const date = new Date(deal.created_at || deal.createdAt || Date.now());
+      const date = new Date(deal.createdAt || Date.now());
       const monthYear = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || 0);
       
@@ -73,7 +73,7 @@ export function EnhancedComprehensiveAnalytics({
 
     // Top agents performance
     const topAgents = deals.reduce((acc: any[], deal) => {
-      const agent = deal.sales_agent || deal.salesAgentName || 'Unknown Agent';
+      const agent = deal.salesAgentName || 'Unknown Agent';
       const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || 0);
       
       const existing = acc.find(item => item.agent === agent);
@@ -116,7 +116,7 @@ export function EnhancedComprehensiveAnalytics({
 
     // Team performance (manager only)
     const teamPerformance = userRole === 'manager' ? deals.reduce((acc: any[], deal) => {
-      const team = deal.sales_team || deal.salesTeam || 'Unknown Team';
+      const team = deal.salesTeam || deal.salesTeam || 'Unknown Team';
       const amount = typeof deal.amount_paid === 'string' ? parseFloat(deal.amount_paid) : (deal.amount_paid || 0);
       
       const existing = acc.find(item => item.team === team);

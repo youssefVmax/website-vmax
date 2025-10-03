@@ -14,8 +14,58 @@ import { useAuth } from '@/hooks/useAuth'
 import { Search, Download, Filter, Eye, Calendar, DollarSign, Users, TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 
+// Enhanced Deal type with both camelCase and snake_case fields for compatibility
+type DealData = Deal & {
+  closing_agent?: string;
+  closing_agent_name?: string;
+  closingAgentName?: string;
+  durationYears?: number;
+  numberOfUsers?: number;
+  dealId?: string;
+  serviceTier?: string;
+  salesAgentId?: string;
+  deviceKey?: string;
+  deviceId?: string;
+  invoiceLink?: string;
+  createdBy?: string;
+  programType?: string;
+  program_type?: string;
+  // Service feature flags
+  is_ibo_player?: boolean | number;
+  is_bob_player?: boolean | number;
+  is_smarters?: boolean | number;
+  is_ibo_pro?: boolean | number;
+  is_iboss?: boolean | number;
+}
+
+// Helper function to get closing agent name from various field formats
+const getClosingAgentName = (deal: DealData) => 
+  deal?.closingAgentName || deal?.closing_agent || deal?.closing_agent_name || '';
+
+// Helper function to get program type from deal data
+const getProgramType = (deal: any) => {
+  // First check if program_type is explicitly set
+  if (deal.program_type && deal.program_type !== 'None Selected' && deal.program_type !== null) {
+    return deal.program_type;
+  }
+  if (deal.programType && deal.programType !== 'None Selected' && deal.programType !== null) {
+    return deal.programType;
+  }
+  
+  // If not, calculate from boolean service feature fields
+  if (deal.is_ibo_player === true || deal.is_ibo_player === 1) return 'IBO Player';
+  if (deal.is_bob_player === true || deal.is_bob_player === 1) return 'BOB Player';
+  if (deal.is_smarters === true || deal.is_smarters === 1) return 'Smarters';
+  if (deal.is_ibo_pro === true || deal.is_ibo_pro === 1) return 'IBO Pro';
+  if (deal.is_iboss === true || deal.is_iboss === 1) return 'IBOSS';
+  
+  // For legacy deals without any program type data, default to IBO Player
+  // This provides a reasonable fallback for existing deals
+  return 'IBO Player';
+};
+
 export default function DealsTablePage() {
-  const [deals, setDeals] = useState<Deal[]>([])
+  const [deals, setDeals] = useState<DealData[]>([])
   const [totalDeals, setTotalDeals] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
@@ -133,43 +183,90 @@ export default function DealsTablePage() {
       
       // Debug: Log the first deal to see the data structure
       if (result.deals && result.deals.length > 0) {
-        console.log('🔍 DealsTable: Sample deal data structure:', result.deals[0])
+        console.log('🔍 DealsTable: Sample deal data structure:', {
+          program_type: result.deals[0].program_type,
+          is_ibo_player: result.deals[0].is_ibo_player,
+          is_bob_player: result.deals[0].is_bob_player,
+          is_smarters: result.deals[0].is_smarters,
+          is_ibo_pro: result.deals[0].is_ibo_pro,
+          is_iboss: result.deals[0].is_iboss,
+          customer_name: result.deals[0].customer_name
+        })
       }
       
-      // Normalize deals data - prioritize database field customer_name
+      // Normalize deals data - prioritize database field formats (snake_case)
       const normalizedDeals = (result.deals || []).map((deal: any) => ({
+        // Core identifiers
         id: deal.id ?? `deal-${Math.random()}`,
+        dealId: deal.DealID ?? deal.dealId ?? deal.id?.slice(-8),
+        
+        // Customer Information
         customerName: deal.customer_name ?? deal.customerName ?? 'Unknown Customer',
         email: deal.email ?? '',
-        phoneNumber: deal.phoneNumber ?? deal.phone_number ?? '',
+        phoneNumber: deal.phone_number ?? deal.phoneNumber ?? '',
         country: deal.country ?? '',
-        amountPaid: deal.amountPaid ?? deal.amount_paid ?? 0,
-        serviceTier: deal.serviceTier ?? deal.service_tier ?? 'Silver',
-        salesAgentId: deal.salesAgentId ?? deal.SalesAgentID ?? deal.sales_agent_id ?? '',
-        salesAgentName: deal.sales_agent_name ?? deal.salesAgentName ?? deal.salesAgent ?? deal.sales_agent ?? 'Unknown Agent',
-        closingAgentId: deal.closingAgentId ?? deal.closing_agent_id ?? deal.ClosingAgentID ?? '',
-        closingAgentName: deal.closing_agent_name ?? deal.closingAgentName ?? deal.closingAgent ?? deal.closing_agent ?? '',
-        salesTeam: deal.salesTeam ?? deal.sales_team ?? 'Unknown Team',
+        customCountry: deal.custom_country ?? deal.customCountry ?? '',
+        
+        // Deal Information
+        amountPaid: deal.amount_paid ?? deal.amountPaid ?? 0,
+        serviceTier: deal.service_tier ?? deal.serviceTier ?? 'Silver',
+        // Use helper function to get program type
+        programType: getProgramType(deal),
+        signupDate: deal.signup_date ?? deal.signupDate ?? '',
+        endDate: deal.end_date ?? deal.endDate ?? '',
+        durationYears: deal.duration_years ?? deal.durationYears ?? 0,
+        durationMonths: deal.duration_months ?? deal.durationMonths ?? 12,
+        numberOfUsers: deal.number_of_users ?? deal.numberOfUsers ?? 1,
+        productType: deal.product_type ?? deal.productType ?? '',
+        
+        // Calculated Fields
+        paidPerMonth: deal.paid_per_month ?? deal.paidPerMonth ?? 0,
+        paidPerDay: deal.paid_per_day ?? deal.paidPerDay ?? 0,
+        daysRemaining: deal.days_remaining ?? deal.daysRemaining ?? 0,
+        dataMonth: deal.data_month ?? deal.dataMonth ?? 0,
+        dataYear: deal.data_year ?? deal.dataYear ?? 0,
+        endYear: deal.end_year ?? deal.endYear ?? 0,
+        
+        // Agent Information
+        salesAgentId: deal.SalesAgentID ?? deal.salesAgentId ?? '',
+        salesAgentName: deal.sales_agent_name ?? deal.sales_agent ?? deal.salesAgentName ?? 'Unknown Agent',
+        closingAgentId: deal.ClosingAgentID ?? deal.closingAgentId ?? '',
+        closingAgentName: deal.closing_agent_name ?? deal.closing_agent ?? deal.closingAgentName ?? '',
+        salesTeam: deal.sales_team ?? deal.salesTeam ?? 'Unknown Team',
+        
+        // Service Features
+        isIboPlayer: deal.is_ibo_player ?? deal.isIboPlayer ?? false,
+        isBobPlayer: deal.is_bob_player ?? deal.isBobPlayer ?? false,
+        isSmarters: deal.is_smarters ?? deal.isSmarters ?? false,
+        isIboPro: deal.is_ibo_pro ?? deal.isIboPro ?? false,
+        isIboss: deal.is_iboss ?? deal.isIboss ?? false,
+        
+        // Additional Information
+        deviceKey: deal.device_key ?? deal.deviceKey ?? '',
+        deviceId: deal.device_id ?? deal.deviceId ?? '',
+        invoiceLink: deal.invoice_link ?? deal.invoiceLink ?? 'Website',
+        notes: deal.notes ?? '',
+        
+        // Status Information
         stage: deal.stage ?? 'prospect',
         status: deal.status ?? 'active',
         priority: deal.priority ?? 'medium',
-        signupDate: deal.signupDate ?? deal.signup_date ?? '',
-        durationYears: deal.durationYears ?? deal.duration_years ?? deal.DurationYears ?? 1,
-        durationMonths: deal.durationMonths ?? deal.duration_months ?? deal.DurationMonths ?? 12,
-        numberOfUsers: deal.numberOfUsers ?? deal.number_of_users ?? 1,
-        notes: deal.notes ?? '',
-        createdBy: deal.createdBy ?? deal.created_by ?? '',
-        createdAt: deal.createdAt ?? deal.created_at ?? '',
-        updatedAt: deal.updatedAt ?? deal.updated_at ?? '',
+        
+        // Metadata
+        createdBy: deal.created_by ?? deal.createdBy ?? '',
+        createdAt: deal.created_at ?? deal.createdAt ?? '',
+        updatedAt: deal.updated_at ?? deal.updatedAt ?? '',
       }))
       
       // Debug: Log the first normalized deal to see what we're displaying
       if (normalizedDeals.length > 0) {
         console.log('🔍 DealsTable: Sample normalized deal:', {
+          programType: normalizedDeals[0].programType,
+          is_ibo_player: result.deals[0]?.is_ibo_player,
+          is_bob_player: result.deals[0]?.is_bob_player,
+          program_type_field: result.deals[0]?.program_type,
           salesAgentName: normalizedDeals[0].salesAgentName,
-          closingAgentName: normalizedDeals[0].closingAgentName,
-          durationMonths: normalizedDeals[0].durationMonths,
-          durationYears: normalizedDeals[0].durationYears
+          closingAgentName: normalizedDeals[0].closingAgentName
         })
       }
       
@@ -203,8 +300,10 @@ export default function DealsTablePage() {
   const exportToCSV = () => {
     const headers = [
       'Deal ID', 'Customer Name', 'Email', 'Phone', 'Country', 'Signup Date',
-      'Amount Paid', 'Duration (Months)', 'Service Tier', 'Sales Agent',
-      'Closing Agent', 'Sales Team', 'Status', 'Stage', 'Priority', 'Created At'
+      'Amount Paid', 'Duration (Months)', 'Duration (Years)', 'Service Tier', 'Program Type', 'Number of Users',
+      'Sales Agent', 'Sales Agent ID', 'Closing Agent', 'Closing Agent ID', 'Sales Team',
+      'Device Key', 'Device ID', 'Invoice Link', 'Notes',
+      'Status', 'Stage', 'Priority', 'Created At', 'Created By'
     ]
 
     const csvData = deals.map(deal => [
@@ -216,14 +315,24 @@ export default function DealsTablePage() {
       deal.signupDate,
       deal.amountPaid,
       deal.durationMonths,
+      deal.durationYears || 0,
       deal.serviceTier,
+      deal.programType || 'None Selected',
+      deal.numberOfUsers || 1,
       deal.salesAgentName,
-      deal.closingAgentName,
+      deal.salesAgentId || '',
+      getClosingAgentName(deal),
+      deal.closingAgentId || '',
       deal.salesTeam,
+      deal.deviceKey || '',
+      deal.deviceId || '',
+      deal.invoiceLink || '',
+      deal.notes || '',
       deal.status,
       deal.stage,
       deal.priority,
-      deal.createdAt ? format(new Date(deal.createdAt), 'yyyy-MM-dd HH:mm:ss') : ''
+      deal.createdAt ? format(new Date(deal.createdAt), 'yyyy-MM-dd HH:mm:ss') : '',
+      deal.createdBy || ''
     ])
 
     const csvContent = [headers, ...csvData]
@@ -451,7 +560,10 @@ export default function DealsTablePage() {
                   <TableHead>Contact</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Duration</TableHead>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Program Type</TableHead>
                   <TableHead>Sales Agent</TableHead>
+                  <TableHead>Closing Agent</TableHead>
                   <TableHead>Team</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Stage</TableHead>
@@ -483,15 +595,34 @@ export default function DealsTablePage() {
                     </TableCell>
                     <TableCell>
                       <div>{deal.durationMonths} months</div>
-                      {deal.durationYears && (
+                      {(deal.durationYears || 0) > 0 && (
                         <div className="text-xs text-muted-foreground">({deal.durationYears} years)</div>
                       )}
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <div className="font-medium">{deal.salesAgentName}</div>
-                        <div className="text-xs text-muted-foreground">{deal.closingAgentName}</div>
+                      <div className="font-medium">{deal.serviceTier}</div>
+                      {(deal.numberOfUsers || 1) > 1 && (
+                        <div className="text-xs text-muted-foreground">{deal.numberOfUsers} users</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{deal.programType || 'None Selected'}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {deal.programType === 'IBO Player' && '🎯 IBO'}
+                        {deal.programType === 'BOB Player' && '🎮 BOB'}
+                        {deal.programType === 'Smarters' && '📱 Smart'}
+                        {deal.programType === 'IBO Pro' && '⭐ Pro'}
+                        {deal.programType === 'IBOSS' && '👑 Boss'}
+                        {!deal.programType || deal.programType === 'None Selected' && '❌ None'}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{deal.salesAgentName}</div>
+                      <div className="text-xs text-muted-foreground">ID: {deal.salesAgentId || 'N/A'}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{deal.closingAgentName || 'N/A'}</div>
+                      <div className="text-xs text-muted-foreground">ID: {deal.closingAgentId || 'N/A'}</div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{deal.salesTeam}</Badge>

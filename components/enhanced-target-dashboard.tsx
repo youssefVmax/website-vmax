@@ -128,9 +128,20 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
     }
   }
 
-  // Load data on component mount
+  // Load data on component mount and set up auto-refresh
   useEffect(() => {
     loadTargets()
+    
+    // Set up auto-refresh every 30 seconds for real-time updates
+    const refreshInterval = setInterval(() => {
+      console.log('🔄 Auto-refreshing targets data...')
+      loadTargets()
+    }, 30000) // 30 seconds
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(refreshInterval)
+    }
   }, [user.id, userRole, user.managedTeam])
 
   // Filter states
@@ -155,7 +166,7 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
     }
   }
 
-  // Calculate target statistics with safe number conversion
+  // Calculate target statistics with real progress data
   const targetStats = useMemo(() => {
     const targetsData = targets || [];
     
@@ -166,9 +177,14 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
         : Number(target.monthlyTarget) || 0;
       return sum + amount;
     }, 0);
-    // For current revenue, we'd need to calculate from actual deals
-    // For now, we'll show 0 as a placeholder
-    const currentRevenue = 0;
+    
+    // Calculate current revenue from actual progress data
+    const currentRevenue = targetsData.reduce((sum: number, target: any) => {
+      const current = typeof target.currentAmount === 'string'
+        ? parseFloat(target.currentAmount) || 0
+        : Number(target.currentAmount) || 0;
+      return sum + current;
+    }, 0);
     
     // Calculate average progress
     const totalProgress = targetsData.reduce((sum: number, target: any) => {
@@ -180,7 +196,20 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
     const avgProgress = totalProgress / targetsData.length || 0;
     
     // Calculate exceeded targets
-    const exceededTargets = targetsData.filter(target => target.progress >= 100).length;
+    const exceededTargets = targetsData.filter(target => {
+      const progress = typeof target.progress === 'string' 
+        ? parseFloat(target.progress) || 0 
+        : Number(target.progress) || 0;
+      return progress >= 100;
+    }).length;
+    
+    console.log('📊 Target Stats Calculated:', {
+      totalTargets,
+      totalTargetRevenue: Math.round(totalTargetRevenue),
+      currentRevenue: Math.round(currentRevenue),
+      avgProgress: Math.round(avgProgress * 10) / 10,
+      exceededTargets
+    });
     
     return {
       totalTargets,

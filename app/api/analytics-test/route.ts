@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, testConnection } from '@/lib/server/db';
 
+// Force dynamic rendering
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Analytics Test API: Starting connection test...');

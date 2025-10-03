@@ -2,11 +2,12 @@
 import { requestManager } from './request-manager';
 
 class DirectMySQLService {
-  // Force all requests through Next.js API on same origin so they show in Network tab
-  // and avoid direct calls to external PHP host.
-  private baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-    ? `http://localhost:3001/api` 
-    : `/api`; // Use relative API routes for production
+  // Force all requests through proper domain with HTTPS
+  private baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ? 
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api` :
+    (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+      ? `http://localhost:3001/api` 
+      : `https://vmaxcom.org/api`); // Use vmaxcom.org domain with HTTPS for production
 
   // Create a timeout signal that works across browsers
   private createTimeoutSignal(ms: number): AbortSignal | undefined {
@@ -373,7 +374,15 @@ class DirectMySQLService {
       const queryString = queryParams.toString();
       const url = `${this.baseUrl}/callbacks${queryString ? `?${queryString}` : ''}`;
       
-      console.log('🔒 Update callback with role context:', { url, userContext, baseUrl: this.baseUrl });
+      console.log('🔒 Update callback with role context:', { 
+        url, 
+        userContext, 
+        baseUrl: this.baseUrl,
+        environment: {
+          hostname: typeof window !== 'undefined' ? window.location.hostname : 'server',
+          NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL
+        }
+      });
       
       const response = await requestManager.fetch(url, {
         method: 'PUT',

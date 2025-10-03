@@ -175,17 +175,41 @@ export async function POST(request: NextRequest) {
     const dealId = body.dealId || body.DealID || `D${Date.now()}`;
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
+    // One-time migration: Update existing deals with null program_type
+    try {
+      await query<any>(
+        `UPDATE deals 
+         SET program_type = CASE 
+           WHEN is_ibo_player = 1 THEN 'IBO Player'
+           WHEN is_bob_player = 1 THEN 'BOB Player'
+           WHEN is_smarters = 1 THEN 'Smarters'
+           WHEN is_ibo_pro = 1 THEN 'IBO Pro'
+           WHEN is_iboss = 1 THEN 'IBOSS'
+           ELSE 'IBO Player'
+         END
+         WHERE program_type IS NULL OR program_type = '' OR program_type = 'None Selected'`
+      );
+      console.log('✅ Migration: Updated existing deals with program_type');
+    } catch (migrationError) {
+      console.error('❌ Migration error:', migrationError);
+      // Don't fail the deal creation if migration fails
+    }
+
     // Normalize customer name to ensure consistency
     const customerName = body.customerName || body.customer_name || 'Unknown Customer';
     console.log('🔍 Creating deal with customer name:', customerName);
 
-    // Insert deal - Using correct column names and parameter count
+    // Insert deal with all fields from the form including program_type
     await query<any>(
       `INSERT INTO deals (
-        id, DealID, customer_name, email, phone_number, amount_paid, 
+        id, DealID, customer_name, email, phone_number, amount_paid, country, custom_country,
         sales_agent, SalesAgentID, sales_team, closing_agent, ClosingAgentID,
-        stage, status, priority, signup_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        stage, status, priority, signup_date, end_date, duration_years, duration_months,
+        number_of_users, product_type, service_tier, program_type, paid_per_month, paid_per_day,
+        days_remaining, data_month, data_year, end_year, is_ibo_player, is_bob_player,
+        is_smarters, is_ibo_pro, is_iboss, device_key, device_id, invoice_link,
+        notes, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         dealId,
@@ -193,6 +217,8 @@ export async function POST(request: NextRequest) {
         body.email || '',
         body.phoneNumber || body.phone_number || '',
         body.amountPaid || body.amount_paid || 0,
+        body.country || 'USA',
+        body.custom_country || body.customCountry || '',
         body.salesAgentName || body.sales_agent || 'Unknown Agent',
         body.salesAgentId || body.SalesAgentID || '',
         body.salesTeam || body.sales_team || '',
@@ -202,6 +228,29 @@ export async function POST(request: NextRequest) {
         body.status || "active",
         body.priority || "medium",
         body.signupDate || body.signup_date || now,
+        body.end_date || null,
+        body.durationYears || body.duration_years || 0,
+        body.durationMonths || body.duration_months || 12,
+        body.numberOfUsers || body.number_of_users || 1,
+        body.product_type || '',
+        body.serviceTier || body.service_tier || 'Silver',
+        body.program_type || body.programType || 'None Selected',
+        body.paid_per_month || 0,
+        body.paid_per_day || 0,
+        body.days_remaining || 0,
+        body.data_month || 0,
+        body.data_year || 0,
+        body.end_year || 0,
+        body.is_ibo_player || false,
+        body.is_bob_player || false,
+        body.is_smarters || false,
+        body.is_ibo_pro || false,
+        body.is_iboss || false,
+        body.device_key || '',
+        body.device_id || '',
+        body.invoice_link || 'Website',
+        body.notes || '',
+        body.createdBy || body.created_by || 'Unknown',
         now,
         now
       ]
@@ -209,8 +258,43 @@ export async function POST(request: NextRequest) {
 
     // Fetch newly inserted deal
     const [rows] = await query<any>("SELECT * FROM deals WHERE id = ?", [id]);
+    const newDeal = rows[0];
 
-    return addCorsHeaders(NextResponse.json({ success: true, deal: rows[0] }, { status: 201 }));
+    // Create notification for managers about new deal
+    try {
+      const notificationId = `deal-${id}-${Date.now()}`;
+      await query(`
+        INSERT INTO notifications (
+          id, title, message, type, priority, \`from\`, \`to\`, 
+          timestamp, isRead, salesAgentId, userRole, dealId, dealValue,
+          customerName, isManagerMessage, actionRequired, teamName
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        notificationId,
+        '💰 New Deal Created!',
+        `${body.customerName || body.customer_name || 'New customer'} - $${body.amount || body.amountPaid || 0} deal created by ${body.salesAgentName || body.sales_agent || 'agent'}`,
+        'success',
+        'high',
+        body.salesAgentName || body.sales_agent || 'Sales Agent',
+        JSON.stringify(['ALL', 'manager', 'team_leader', body.salesAgentId || body.SalesAgentID || 'unknown']),
+        now,
+        0,
+        body.salesAgentId || body.SalesAgentID || 'unknown',
+        'manager',
+        id,
+        body.amount || body.amountPaid || 0,
+        body.customerName || body.customer_name || 'New Customer',
+        false,
+        true,
+        body.salesTeam || body.sales_team || 'Unknown Team'
+      ]);
+      console.log('✅ Deal notification created successfully');
+    } catch (notificationError) {
+      console.error('❌ Failed to create deal notification:', notificationError);
+      // Don't fail the deal creation if notification fails
+    }
+
+    return addCorsHeaders(NextResponse.json({ success: true, deal: newDeal }, { status: 201 }));
   } catch (error) {
     console.error("❌ Error creating deal:", error);
     console.error("❌ Error details:", {
@@ -256,40 +340,63 @@ export async function PUT(request: NextRequest) {
     const params: any[] = [];
 
     const fieldMap: Record<string, string> = {
+      // Customer Information
       customerName: "customer_name", customer_name: "customer_name",
+      email: "email",
       phoneNumber: "phone_number", phone_number: "phone_number",
+      country: "country",
+      customCountry: "custom_country", custom_country: "custom_country",
+      
+      // Deal Information
       amountPaid: "amount_paid", amount_paid: "amount_paid",
       serviceTier: "service_tier", service_tier: "service_tier",
       productType: "product_type", product_type: "product_type",
-      salesAgentId: "SalesAgentID", SalesAgentID: "SalesAgentID",
-      salesAgentName: "sales_agent", sales_agent: "sales_agent",
-      salesTeam: "sales_team", sales_team: "sales_team",
-      closingAgentId: "ClosingAgentID", ClosingAgentID: "ClosingAgentID",
-      closingAgent: "closing_agent", closing_agent: "closing_agent",
+      programType: "program_type", program_type: "program_type",
       signupDate: "signup_date", signup_date: "signup_date",
       endDate: "end_date", end_date: "end_date",
       durationYears: "duration_years", duration_years: "duration_years",
       durationMonths: "duration_months", duration_months: "duration_months",
       numberOfUsers: "number_of_users", number_of_users: "number_of_users",
-      customCountry: "custom_country", custom_country: "custom_country",
-      invoiceLink: "invoice_link", invoice_link: "invoice_link",
-      isIboPlayer: "is_ibo_player", is_ibo_player: "is_ibo_player",
-      isBobPlayer: "is_bob_player", is_bob_player: "is_bob_player",
-      isIboss: "is_iboss", is_iboss: "is_iboss",
-      isIboPro: "is_ibo_pro", is_ibo_pro: "is_ibo_pro",
-      isSmarters: "is_smarters", is_smarters: "is_smarters",
-      isAboveAvg: "is_above_avg", is_above_avg: "is_above_avg",
+      
+      // Calculated Fields
+      paidPerMonth: "paid_per_month", paid_per_month: "paid_per_month",
+      paidPerDay: "paid_per_day", paid_per_day: "paid_per_day",
+      daysRemaining: "days_remaining", days_remaining: "days_remaining",
       dataMonth: "data_month", data_month: "data_month",
       dataYear: "data_year", data_year: "data_year",
       endYear: "end_year", end_year: "end_year",
-      paidPerDay: "paid_per_day", paid_per_day: "paid_per_day",
-      paidPerMonth: "paid_per_month", paid_per_month: "paid_per_month",
-      paidRank: "paid_rank", paid_rank: "paid_rank",
-      daysRemaining: "days_remaining", days_remaining: "days_remaining",
-      agentAvgPaid: "agent_avg_paid", agent_avg_paid: "agent_avg_paid",
-      durationMeanPaid: "duration_mean_paid", duration_mean_paid: "duration_mean_paid",
+      
+      // Agent Information
+      salesAgentId: "SalesAgentID", SalesAgentID: "SalesAgentID",
+      salesAgentName: "sales_agent", sales_agent: "sales_agent",
+      salesTeam: "sales_team", sales_team: "sales_team",
+      closingAgentId: "ClosingAgentID", ClosingAgentID: "ClosingAgentID",
+      closingAgent: "closing_agent", closing_agent: "closing_agent",
+      
+      // Service Features
+      isIboPlayer: "is_ibo_player", is_ibo_player: "is_ibo_player",
+      isBobPlayer: "is_bob_player", is_bob_player: "is_bob_player",
+      isSmarters: "is_smarters", is_smarters: "is_smarters",
+      isIboPro: "is_ibo_pro", is_ibo_pro: "is_ibo_pro",
+      isIboss: "is_iboss", is_iboss: "is_iboss",
+      
+      // Additional Information
       deviceId: "device_id", device_id: "device_id",
       deviceKey: "device_key", device_key: "device_key",
+      invoiceLink: "invoice_link", invoice_link: "invoice_link",
+      notes: "notes",
+      
+      // Status Information
+      stage: "stage",
+      status: "status",
+      priority: "priority",
+      createdBy: "created_by", created_by: "created_by",
+      
+      // Other fields
+      isAboveAvg: "is_above_avg", is_above_avg: "is_above_avg",
+      paidRank: "paid_rank", paid_rank: "paid_rank",
+      agentAvgPaid: "agent_avg_paid", agent_avg_paid: "agent_avg_paid",
+      durationMeanPaid: "duration_mean_paid", duration_mean_paid: "duration_mean_paid",
       salesAgentNorm: "sales_agent_norm", sales_agent_norm: "sales_agent_norm",
       closingAgentNorm: "closing_agent_norm", closing_agent_norm: "closing_agent_norm",
       dealId: "DealID", DealID: "DealID"

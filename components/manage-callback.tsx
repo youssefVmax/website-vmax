@@ -264,7 +264,7 @@ export default function ManageCallbacksPage() {
     );
   };
 
-  const updateStatus = async (row: CallbackRow, next: CallbackRow["status"]) => {
+  const updateStatus = async (row: CallbackRow, next: "pending" | "contacted" | "completed" | "cancelled") => {
     try {
       // Pass user context for role-based permissions
       const userContext = {
@@ -273,7 +273,7 @@ export default function ManageCallbacksPage() {
         managedTeam: user?.managedTeam
       };
 
-      await callbacksService.updateCallback(row.id, { status: next }, user, userContext);
+      await callbacksService.updateCallback(row.id, { status: next as any }, user, userContext);
       toast({ title: "Updated", description: `Callback marked as ${next}` });
       // Refresh current page (for team leaders, always refresh page 1)
       loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
@@ -339,18 +339,21 @@ export default function ManageCallbacksPage() {
     if (!editingCallback || !editForm) return;
 
     try {
-      // Convert snake_case form properties to camelCase API properties
+      console.log('🔄 handleUpdateCallback - Starting update for callback:', editingCallback.id);
+      console.log('📋 Raw editForm data:', editForm);
+      
+      // Keep snake_case properties to match database table structure
       const apiUpdates: any = {};
       
-      if (editForm.customer_name !== undefined) apiUpdates.customerName = editForm.customer_name;
-      if (editForm.phone_number !== undefined) apiUpdates.phoneNumber = editForm.phone_number;
+      if (editForm.customer_name !== undefined) apiUpdates.customer_name = editForm.customer_name;
+      if (editForm.phone_number !== undefined) apiUpdates.phone_number = editForm.phone_number;
       if (editForm.email !== undefined) apiUpdates.email = editForm.email;
       if (editForm.status !== undefined) apiUpdates.status = editForm.status;
       if (editForm.priority !== undefined) apiUpdates.priority = editForm.priority;
-      if (editForm.scheduled_date !== undefined) apiUpdates.scheduledDate = editForm.scheduled_date;
-      if (editForm.scheduled_time !== undefined) apiUpdates.scheduledTime = editForm.scheduled_time;
-      if (editForm.callback_notes !== undefined) apiUpdates.callbackNotes = editForm.callback_notes;
-      if (editForm.callback_reason !== undefined) apiUpdates.callbackReason = editForm.callback_reason;
+      if (editForm.scheduled_date !== undefined) apiUpdates.scheduled_date = editForm.scheduled_date;
+      if (editForm.scheduled_time !== undefined) apiUpdates.scheduled_time = editForm.scheduled_time;
+      if (editForm.callback_notes !== undefined) apiUpdates.callback_notes = editForm.callback_notes;
+      if (editForm.callback_reason !== undefined) apiUpdates.callback_reason = editForm.callback_reason;
 
       // Pass user context for role-based permissions
       const userContext = {
@@ -358,8 +361,10 @@ export default function ManageCallbacksPage() {
         userId: user?.id,
         managedTeam: user?.managedTeam
       };
+      console.log('🚀 Calling callbacksService.updateCallback with:', { id: editingCallback.id, updates: apiUpdates, user, userContext });
 
       await callbacksService.updateCallback(editingCallback.id, apiUpdates, user, userContext);
+      console.log('✅ Callback update completed successfully');
       setEditingCallback(null);
       setEditForm({});
       toast({
@@ -369,7 +374,11 @@ export default function ManageCallbacksPage() {
       // Refresh current page (for team leaders, always refresh page 1)
       loadCallbacks(user?.role === 'team_leader' ? 1 : (pagination?.page || 1));
     } catch (error) {
-      console.error("Error updating callback:", error);
+      console.error('❌ Error updating callback:', error);
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       toast({
         title: "Error",
         description: "Failed to update callback",
@@ -378,7 +387,7 @@ export default function ManageCallbacksPage() {
     }
   };
 
-  const handleStatusUpdate = async (id: string, newStatus: CallbackRow["status"]) => {
+  const handleStatusUpdate = async (id: string, newStatus: "pending" | "contacted" | "completed" | "cancelled") => {
     try {
       // Pass user context for role-based permissions
       const userContext = {
@@ -387,7 +396,7 @@ export default function ManageCallbacksPage() {
         managedTeam: user?.managedTeam
       };
 
-      await callbacksService.updateCallback(id, { status: newStatus }, user, userContext);
+      await callbacksService.updateCallback(id, { status: newStatus as any }, user, userContext);
       toast({
         title: "Success",
         description: `Callback status updated to ${newStatus}`,

@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const queryString = searchParams.toString();
 
     // Always fetch real-time data from MySQL database
-    const phpApiUrl = `http://vmaxcom.org/api/mysql-service.php?${queryString}`;
+    const phpApiUrl = `https://vmaxcom.org/api/mysql-service.php?${queryString}`;
     
     const fetchResponse = await fetch(phpApiUrl, {
       method: 'GET',
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const queryString = searchParams.toString();
 
     // Always create real data in MySQL database
-    const fetchResponse = await fetch(`http://vmaxcom.org/api/mysql-service.php?${queryString}`, {
+    const fetchResponse = await fetch(`https://vmaxcom.org/api/mysql-service.php?${queryString}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

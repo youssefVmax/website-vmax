@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { Notification } from "@/types/notification"
 import { useAuth } from "@/hooks/useAuth"
-import { showToast } from "@/lib/sweetalert"
+import { showNotificationToast } from "@/lib/sweetalert"
 import { notificationService } from "@/lib/mysql-notifications-service"
 
 interface NotificationsContextType {
@@ -34,7 +34,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('🔄 NotificationsProvider: Loading notifications for user:', user.id, 'role:', user.role);
-        const data = await notificationService.getNotifications(user.id, user.role)
+        // Pass user team information for team leader filtering
+        const userTeam = (user as any).managedTeam || (user as any).team || (user as any).sales_team;
+        const data = await notificationService.getNotifications(user.id, user.role, userTeam)
         // Notifications are already in the correct format from MySQL service
         const mapped: Notification[] = data.map((n: any) => ({
           id: n.id,
@@ -89,10 +91,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         const isRecent = notificationTime > fiveMinutesAgo
         
         if ((addressedToUser || managerSeesAll) && !n.read && isRecent) {
-          // Use SweetAlert2 toast matching app design
-          const title = n.title ? `${n.title}` : 'Notification'
-          const message = n.message ? ` ${n.message}` : ''
-          showToast(`${title}${message ? ': ' + message : ''}`, 'info')
+          // Use custom notification toast with proper design
+          const title = n.title || 'Notification'
+          const message = n.message || 'You have a new notification'
+          const notificationType = n.type === 'error' ? 'error' : 
+                                   n.type === 'warning' ? 'warning' : 
+                                   n.type === 'success' ? 'success' : 'info'
+          showNotificationToast(title, message, notificationType)
         }
       }
     }

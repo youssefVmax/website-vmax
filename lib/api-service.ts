@@ -381,8 +381,8 @@ class DirectApiService {
     return await directMySQLService.getUsers(filters);
   }
 
-  async getDeals(filters: Record<string, string> = {}): Promise<Deal[]> {
-    return await directMySQLService.getDeals(filters);
+  async getDeals(filters: Record<string, string> = {}, userContext?: { userRole?: string; userId?: string; managedTeam?: string }): Promise<Deal[]> {
+    return await directMySQLService.getDeals(filters, userContext);
   }
 
   async createDeal(dealData: any): Promise<{ success: boolean; id: string; dealId: string }> {

@@ -17,6 +17,7 @@ import { targetsService } from "@/lib/mysql-targets-service"
 import { SalesTarget as TargetType, TeamTarget } from "@/lib/api-service"
 import { unifiedApiService } from "@/lib/unified-api-service"
 import { DynamicTargetCreator } from "./dynamic-target-creator"
+import { showTargetAdded } from "@/lib/sweetalert"
 
 interface EnhancedTargetsProps {
   userRole: 'manager' | 'salesman' | 'team_leader'
@@ -316,6 +317,19 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
 
       const createdTargetId = await targetsService.createTarget(targetData)
       
+      // SweetAlert: Target created (individual) - Don't let this break the flow
+      try {
+        await showTargetAdded({
+          type: 'individual',
+          name: targetData.agentName || 'Member',
+          amount: targetData.monthlyTarget || 0,
+          deals: targetData.dealsTarget || 0,
+          period: targetData.period || ''
+        })
+      } catch (swalError) {
+        console.warn('SweetAlert failed, but target was created successfully:', swalError)
+      }
+      
       // Create the full target object for state update
       const createdTarget: TargetType = {
         id: createdTargetId,
@@ -409,6 +423,19 @@ export function EnhancedTargetsManagement({ userRole, user }: EnhancedTargetsPro
       }
 
       const teamTargetId = await targetsService.createTarget(teamTargetData)
+      
+      // SweetAlert: Target created (team) - Don't let this break the flow
+      try {
+        await showTargetAdded({
+          type: 'team',
+          name: selectedTeam.name,
+          amount: teamTargetData.monthlyTarget || 0,
+          deals: teamTargetData.dealsTarget || 0,
+          period: teamTargetData.period || ''
+        })
+      } catch (swalError) {
+        console.warn('SweetAlert failed, but team target was created successfully:', swalError)
+      }
       
       const createdTeamTarget: TeamTarget = {
         id: teamTargetId,

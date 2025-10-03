@@ -22,6 +22,10 @@ export class MySQLDatabaseService {
     old_values?: any;
     new_values?: any;
   }): Promise<void> {
+    // Temporarily disabled - activity_log API endpoint does not exist
+    // TODO: Create /api/activity_log endpoint when needed
+    return;
+
     try {
       const payload = {
         id: `activity_${Date.now()}`,
@@ -30,12 +34,11 @@ export class MySQLDatabaseService {
         user_agent: 'VMAX System',
         created_at: new Date().toISOString()
       };
-      
-      // Store in activity_log table
-      await apiService.makeRequest('activity_log', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+
+      // TODO: Implement activity_log API endpoint
+      // Skip API call until endpoint is implemented
+      console.log(`📋 Activity log:`, payload);
+      // await apiService.makeRequest('activity_log', { ... });
     } catch (error) {
       console.warn('Failed to log activity:', error);
     }
@@ -58,20 +61,20 @@ export class MySQLDatabaseService {
         ...historyData,
         created_at: new Date().toISOString()
       };
-      
-      await apiService.makeRequest('deal_history', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+
+      // TODO: Implement deal_history API endpoint
+      // Skip API call until endpoint is implemented
+      console.log(`📊 Deal history log:`, payload);
+      // await apiService.makeRequest('deal_history', { ... });
     } catch (error) {
       console.warn('Failed to log deal history:', error);
     }
   }
 
-  // Callback history tracking
+  // Callback history tracking - Disabled until API endpoint is implemented
   async logCallbackHistory(historyData: {
     callback_id: string;
-    changed_by?: string;
+    changed_by: string;
     change_type: string;
     old_status?: string;
     new_status?: string;
@@ -80,67 +83,58 @@ export class MySQLDatabaseService {
     notes?: string;
   }): Promise<void> {
     try {
-      const payload = {
-        id: `callback_history_${Date.now()}`,
-        ...historyData,
-        created_at: new Date().toISOString()
-      };
-      
-      await apiService.makeRequest('callback_history', {
-        method: 'POST',
-        body: JSON.stringify(payload)
+      console.log(`📝 Callback history log requested:`, {
+        callback_id: historyData.callback_id,
+        changed_by: historyData.changed_by,
+        change_type: historyData.change_type,
+        timestamp: new Date().toISOString()
       });
+
+      // TODO: Implement callback_history API endpoint
+      // Skip API call until endpoint is implemented
+      // await apiService.makeRequest('callback_history', { ... });
+      
     } catch (error) {
       console.warn('Failed to log callback history:', error);
+      // Don't throw - this is optional functionality
     }
   }
 
-  // Team metrics calculation and storage
+  // Update team metrics (optional) - Disabled until API endpoint is implemented
   async updateTeamMetrics(teamName?: string): Promise<void> {
     if (!teamName) return;
 
     try {
-      const period = new Date().toISOString().substring(0, 7); // YYYY-MM
+      console.log(`📊 Team metrics update requested for team: ${teamName}`);
       
-      // Get team deals and callbacks
-      const [deals, callbacks] = await Promise.all([
-        apiService.getDeals({ sales_team: teamName }),
-        apiService.getCallbacks({ sales_team: teamName })
+      // Get team stats for metrics calculation (when API is ready)
+      const [deals] = await Promise.all([
+        apiService.getDeals({ salesTeam: teamName }).catch(() => [])
       ]);
 
-      const totalDeals = deals.length;
-      const totalRevenue = deals.reduce((sum, deal) => sum + (deal.amountPaid || 0), 0);
-      const totalCallbacks = callbacks.length;
-      const completedCallbacks = callbacks.filter(c => c.status === 'completed').length;
+      const totalDeals = deals?.length || 0;
+      const totalRevenue = deals?.reduce((sum, deal) => sum + (deal.amountPaid || deal.amount || 0), 0) || 0;
       const avgDealValue = totalDeals > 0 ? totalRevenue / totalDeals : 0;
-      const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
 
-      const metricsPayload = {
-        id: `metrics_${teamName}_${period}`,
-        team_name: teamName,
-        period,
-        total_deals: totalDeals,
-        total_revenue: totalRevenue,
-        total_callbacks: totalCallbacks,
-        completed_callbacks: completedCallbacks,
-        avg_deal_value: avgDealValue,
-        conversion_rate: conversionRate,
-        updated_at: new Date().toISOString()
-      };
-
-      await apiService.makeRequest('team_metrics', {
-        method: 'POST',
-        body: JSON.stringify(metricsPayload)
+      console.log(`📈 Team ${teamName} metrics:`, {
+        totalDeals,
+        totalRevenue,
+        avgDealValue
       });
+
+      // Skip API call until endpoint is implemented
+      // await apiService.makeRequest('team_metrics', { ... });
+      
     } catch (error) {
-      console.warn('Failed to update team metrics:', error);
+      console.warn('Failed to calculate team metrics:', error);
+      // Don't throw - this is optional functionality
     }
   }
 
   // Enhanced deal creation with full tracking
   async createDealWithTracking(dealData: any, createdBy: any): Promise<string> {
     const dealId = await apiService.createDeal(dealData);
-    
+
     // Log activity (optional - don't fail if this fails)
     try {
       await this.logActivity({
@@ -160,14 +154,14 @@ export class MySQLDatabaseService {
     } catch (error) {
       console.warn('Failed to update team metrics after deal creation:', error);
     }
-    
+
     return dealId.id;
   }
 
   // Enhanced callback creation with full tracking
   async createCallbackWithTracking(callbackData: any, createdBy: any): Promise<string> {
     const callbackId = await apiService.createCallback(callbackData);
-    
+
     // Log activity (optional - don't fail if this fails)
     try {
       await this.logActivity({
@@ -187,7 +181,7 @@ export class MySQLDatabaseService {
     } catch (error) {
       console.warn('Failed to update team metrics after callback creation:', error);
     }
-    
+
     return callbackId.id;
   }
 }

@@ -216,11 +216,11 @@ export function CallbackKPIDashboard({
         const teamMap = new Map<string, { team: string; deals: number; revenue: number }>()
 
         dealsData.forEach(d => {
-          const team = d.sales_team || 'Unknown'
+          const team = d.salesTeam  || 'Unknown'
           if (!teamMap.has(team)) teamMap.set(team, { team, deals: 0, revenue: 0 })
           const rec = teamMap.get(team)!
           rec.deals += 1
-          rec.revenue += Number(d.amount_paid || 0)
+          rec.revenue += Number(d.amountPaid || 0)
         })
 
         const perTeam = Array.from(teamMap.values()).map(row => ({

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
@@ -49,7 +50,6 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     SalesAgentID: currentUser.id || '',
     ClosingAgentID: currentUser.id || '',
     
-    // Service Features
     is_ibo_player: false,
     is_bob_player: false,
     is_smarters: false,
@@ -57,7 +57,7 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     is_iboss: false,
     
     // Additional Information
-    invoice_link: '',
+    invoice_link: 'Website',
     device_key: '',
     device_id: '',
     notes: '',
@@ -197,11 +197,11 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
       errors.service_tier = 'Service tier is required';
     }
 
-    // Program type validation
+    // Program type validation - ensure at least one is selected
     const isProgramTypeSelected = formData.is_ibo_player || formData.is_bob_player || 
                                  formData.is_smarters || formData.is_ibo_pro || formData.is_iboss;
     if (!isProgramTypeSelected) {
-      errors.program_type = 'Please select a program type';
+      errors.program_type = 'Please select a program type (IBO Player, BOB Player, Smarters, IBO Pro, or IBOSS)';
     }
 
     // Closing agent validation
@@ -242,27 +242,88 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
     setLoading(true);
 
     try {
-      // Create via unified apiService
+      // Calculate the program type based on selected service features
+      const getProgramType = () => {
+        if (formData.is_ibo_player) return 'IBO Player';
+        if (formData.is_bob_player) return 'BOB Player';
+        if (formData.is_smarters) return 'Smarters';
+        if (formData.is_ibo_pro) return 'IBO Pro';
+        if (formData.is_iboss) return 'IBOSS';
+        return 'None Selected';
+      };
+
+      const programType = getProgramType();
+
+      // Create complete deal with all form fields
       const result = await apiService.createDeal({
+        // Customer Information
         customerName: formData.customer_name,
+        customer_name: formData.customer_name,
         email: formData.email,
         phoneNumber: formData.phone_number,
+        phone_number: formData.phone_number,
         country: formData.country || 'Unknown',
+        custom_country: formData.custom_country,
+        
+        // Deal Information
         amountPaid: formData.amount_paid,
+        amount_paid: formData.amount_paid,
         serviceTier: formData.service_tier as 'Silver' | 'Gold' | 'Premium',
+        service_tier: formData.service_tier,
+        signupDate: formData.signup_date,
+        signup_date: formData.signup_date,
+        durationYears: formData.duration_years,
+        duration_years: formData.duration_years,
+        durationMonths: formData.duration_months,
+        duration_months: formData.duration_months,
+        numberOfUsers: formData.number_of_users,
+        number_of_users: formData.number_of_users,
+        product_type: formData.product_type,
+        
+        // Program Type (computed from service features)
+        program_type: programType,
+        programType: programType,
+        
+        // Calculated Fields
+        end_date: calculatedFields.end_date,
+        paid_per_month: calculatedFields.paid_per_month,
+        paid_per_day: calculatedFields.paid_per_day,
+        days_remaining: calculatedFields.days_remaining,
+        data_month: calculatedFields.data_month,
+        data_year: calculatedFields.data_year,
+        end_year: calculatedFields.end_year,
+        
+        // Agent Information
         salesAgentId: formData.SalesAgentID,
+        SalesAgentID: formData.SalesAgentID,
+        sales_agent: formData.sales_agent,
+        salesAgentName: formData.sales_agent,
         closingAgentId: formData.ClosingAgentID,
+        ClosingAgentID: formData.ClosingAgentID,
+        closing_agent: formData.closing_agent,
+        closingAgent: formData.closing_agent,
         salesTeam: formData.sales_team,
+        sales_team: formData.sales_team,
+        
+        // Service Features
+        is_ibo_player: formData.is_ibo_player,
+        is_bob_player: formData.is_bob_player,
+        is_smarters: formData.is_smarters,
+        is_ibo_pro: formData.is_ibo_pro,
+        is_iboss: formData.is_iboss,
+        
+        // Additional Information
+        device_key: formData.device_key,
+        device_id: formData.device_id,
+        invoice_link: formData.invoice_link,
+        notes: formData.notes,
+        
+        // Status Information
         stage: formData.stage,
         status: formData.status,
         priority: formData.priority,
-        signupDate: formData.signup_date,
-        durationYears: formData.duration_years,
-        durationMonths: formData.duration_months,
-        numberOfUsers: formData.number_of_users,
-        notes: formData.notes,
-        invoice_link: formData.invoice_link,
-        createdBy: currentUser.name || 'Unknown'
+        createdBy: currentUser.name || 'Unknown',
+        created_by: currentUser.name || 'Unknown'
       } as any)
 
       // Do not await alerts per requirement - show success and close modal
@@ -293,12 +354,13 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
         sales_team: currentUser.team || '',
         SalesAgentID: currentUser.id || '',
         ClosingAgentID: currentUser.id || '',
-        is_ibo_player: false,
+        // Service Features (default to IBO Player)
+        is_ibo_player: true,
         is_bob_player: false,
         is_smarters: false,
         is_ibo_pro: false,
         is_iboss: false,
-        invoice_link: '',
+        invoice_link: 'Website',
         device_key: '',
         device_id: '',
         notes: '',
@@ -776,16 +838,20 @@ export default function EnhancedAddDeal({ currentUser, onClose, onSuccess }: Enh
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Additional Information</h3>
               <div>
-                <Label htmlFor="invoice_link">Invoice Link</Label>
-                <Input
-                  id="invoice_link"
-                  type="text"
+                <Label htmlFor="invoice_link">Invoice Type</Label>
+                <Combobox
+                  options={[
+                    "PayPal",
+                    "Website"
+                  ]}
                   value={formData.invoice_link}
-                  onChange={(e) => handleInputChange('invoice_link', e.target.value)}
-                  placeholder="paypal or website"
+                  onValueChange={(value) => handleInputChange("invoice_link", value)}
+                  placeholder="Select or type invoice website"
+                  searchPlaceholder="Search invoice websites..."
+                  allowCustom={true}
                 />
               </div>
-            
+              
               <div>
                 <Label htmlFor="device_key">Device Key</Label>
                 <Input

@@ -137,7 +137,7 @@ class MySQLTargetsService implements TargetsService {
       }
       
       if (!target) {
-        console.log('🎯 MySQLTargetsService: Target not found');
+        console.log('🎯 MySQLTargetsService: Target not found for:', targetIdOrUserId);
         // Return default progress structure
         return {
           targetId: targetIdOrUserId,
@@ -148,7 +148,7 @@ class MySQLTargetsService implements TargetsService {
           dealsTarget: 0,
           currentRevenue: 0,
           currentDeals: 0,
-          currentSales: 0, // Add for compatibility
+          currentSales: 0,
           revenueProgress: 0,
           dealsProgress: 0,
           remainingRevenue: 0,
@@ -162,20 +162,50 @@ class MySQLTargetsService implements TargetsService {
 
       // Normalize target fields (support both legacy and new schema)
       const agentId = (target as any).agentId || (target as any).salesAgentId;
-      const targetRevenue = (target as any).monthlyTarget ?? (target as any).targetAmount ?? 0;
-      const targetDeals = (target as any).dealsTarget ?? (target as any).targetDeals ?? 0;
+      const targetRevenue = Number((target as any).monthlyTarget ?? (target as any).targetAmount ?? 0);
+      const targetDeals = Number((target as any).dealsTarget ?? (target as any).targetDeals ?? 0);
       const targetPeriod = (target as any).period || (target as any).month || period || '';
 
-      // Get deals for this agent, optionally period filter can be added at API later
-      const deals = await directMySQLService.getDeals({
-        salesAgentId: agentId,
+      console.log('🎯 Target Details:', {
+        targetId: (target as any).id,
+        agentId,
+        targetRevenue,
+        targetDeals,
+        targetPeriod
       });
 
-      // Calculate progress
-      const currentRevenue = deals.reduce(
-        (sum: number, deal: any) => sum + (deal.amountPaid ?? deal.amount ?? 0),
-        0
-      );
+      // Build deals query with proper field mapping and enhanced filtering
+      const dealsQuery: any = {
+        // Use both possible field names for compatibility
+        SalesAgentID: agentId,
+        salesAgentId: agentId,
+        userRole: 'salesman',
+        userId: agentId
+      };
+
+      // Add period filtering if target has a specific period
+      if (targetPeriod) {
+        const [month, year] = targetPeriod.split(' ');
+        if (month && year) {
+          dealsQuery.month = month;
+          dealsQuery.year = year;
+          console.log('🎯 Adding period filter:', { month, year });
+        }
+      }
+
+      console.log('🎯 Querying deals with:', dealsQuery);
+
+      // Get deals for this agent with period filtering
+      const deals = await directMySQLService.getDeals(dealsQuery);
+      
+      console.log('🎯 Found deals:', deals.length);
+      
+      // Calculate progress with proper field mapping
+      const currentRevenue = deals.reduce((sum: number, deal: any) => {
+        const amount = Number(deal.amount_paid || deal.amountPaid || deal.amount || 0);
+        console.log('🎯 Deal amount:', amount, 'from deal:', deal.id || deal.DealID);
+        return sum + amount;
+      }, 0);
       const currentDeals = deals.length;
       
       const revenueProgress = targetRevenue > 0 ? (currentRevenue / targetRevenue) * 100 : 0;
@@ -183,6 +213,15 @@ class MySQLTargetsService implements TargetsService {
       
       const remainingRevenue = Math.max(0, targetRevenue - currentRevenue);
       const remainingDeals = Math.max(0, targetDeals - currentDeals);
+
+      console.log('🎯 Progress Calculation:', {
+        currentRevenue,
+        targetRevenue,
+        currentDeals,
+        targetDeals,
+        revenueProgress: revenueProgress.toFixed(1) + '%',
+        dealsProgress: dealsProgress.toFixed(1) + '%'
+      });
       
       return {
         targetId: (target as any).id,
@@ -193,7 +232,7 @@ class MySQLTargetsService implements TargetsService {
         dealsTarget: targetDeals,
         currentRevenue,
         currentDeals,
-        currentSales: currentRevenue, // Add for compatibility
+        currentSales: currentRevenue,
         revenueProgress,
         dealsProgress,
         remainingRevenue,
@@ -204,7 +243,7 @@ class MySQLTargetsService implements TargetsService {
         lastUpdated: new Date().toISOString()
       };
     } catch (error) {
-      console.error('Error calculating target progress:', error);
+      console.error('❌ Error calculating target progress:', error);
       throw error;
     }
   }
