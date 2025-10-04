@@ -7,7 +7,7 @@ class DirectMySQLService {
     `${process.env.NEXT_PUBLIC_API_BASE_URL}/api` :
     (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
       ? `http://localhost:3001/api` 
-      : `https://vmaxcom.org/api`); // Use vmaxcom.org domain with HTTPS for production
+      : `/api`); // Use same-origin in production to avoid CORS issues
 
   // Create a timeout signal that works across browsers
   private createTimeoutSignal(ms: number): AbortSignal | undefined {
@@ -135,9 +135,9 @@ class DirectMySQLService {
       const response = await fetch(`${this.baseUrl}/callbacks?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache'
-        }
+          'Accept': 'application/json'
+        },
+        cache: 'no-store'
       });
       
       if (!response.ok) {

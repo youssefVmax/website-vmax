@@ -155,10 +155,10 @@ export default function DealsTablePage() {
         }
       }
       
-      // Fetch from API - use localhost in development
+      // Fetch from API - use localhost in development, same-origin in production to avoid CORS
       const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
         ? 'http://localhost:3001' 
-        : 'https://vmaxcom.org';
+        : '';
       const apiUrl = `${baseUrl}/api/deals?${params.toString()}`;
       
       console.log('🔍 DealsTable: Fetching deals from:', apiUrl);
@@ -166,9 +166,9 @@ export default function DealsTablePage() {
       
       const response = await fetch(apiUrl, {
         headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
-        }
+          'Content-Type': 'application/json'
+        },
+        cache: 'no-store'
       })
       
       if (!response.ok) {

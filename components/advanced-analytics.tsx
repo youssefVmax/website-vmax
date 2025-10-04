@@ -99,10 +99,10 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       setError(null)
       console.log('🔄 Fetching salesman analytics for user:', user.id)
 
-      // Dynamic base URL for localhost development
+      // Dynamic base URL for localhost development; same-origin in production to avoid CORS
       const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
         ? 'http://localhost:3001' 
-        : 'https://vmaxcom.org';
+        : '';
 
       // Get dashboard stats with salesman filtering
       const dashboardParams = new URLSearchParams({
@@ -114,7 +114,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       const dashboardUrl = `${baseUrl}/api/analytics/dashboard-stats?${dashboardParams.toString()}`
       console.log('➡️ Calling dashboard stats API for salesman:', dashboardUrl)
       const dashboardResponse = await fetch(dashboardUrl, {
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         signal: AbortSignal.timeout(10000) // 10 second timeout
       })
@@ -140,7 +140,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       const chartsUrl = `${baseUrl}/api/charts?${chartsParams.toString()}`
       console.log('➡️ Calling charts API for salesman:', chartsUrl)
       const chartsResponse = await fetch(chartsUrl, {
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         signal: AbortSignal.timeout(10000) // 10 second timeout
       })
@@ -165,7 +165,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       const dealsUrl = `${baseUrl}/api/deals?${dealsParams.toString()}`
       console.log('➡️ Calling deals API for salesman:', dealsUrl)
       const dealsResponse = await fetch(dealsUrl, {
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         signal: AbortSignal.timeout(15000) // 15 second timeout for larger data
       })
@@ -206,7 +206,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       setError(null)
       console.log('🔄 Fetching team leader analytics for:', user.managedTeam)
 
-      // Dynamic base URL for localhost development
+      // Dynamic base URL for localhost development; same-origin in production
       const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
         ? 'http://localhost:3001' 
         : '';
@@ -299,7 +299,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       const callbacksUrl = `${baseUrl}/api/callbacks?${callbacksParams.toString()}`
       console.log('➡️ Calling callbacks API:', callbacksUrl)
       const callbacksResponse = await fetch(callbacksUrl, {
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         signal: AbortSignal.timeout(15000) // 15 second timeout for larger data
       })
