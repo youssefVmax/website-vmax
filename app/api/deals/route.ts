@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search");
     const monthParam = searchParams.get("month");
     const yearParam = searchParams.get("year");
+    const dateRange = searchParams.get('dateRange'); // Number of days to look back
     const page = parseInt(searchParams.get("page") || "1", 10) || 1;
     const limit = Math.min(parseInt(searchParams.get("limit") || "25", 10) || 25, 200);
     const offset = (page - 1) * limit;
@@ -102,6 +103,21 @@ export async function GET(request: NextRequest) {
       const searchTerm = `%${search.trim()}%`;
       where.push('(d.`customer_name` LIKE ? OR d.`phone_number` LIKE ? OR d.`email` LIKE ? OR d.`sales_agent` LIKE ? OR d.`SalesAgentID` LIKE ?)');
       console.log('🔍 Search applied:', { search: search.trim(), searchTerm });
+    }
+
+    // Apply date range filtering if specified
+    if (dateRange && dateRange !== 'all') {
+      const days = parseInt(dateRange);
+      console.log('🔍 Deals API - Date range filtering:', { dateRange, days, isValid: !isNaN(days) && days > 0 });
+      if (!isNaN(days) && days > 0) {
+        where.push('d.`created_at` >= DATE_SUB(NOW(), INTERVAL ? DAY)');
+        params.push(days);
+        console.log('✅ Deals API - Applied date range filtering for', days, 'days');
+      } else {
+        console.log('⚠️ Deals API - Invalid date range, skipping filtering');
+      }
+    } else {
+      console.log('ℹ️ Deals API - No date range specified or set to "all"');
     }
 
     const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";

@@ -45,22 +45,29 @@ export async function GET(request: NextRequest) {
     }
 
     // Build base queries based on role
-    let dealsQuery = 'SELECT * FROM deals WHERE 1=1';
+    let dealsQuery = 'SELECT d.*, COALESCE(u1.name, \'Unknown Agent\') as sales_agent_name, COALESCE(u2.name, d.closing_agent, \'Unknown Agent\') as closing_agent_name FROM deals d LEFT JOIN users u1 ON d.SalesAgentID = u1.id LEFT JOIN users u2 ON d.ClosingAgentID = u2.id WHERE 1=1';
     let callbacksQuery = 'SELECT * FROM callbacks WHERE 1=1';
     let targetsQuery = 'SELECT * FROM targets WHERE 1=1';
     const queryParams: any[] = [];
 
     // Apply role-based filtering using correct field names
     if (userRole === 'salesman' && userId) {
-      dealsQuery += ' AND (SalesAgentID = ? OR ClosingAgentID = ?)';
+      dealsQuery += ' AND (d.SalesAgentID = ? OR d.ClosingAgentID = ?)';
       callbacksQuery += ' AND SalesAgentID = ?';
       targetsQuery += ' AND agentId = ?';
       queryParams.push(userId, userId, userId, userId);
-    } else if (userRole === 'team_leader' && managedTeam) {
-      dealsQuery += ' AND (sales_team = ? OR SalesAgentID = ?)';
-      callbacksQuery += ' AND (sales_team = ? OR SalesAgentID = ?)';
-      targetsQuery += ' AND (managerId = ? OR agentId = ?)';
-      queryParams.push(managedTeam, userId, managedTeam, userId, managedTeam, userId);
+    } else if (userRole === 'team_leader' && userId) {
+      if (managedTeam) {
+        dealsQuery += ' AND (d.SalesAgentID = ? OR d.sales_team = ?)';
+        callbacksQuery += ' AND (SalesAgentID = ? OR sales_team = ?)';
+        targetsQuery += ' AND (managerId = ? OR agentId = ?)';
+        queryParams.push(userId, managedTeam, userId, managedTeam, managedTeam, userId);
+      } else {
+        dealsQuery += ' AND d.SalesAgentID = ?';
+        callbacksQuery += ' AND SalesAgentID = ?';
+        targetsQuery += ' AND agentId = ?';
+        queryParams.push(userId, userId, userId);
+      }
     }
     // Manager sees all data (no additional filters)
 
@@ -203,7 +210,7 @@ function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], user
   // Sales by agent (using correct field names)
   const salesByAgent: { [key: string]: { agent: string; sales: number; deals: number } } = {};
   deals.forEach(deal => {
-    const agent = deal.sales_agent || deal.SalesAgentID || 'Unknown';
+    const agent = deal.sales_agent_name || deal.sales_agent || deal.SalesAgentID || 'Unknown';
     if (!salesByAgent[agent]) {
       salesByAgent[agent] = { agent, sales: 0, deals: 0 };
     }

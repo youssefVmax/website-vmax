@@ -22,8 +22,9 @@ export async function GET(request: NextRequest) {
     const userRole = searchParams.get('userRole') || 'manager';
     const userId = searchParams.get('userId');
     const managedTeam = searchParams.get('managedTeam');
+    const dateRange = searchParams.get('dateRange'); // Number of days to look back
 
-    console.log('🔄 Fetching dashboard stats:', { userRole, userId, managedTeam });
+    console.log('🔄 Fetching dashboard stats:', { userRole, userId, managedTeam, dateRange });
 
     // First, let's check if the tables exist
     try {
@@ -40,25 +41,62 @@ export async function GET(request: NextRequest) {
     const callbackParams: any[] = [];
 
     // Apply role-based filtering
+    console.log('🔍 Applying role-based filtering:', { userRole, userId, managedTeam });
     if (userRole === 'salesman' && userId) {
       dealFilters.push('`SalesAgentID` = ?');
       dealParams.push(userId);
       callbackFilters.push('`SalesAgentID` = ?');
       callbackParams.push(userId);
+      console.log('✅ Applied salesman filtering:', { dealParams, callbackParams });
     } else if (userRole === 'team_leader' && userId) {
       if (managedTeam) {
         dealFilters.push('(`SalesAgentID` = ? OR `sales_team` = ?)');
         dealParams.push(userId, managedTeam);
         callbackFilters.push('(`SalesAgentID` = ? OR `sales_team` = ?)');
         callbackParams.push(userId, managedTeam);
+        console.log('✅ Applied team leader filtering:', { dealParams, callbackParams });
       } else {
         dealFilters.push('`SalesAgentID` = ?');
         dealParams.push(userId);
         callbackFilters.push('`SalesAgentID` = ?');
         callbackParams.push(userId);
+        console.log('⚠️ Applied team leader filtering (no managed team):', { dealParams, callbackParams });
       }
+    } else {
+      console.log('ℹ️ Manager role - no filtering applied');
     }
-    // Managers see all data (no additional filters)
+    // Debug: Check what data exists for this user/team
+    try {
+      console.log('🔍 Checking data availability for team leader...');
+      const [userDeals] = await query<any>('SELECT COUNT(*) as count FROM deals WHERE SalesAgentID = ?', [userId]);
+      const [teamDeals] = await query<any>('SELECT COUNT(*) as count FROM deals WHERE sales_team = ?', [managedTeam]);
+      const [userCallbacks] = await query<any>('SELECT COUNT(*) as count FROM callbacks WHERE SalesAgentID = ?', [userId]);
+      const [teamCallbacks] = await query<any>('SELECT COUNT(*) as count FROM callbacks WHERE sales_team = ?', [managedTeam]);
+      
+      console.log('📊 Data availability check:', {
+        userDeals: userDeals[0]?.count || 0,
+        teamDeals: teamDeals[0]?.count || 0,
+        userCallbacks: userCallbacks[0]?.count || 0,
+        teamCallbacks: teamCallbacks[0]?.count || 0
+      });
+    } catch (debugError) {
+      console.error('❌ Error in data availability check:', debugError);
+    }
+    if (dateRange && dateRange !== 'all') {
+      const days = parseInt(dateRange);
+      console.log('🔍 Date range filtering:', { dateRange, days, isValid: !isNaN(days) && days > 0 });
+      if (!isNaN(days) && days > 0) {
+        dealFilters.push('`created_at` >= DATE_SUB(NOW(), INTERVAL ? DAY)');
+        dealParams.push(days);
+        callbackFilters.push('`created_at` >= DATE_SUB(NOW(), INTERVAL ? DAY)');
+        callbackParams.push(days);
+        console.log('✅ Applied date range filtering for', days, 'days');
+      } else {
+        console.log('⚠️ Invalid date range, skipping filtering');
+      }
+    } else {
+      console.log('ℹ️ No date range specified or set to "all"');
+    }
 
     const dealWhere = dealFilters.length ? `WHERE ${dealFilters.join(' AND ')}` : '';
     const callbackWhere = callbackFilters.length ? `WHERE ${callbackFilters.join(' AND ')}` : '';
@@ -66,9 +104,7 @@ export async function GET(request: NextRequest) {
     // Execute queries one by one with better error handling
     let dealsResult, callbacksResult, notificationsResult, targetsResult, revenueResult, todayDealsResult, todayCallbacksResult;
 
-    try {
-      console.log('🔍 Querying deals count...');
-      [dealsResult] = await query<any>(`SELECT COUNT(*) as count FROM deals ${dealWhere}`, dealParams);
+    try {   [dealsResult] = await query<any>(`SELECT COUNT(*) as count FROM deals ${dealWhere}`, dealParams);
       console.log('✅ Deals count:', dealsResult[0]?.count);
     } catch (error) {
       console.error('❌ Error querying deals:', error);
@@ -77,6 +113,8 @@ export async function GET(request: NextRequest) {
 
     try {
       console.log('🔍 Querying callbacks count...');
+      console.log('🔍 Callback query:', `SELECT COUNT(*) as count FROM callbacks ${callbackWhere}`);
+      console.log('🔍 Callback params:', callbackParams);
       [callbacksResult] = await query<any>(`SELECT COUNT(*) as count FROM callbacks ${callbackWhere}`, callbackParams);
       console.log('✅ Callbacks count:', callbacksResult[0]?.count);
     } catch (error) {
@@ -111,6 +149,8 @@ export async function GET(request: NextRequest) {
 
     try {
       console.log('🔍 Querying total revenue...');
+      console.log('🔍 Revenue query:', `SELECT COALESCE(SUM(amount_paid), 0) as revenue FROM deals ${dealWhere}`);
+      console.log('🔍 Revenue params:', dealParams);
       [revenueResult] = await query<any>(`SELECT COALESCE(SUM(amount_paid), 0) as revenue FROM deals ${dealWhere}`, dealParams);
       console.log('✅ Total revenue:', revenueResult[0]?.revenue);
     } catch (error) {

@@ -159,6 +159,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       const dealsParams = new URLSearchParams({
         userRole,
         userId: user.id,
+        dateRange,
         limit: '200'
       })
 
@@ -269,6 +270,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         userRole,
         userId: user.id,
         salesTeam: user.managedTeam || '',
+        dateRange,
         limit: '200' // Reduced from 1000 to prevent resource issues
       })
 
@@ -285,14 +287,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         dealsData = await dealsResponse.json()
       }
 
-      // Sequential call - wait to avoid resource issues
-      await new Promise(resolve => setTimeout(resolve, 500))
-
       // Fetch team member callbacks data (sequential, reduced limit)
       const callbacksParams = new URLSearchParams({
         userRole,
         userId: user.id,
         salesTeam: user.managedTeam || '',
+        dateRange,
         limit: '200' // Reduced from 1000 to prevent resource issues
       })
 

@@ -51,23 +51,34 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
 
     // Use COALESCE for date source (some rows may lack created_at)
-    const dealDateExpr = 'COALESCE(created_at, signup_date)';
+    const dealDateExpr = `COALESCE(d.created_at, d.signup_date, NOW())`;
 
     if (userRole === 'salesman') {
-      dealsWhere = 'WHERE SalesAgentID = ?';
-      callbacksWhere = 'WHERE SalesAgentID = ?';
+      dealsWhere = 'WHERE d.SalesAgentID = ?';
+      callbacksWhere = 'WHERE c.SalesAgentID = ?';
       params.push(userId, userId);
     } else if (userRole === 'team_leader' && managedTeam) {
-      dealsWhere = 'WHERE (SalesAgentID = ? OR sales_team = ?)';
-      callbacksWhere = 'WHERE (SalesAgentID = ? OR sales_team = ?)';
+      dealsWhere = 'WHERE (d.SalesAgentID = ? OR d.sales_team = ?)';
+      callbacksWhere = 'WHERE (c.SalesAgentID = ? OR c.sales_team = ?)';
       params.push(userId, managedTeam, userId, managedTeam);
     }
 
     // Add date range filter (use dealDateExpr for deals)
-    const dateFilterDeals = `AND ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
-    const dateFilterCallbacks = `AND created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
-    dealsWhere += dealsWhere ? ` ${dateFilterDeals}` : `WHERE ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
-    callbacksWhere += callbacksWhere ? ` ${dateFilterCallbacks}` : `WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+    if (userRole === 'salesman') {
+      const dateFilterDeals = `AND ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+      dealsWhere += ` ${dateFilterDeals}`;
+      const dateFilterCallbacks = `AND created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+      callbacksWhere += ` ${dateFilterCallbacks}`;
+    } else if (userRole === 'team_leader' && managedTeam) {
+      const dateFilterDeals = `AND ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+      dealsWhere += ` ${dateFilterDeals}`;
+      const dateFilterCallbacks = `AND created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+      callbacksWhere += ` ${dateFilterCallbacks}`;
+    } else {
+      // Manager - no role filter, just date filter
+      dealsWhere = `WHERE ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+      callbacksWhere = `WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`;
+    }
 
     // 1. Sales Trend Chart (Daily/Weekly/Monthly)
     if (chartType === 'all' || chartType === 'sales-trend') {
@@ -75,8 +86,9 @@ export async function GET(request: NextRequest) {
         SELECT 
           DATE(${dealDateExpr}) as date,
           COUNT(*) as deals,
-          COALESCE(SUM(amount_paid), 0) as revenue
-        FROM deals 
+          COALESCE(SUM(d.amount_paid), 0) as revenue
+        FROM deals d 
+        LEFT JOIN users u1 ON d.SalesAgentID = u1.id
         ${dealsWhere}
         GROUP BY DATE(${dealDateExpr})
         ORDER BY date DESC
@@ -85,23 +97,41 @@ export async function GET(request: NextRequest) {
 
       const salesTrend = await query<any>(salesTrendQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
-      charts.salesTrend = salesTrend.map(row => ({
-        date: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        deals: row.deals,
-        revenue: row.revenue
-      })).reverse();
+      console.log('📊 Sales trend raw data:', salesTrend.slice(0, 3)); // Log first 3 entries
+      
+      charts.salesTrend = salesTrend.map(row => {
+        // Handle invalid or null dates
+        let dateString = 'Invalid Date';
+        try {
+          if (row.date && row.date !== '0000-00-00') {
+            const date = new Date(row.date);
+            if (!isNaN(date.getTime())) {
+              dateString = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Invalid date in sales trend:', row.date, e);
+        }
+        
+        return {
+          date: dateString,
+          deals: row.deals || 0,
+          revenue: row.revenue || 0
+        };
+      }).reverse();
     }
 
     // 2. Sales by Agent Chart
     if (chartType === 'all' || chartType === 'sales-by-agent') {
       const salesByAgentQuery = `
         SELECT 
-          COALESCE(sales_agent, SalesAgentID) as agent,
+          COALESCE(u1.name, d.sales_agent, d.SalesAgentID) as agent,
           COUNT(*) as deals,
-          COALESCE(SUM(amount_paid), 0) as revenue
-        FROM deals 
+          COALESCE(SUM(d.amount_paid), 0) as revenue
+        FROM deals d 
+        LEFT JOIN users u1 ON d.SalesAgentID = u1.id
         ${dealsWhere}
-        GROUP BY COALESCE(sales_agent, SalesAgentID)
+        GROUP BY COALESCE(u1.name, d.sales_agent, d.SalesAgentID)
         ORDER BY revenue DESC
         LIMIT 10
       `;
@@ -119,12 +149,13 @@ export async function GET(request: NextRequest) {
     if (chartType === 'all' || chartType === 'sales-by-team') {
       const salesByTeamQuery = `
         SELECT 
-          sales_team as team,
+          d.sales_team as team,
           COUNT(*) as deals,
-          COALESCE(SUM(amount_paid), 0) as revenue
-        FROM deals 
+          COALESCE(SUM(d.amount_paid), 0) as revenue
+        FROM deals d 
+        LEFT JOIN users u1 ON d.SalesAgentID = u1.id
         ${userRole === 'manager' ? `WHERE ${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)` : dealsWhere}
-        GROUP BY sales_team
+        GROUP BY d.sales_team
         ORDER BY revenue DESC
       `;
 
@@ -142,11 +173,12 @@ export async function GET(request: NextRequest) {
     if (chartType === 'all' || chartType === 'deal-status') {
       const dealStatusQuery = `
         SELECT 
-          COALESCE(status, 'active') as status,
+          COALESCE(d.status, 'active') as status,
           COUNT(*) as count
-        FROM deals 
+        FROM deals d 
+        LEFT JOIN users u1 ON d.SalesAgentID = u1.id
         ${dealsWhere}
-        GROUP BY status
+        GROUP BY d.status
         ORDER BY count DESC
       `;
 
@@ -163,12 +195,13 @@ export async function GET(request: NextRequest) {
     if (chartType === 'all' || chartType === 'service-tier') {
       const serviceTierQuery = `
         SELECT 
-          COALESCE(service_tier, 'Unknown') as service,
+          COALESCE(d.service_tier, 'Unknown') as service,
           COUNT(*) as deals,
-          COALESCE(SUM(amount_paid), 0) as revenue
-        FROM deals 
+          COALESCE(SUM(d.amount_paid), 0) as revenue
+        FROM deals d 
+        LEFT JOIN users u1 ON d.SalesAgentID = u1.id
         ${dealsWhere}
-        GROUP BY COALESCE(service_tier, 'Unknown')
+        GROUP BY COALESCE(d.service_tier, 'Unknown')
         ORDER BY revenue DESC
       `;
 
@@ -185,13 +218,13 @@ export async function GET(request: NextRequest) {
     if (chartType === 'all' || chartType === 'callback-performance') {
       const callbackPerformanceQuery = `
         SELECT 
-          DATE(created_at) as date,
+          DATE(c.created_at) as date,
           COUNT(*) as total_callbacks,
-          COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_callbacks,
-          COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_callbacks
-        FROM callbacks 
+          COUNT(CASE WHEN c.status = 'completed' THEN 1 END) as completed_callbacks,
+          COUNT(CASE WHEN c.status = 'pending' THEN 1 END) as pending_callbacks
+        FROM callbacks c 
         ${callbacksWhere}
-        GROUP BY DATE(created_at)
+        GROUP BY DATE(c.created_at)
         ORDER BY date DESC
         LIMIT 30
       `;
@@ -199,24 +232,49 @@ export async function GET(request: NextRequest) {
       const callbackParams = userRole === 'team_leader' ? [userId, managedTeam] : [userId];
       const callbackPerformance = await query<any>(callbackPerformanceQuery, callbackParams);
       
-      charts.callbackPerformance = callbackPerformance.map(row => ({
-        date: new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        total: row.total_callbacks,
-        completed: row.completed_callbacks,
-        pending: row.pending_callbacks,
-        conversionRate: row.total_callbacks > 0 ? (row.completed_callbacks / row.total_callbacks) * 100 : 0
-      })).reverse();
+      charts.callbackPerformance = callbackPerformance.map(row => {
+        // Handle invalid or null dates
+        let dateString = 'Invalid Date';
+        try {
+          if (row.date && row.date !== '0000-00-00') {
+            const date = new Date(row.date);
+            if (!isNaN(date.getTime())) {
+              dateString = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Invalid date in callback performance:', row.date);
+        }
+        
+        return {
+          date: dateString,
+          total: row.total_callbacks || 0,
+          completed: row.completed_callbacks || 0,
+          pending: row.pending_callbacks || 0,
+          conversionRate: row.total_callbacks > 0 ? (row.completed_callbacks / row.total_callbacks) * 100 : 0
+        };
+      }).reverse();
     }
 
     // 7. Monthly Revenue Comparison
     if (chartType === 'all' || chartType === 'monthly-revenue') {
+      let monthlyDealsWhere = dealsWhere;
+      if (userRole === 'salesman') {
+        monthlyDealsWhere = monthlyDealsWhere.replace(/AND COALESCE\(d\.created_at, d\.signup_date, NOW\(\)\) >= DATE_SUB\(NOW\(\), INTERVAL \d+ DAY\)/, 'AND COALESCE(d.created_at, d.signup_date, NOW()) >= DATE_SUB(NOW(), INTERVAL 12 MONTH)');
+      } else if (userRole === 'team_leader' && managedTeam) {
+        monthlyDealsWhere = monthlyDealsWhere.replace(/AND COALESCE\(d\.created_at, d\.signup_date, NOW\(\)\) >= DATE_SUB\(NOW\(\), INTERVAL \d+ DAY\)/, 'AND COALESCE(d.created_at, d.signup_date, NOW()) >= DATE_SUB(NOW(), INTERVAL 12 MONTH)');
+      } else {
+        monthlyDealsWhere = monthlyDealsWhere.replace(/WHERE COALESCE\(d\.created_at, d\.signup_date, NOW\(\)\) >= DATE_SUB\(NOW\(\), INTERVAL \d+ DAY\)/, 'WHERE COALESCE(d.created_at, d.signup_date, NOW()) >= DATE_SUB(NOW(), INTERVAL 12 MONTH)');
+      }
+      
       const monthlyRevenueQuery = `
         SELECT 
           DATE_FORMAT(${dealDateExpr}, '%Y-%m') as month,
           COUNT(*) as deals,
-          COALESCE(SUM(amount_paid), 0) as revenue
-        FROM deals 
-        ${dealsWhere.replace(`${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL ${parseInt(dateRange)} DAY)`, `${dealDateExpr} >= DATE_SUB(NOW(), INTERVAL 12 MONTH)`)}
+          COALESCE(SUM(d.amount_paid), 0) as revenue
+        FROM deals d 
+        LEFT JOIN users u1 ON d.SalesAgentID = u1.id
+        ${monthlyDealsWhere}
         GROUP BY DATE_FORMAT(${dealDateExpr}, '%Y-%m')
         ORDER BY month DESC
         LIMIT 12
@@ -224,23 +282,41 @@ export async function GET(request: NextRequest) {
 
       const monthlyRevenue = await query<any>(monthlyRevenueQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
-      charts.monthlyRevenue = monthlyRevenue.map(row => ({
-        month: new Date(row.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        deals: row.deals,
-        revenue: row.revenue
-      })).reverse();
+      console.log('📊 Monthly revenue raw data:', monthlyRevenue.slice(0, 3)); // Log first 3 entries
+      
+      charts.monthlyRevenue = monthlyRevenue.map(row => {
+        // Handle invalid or null months
+        let monthString = 'Invalid Month';
+        try {
+          if (row.month && row.month !== '0000-00') {
+            const date = new Date(row.month + '-01');
+            if (!isNaN(date.getTime())) {
+              monthString = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Invalid month in monthly revenue:', row.month);
+        }
+        
+        return {
+          month: monthString,
+          deals: row.deals || 0,
+          revenue: row.revenue || 0
+        };
+      }).reverse();
     }
 
     // 8. Top Customers Chart
     if (chartType === 'all' || chartType === 'top-customers') {
       const topCustomersQuery = `
         SELECT 
-          customer_name as customer,
+          d.customer_name as customer,
           COUNT(*) as deals,
-          COALESCE(SUM(amount_paid), 0) as revenue
-        FROM deals 
+          COALESCE(SUM(d.amount_paid), 0) as revenue
+        FROM deals d 
+        LEFT JOIN users u1 ON d.SalesAgentID = u1.id
         ${dealsWhere}
-        GROUP BY customer_name
+        GROUP BY d.customer_name
         ORDER BY revenue DESC
         LIMIT 10
       `;
@@ -258,10 +334,11 @@ export async function GET(request: NextRequest) {
     const summaryQuery = `
       SELECT 
         COUNT(*) as total_deals,
-        COALESCE(SUM(amount_paid), 0) as total_revenue,
-        COALESCE(AVG(amount_paid), 0) as avg_deal_size,
-        COUNT(DISTINCT COALESCE(sales_agent, SalesAgentID)) as unique_agents
-      FROM deals 
+        COALESCE(SUM(d.amount_paid), 0) as total_revenue,
+        COALESCE(AVG(d.amount_paid), 0) as avg_deal_size,
+        COUNT(DISTINCT COALESCE(u1.name, d.sales_agent, d.SalesAgentID)) as unique_agents
+      FROM deals d 
+      LEFT JOIN users u1 ON d.SalesAgentID = u1.id
       ${dealsWhere}
     `;
 

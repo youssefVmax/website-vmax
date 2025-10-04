@@ -181,19 +181,6 @@ export default function DealsTablePage() {
         throw new Error(result.error || 'Failed to fetch deals')
       }
       
-      // Debug: Log the first deal to see the data structure
-      if (result.deals && result.deals.length > 0) {
-        console.log('🔍 DealsTable: Sample deal data structure:', {
-          program_type: result.deals[0].program_type,
-          is_ibo_player: result.deals[0].is_ibo_player,
-          is_bob_player: result.deals[0].is_bob_player,
-          is_smarters: result.deals[0].is_smarters,
-          is_ibo_pro: result.deals[0].is_ibo_pro,
-          is_iboss: result.deals[0].is_iboss,
-          customer_name: result.deals[0].customer_name
-        })
-      }
-      
       // Normalize deals data - prioritize database field formats (snake_case)
       const normalizedDeals = (result.deals || []).map((deal: any) => ({
         // Core identifiers
@@ -257,19 +244,6 @@ export default function DealsTablePage() {
         createdAt: deal.created_at ?? deal.createdAt ?? '',
         updatedAt: deal.updated_at ?? deal.updatedAt ?? '',
       }))
-      
-      // Debug: Log the first normalized deal to see what we're displaying
-      if (normalizedDeals.length > 0) {
-        console.log('🔍 DealsTable: Sample normalized deal:', {
-          programType: normalizedDeals[0].programType,
-          is_ibo_player: result.deals[0]?.is_ibo_player,
-          is_bob_player: result.deals[0]?.is_bob_player,
-          program_type_field: result.deals[0]?.program_type,
-          salesAgentName: normalizedDeals[0].salesAgentName,
-          closingAgentName: normalizedDeals[0].closingAgentName
-        })
-      }
-      
       setDeals(normalizedDeals)
       setTotalDeals(result.total || 0)
       paginationActions.setTotalItems(result.total || 0)
