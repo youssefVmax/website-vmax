@@ -2,11 +2,11 @@
 import { requestManager } from './request-manager';
 
 class DirectMySQLService {
-  // Force all requests through proper domain with HTTPS
-  private baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ? 
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api` :
-    (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-      ? `http://localhost:3001/api` 
+  // Force all requests through proper domain with HTTPS or localhost detection first
+  private baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? `http://localhost:3001/api`
+    : (process.env.NEXT_PUBLIC_API_BASE_URL 
+      ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/api` 
       : `/api`); // Use same-origin in production to avoid CORS issues
 
   // Create a timeout signal that works across browsers
@@ -301,6 +301,9 @@ class DirectMySQLService {
     try {
       console.log('🔄 DirectMySQLService: Creating deal via deals API');
       console.log('🔍 Deal data being sent:', dealData);
+      console.log('🌐 Using base URL:', this.baseUrl);
+      console.log('🌐 Full URL:', `${this.baseUrl}/deals`);
+      console.log('🌐 Window hostname:', typeof window !== 'undefined' ? window.location.hostname : 'server-side');
       
       const response = await requestManager.fetch(`${this.baseUrl}/deals`, {
         method: 'POST',

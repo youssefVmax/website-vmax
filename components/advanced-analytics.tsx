@@ -111,7 +111,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         dateRange
       })
 
-      const dashboardUrl = `${baseUrl}/api/analytics/dashboard-stats?${dashboardParams.toString()}`
+      const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
       console.log('➡️ Calling dashboard stats API for salesman:', dashboardUrl)
       const dashboardResponse = await fetch(dashboardUrl, {
         headers: { 'Content-Type': 'application/json' },
@@ -220,7 +220,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         dateRange
       })
 
-      const dashboardUrl = `${baseUrl}/api/analytics/dashboard-stats?${dashboardParams.toString()}`
+      const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
       console.log('➡️ Calling dashboard stats API:', dashboardUrl)
       const dashboardResponse = await fetch(dashboardUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },

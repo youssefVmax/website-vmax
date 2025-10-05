@@ -104,8 +104,6 @@ export async function GET(request: NextRequest) {
       where.push('(d.`customer_name` LIKE ? OR d.`phone_number` LIKE ? OR d.`email` LIKE ? OR d.`sales_agent` LIKE ? OR d.`SalesAgentID` LIKE ?)');
       console.log('🔍 Search applied:', { search: search.trim(), searchTerm });
     }
-
-    // Apply date range filtering if specified
     if (dateRange && dateRange !== 'all') {
       const days = parseInt(dateRange);
       console.log('🔍 Deals API - Date range filtering:', { dateRange, days, isValid: !isNaN(days) && days > 0 });
@@ -184,48 +182,52 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔄 POST /api/deals - Starting deal creation');
+    
+    // Test database connection first
+    try {
+      await query('SELECT 1 as test');
+      console.log('✅ Database connection verified');
+    } catch (dbError) {
+      console.error('❌ Database connection failed:', dbError);
+      return addCorsHeaders(
+        NextResponse.json(
+          { 
+            success: false, 
+            error: "Database connection failed", 
+            details: dbError instanceof Error ? dbError.message : "Unknown database error"
+          },
+          { status: 503 }
+        )
+      );
+    }
+    
     const body = await request.json();
+    console.log('📝 Deal creation request body:', body);
 
     // Generate IDs
     const id = `deal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const dealId = body.dealId || body.DealID || `D${Date.now()}`;
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-    // One-time migration: Update existing deals with null program_type
-    try {
-      await query<any>(
-        `UPDATE deals 
-         SET program_type = CASE 
-           WHEN is_ibo_player = 1 THEN 'IBO Player'
-           WHEN is_bob_player = 1 THEN 'BOB Player'
-           WHEN is_smarters = 1 THEN 'Smarters'
-           WHEN is_ibo_pro = 1 THEN 'IBO Pro'
-           WHEN is_iboss = 1 THEN 'IBOSS'
-           ELSE 'IBO Player'
-         END
-         WHERE program_type IS NULL OR program_type = '' OR program_type = 'None Selected'`
-      );
-      console.log('✅ Migration: Updated existing deals with program_type');
-    } catch (migrationError) {
-      console.error('❌ Migration error:', migrationError);
-      // Don't fail the deal creation if migration fails
-    }
+    // Program type is determined by the boolean flags (is_ibo_player, is_bob_player, etc.)
+    console.log('ℹ️ Program type will be determined by service feature flags');
 
     // Normalize customer name to ensure consistency
     const customerName = body.customerName || body.customer_name || 'Unknown Customer';
     console.log('🔍 Creating deal with customer name:', customerName);
 
-    // Insert deal with all fields from the form including program_type
+    // Insert deal with all fields from the form
     await query<any>(
       `INSERT INTO deals (
         id, DealID, customer_name, email, phone_number, amount_paid, country, custom_country,
         sales_agent, SalesAgentID, sales_team, closing_agent, ClosingAgentID,
         stage, status, priority, signup_date, end_date, duration_years, duration_months,
-        number_of_users, product_type, service_tier, program_type, paid_per_month, paid_per_day,
+        number_of_users, product_type, service_tier, paid_per_month, paid_per_day,
         days_remaining, data_month, data_year, end_year, is_ibo_player, is_bob_player,
         is_smarters, is_ibo_pro, is_iboss, device_key, device_id, invoice_link,
         notes, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         dealId,
@@ -250,7 +252,6 @@ export async function POST(request: NextRequest) {
         body.numberOfUsers || body.number_of_users || 1,
         body.product_type || '',
         body.serviceTier || body.service_tier || 'Silver',
-        body.program_type || body.programType || 'None Selected',
         body.paid_per_month || 0,
         body.paid_per_day || 0,
         body.days_remaining || 0,
@@ -310,6 +311,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the deal creation if notification fails
     }
 
+    console.log('✅ Deal created successfully:', newDeal?.id);
     return addCorsHeaders(NextResponse.json({ success: true, deal: newDeal }, { status: 201 }));
   } catch (error) {
     console.error("❌ Error creating deal:", error);
@@ -318,8 +320,20 @@ export async function POST(request: NextRequest) {
       stack: error instanceof Error ? error.stack : undefined,
       sqlState: (error as any)?.sqlState,
       errno: (error as any)?.errno,
-      code: (error as any)?.code
+      code: (error as any)?.code,
+      sqlMessage: (error as any)?.sqlMessage
     });
+    
+    // Determine appropriate status code based on error type
+    let statusCode = 500;
+    if ((error as any)?.code === 'ER_ACCESS_DENIED_ERROR') {
+      statusCode = 503; // Service unavailable for auth issues
+    } else if ((error as any)?.code === 'ECONNREFUSED' || (error as any)?.code === 'ETIMEDOUT') {
+      statusCode = 503; // Service unavailable for connection issues
+    } else if ((error as any)?.errno === 1062) {
+      statusCode = 409; // Conflict for duplicate entries
+    }
+    
     return addCorsHeaders(
       NextResponse.json(
         { 
@@ -329,10 +343,12 @@ export async function POST(request: NextRequest) {
           debug: {
             message: error instanceof Error ? error.message : "Unknown error",
             code: (error as any)?.code,
-            errno: (error as any)?.errno
+            errno: (error as any)?.errno,
+            sqlState: (error as any)?.sqlState,
+            sqlMessage: (error as any)?.sqlMessage
           }
         },
-        { status: 502 }
+        { status: statusCode }
       )
     );
   }

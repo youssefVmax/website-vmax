@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '../../../../lib/server/db';
+import { query } from '../../../lib/server/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

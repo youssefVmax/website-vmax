@@ -5,9 +5,9 @@
 //  - Public staging: http://vmaxcom.org
 //  - Local XAMPP/WAMP: http://localhost/website-vmax (if your PHP server serves the repo path)
 export const API_CONFIG = {
-  BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-    ? 'http://localhost:3001' 
-    : 'https://vmaxcom.org'),
+  BASE_URL: typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://vmaxcom.org'),
   
   // API endpoints
   ENDPOINTS: {
