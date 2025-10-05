@@ -274,7 +274,7 @@ export default function DealsTablePage() {
   const exportToCSV = () => {
     const headers = [
       'Deal ID', 'Customer Name', 'Email', 'Phone', 'Country', 'Signup Date',
-      'Amount Paid', 'Duration (Months)', 'Duration (Years)', 'Service Tier', 'Program Type', 'Number of Users',
+      'Amount Paid', 'Duration (Compact)', 'Duration (Full)', 'Service Tier', 'Program Type', 'Number of Users',
       'Sales Agent', 'Sales Agent ID', 'Closing Agent', 'Closing Agent ID', 'Sales Team',
       'Device Key', 'Device ID', 'Invoice Link', 'Notes',
       'Status', 'Stage', 'Priority', 'Created At', 'Created By'
@@ -288,8 +288,15 @@ export default function DealsTablePage() {
       deal.country,
       deal.signupDate,
       deal.amountPaid,
-      deal.durationMonths,
-      deal.durationYears || 0,
+      (() => {
+        const years = deal.durationYears || 0;
+        const months = deal.durationMonths || 0;
+        if (years > 0 && months > 0) return `${years}y ${months}m`;
+        if (years > 0) return `${years}y`;
+        if (months > 0) return `${months}m`;
+        return 'N/A';
+      })(),
+      `${deal.durationYears || 0} years, ${deal.durationMonths || 0} months`,
       deal.serviceTier,
       deal.programType || 'None Selected',
       deal.numberOfUsers || 1,
@@ -568,10 +575,48 @@ export default function DealsTablePage() {
                       <div className="text-xs text-muted-foreground">{deal.serviceTier}</div>
                     </TableCell>
                     <TableCell>
-                      <div>{deal.durationMonths} months</div>
-                      {(deal.durationYears || 0) > 0 && (
-                        <div className="text-xs text-muted-foreground">({deal.durationYears} years)</div>
-                      )}
+                      <div className="flex flex-col">
+                        {(() => {
+                          const years = deal.durationYears || 0;
+                          const months = deal.durationMonths || 0;
+                          
+                          if (years > 0 && months > 0) {
+                            return (
+                              <>
+                                <div className="font-medium text-sm">{years}y {months}m</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {years === 1 ? '1 year' : `${years} years`} + {months === 1 ? '1 month' : `${months} months`}
+                                </div>
+                              </>
+                            );
+                          } else if (years > 0) {
+                            return (
+                              <>
+                                <div className="font-medium text-sm">{years}y</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {years === 1 ? '1 year' : `${years} years`}
+                                </div>
+                              </>
+                            );
+                          } else if (months > 0) {
+                            return (
+                              <>
+                                <div className="font-medium text-sm">{months}m</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {months === 1 ? '1 month' : `${months} months`}
+                                </div>
+                              </>
+                            );
+                          } else {
+                            return (
+                              <>
+                                <div className="font-medium text-sm">N/A</div>
+                                <div className="text-xs text-muted-foreground">No duration</div>
+                              </>
+                            );
+                          }
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{deal.serviceTier}</div>

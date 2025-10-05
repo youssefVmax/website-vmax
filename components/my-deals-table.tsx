@@ -15,6 +15,28 @@ import { ArrowUpDown, Eye, Edit as EditIcon, RotateCcw } from "lucide-react"
 import { apiService, Deal } from "@/lib/api-service"
 import { useEffect } from "react"
 
+// Helper function to get program type from deal data
+const getProgramType = (deal: any) => {
+  // First check if program_type is explicitly set
+  if (deal.program_type && deal.program_type !== 'None Selected' && deal.program_type !== null) {
+    return deal.program_type;
+  }
+  if (deal.programType && deal.programType !== 'None Selected' && deal.programType !== null) {
+    return deal.programType;
+  }
+  
+  // If not, calculate from boolean service feature fields
+  if (deal.is_ibo_player === true || deal.is_ibo_player === 1) return 'IBO Player';
+  if (deal.is_bob_player === true || deal.is_bob_player === 1) return 'BOB Player';
+  if (deal.is_smarters === true || deal.is_smarters === 1) return 'Smarters';
+  if (deal.is_ibo_pro === true || deal.is_ibo_pro === 1) return 'IBO Pro';
+  if (deal.is_iboss === true || deal.is_iboss === 1) return 'IBOSS';
+  
+  // For legacy deals without any program type data, default to IBO Player
+  // This provides a reasonable fallback for existing deals
+  return 'Not Selected';
+};
+
 interface MyDealsTableProps {
   user: { id: string; name: string; username: string; role: 'manager'|'salesman'|'team_leader' }
 }
@@ -308,7 +330,6 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                     Amount <ArrowUpDown className="h-3 w-3 ml-1" />
                   </Button>
                 </TableHead>
-                <TableHead className="w-24">Username</TableHead>
                 <TableHead className="w-28">
                   <Button variant="ghost" className="px-0 text-xs" onClick={()=>toggleSort('closing_agent')}>
                     Sales Agent <ArrowUpDown className="h-3 w-3 ml-1" />
@@ -368,11 +389,6 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                     </div>
                   </TableCell>
                   
-                  {/* Username */}
-                  <TableCell className="text-xs py-2 font-mono">{
-                    (d as any).username || (d as any).user_name || 'N/A'
-                  }</TableCell>
-                  
                   {/* Sales Agent */}
                   <TableCell className="text-xs py-2">{
                     (d as any).sales_agent_name || (d as any).sales_agent || d.salesAgentName ||
@@ -392,24 +408,67 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                   </TableCell>
                   
                   {/* Duration */}
-                  <TableCell className="text-xs py-2">{
-                    (() => {
-                      const months = (d as any).duration_months || d.durationMonths
-                      const durLabel = (d as any).duration || (d as any).duration_label
-                      if (durLabel) return durLabel
-                      if (months === 12) return 'YEAR'
-                      if (months === 24) return 'TWO YEAR'
-                      if (months > 24) return `${Math.floor(months/12)}Y+${months%12}M`
-                      if (months) return `${months}M`
-                      return 'N/A'
-                    })()
-                  }</TableCell>
+                  <TableCell className="py-2">
+                    <div className="flex flex-col">
+                      {(() => {
+                        const years = (d as any).duration_years || d.durationYears || 0;
+                        const months = (d as any).duration_months || d.durationMonths || 0;
+                        const durLabel = (d as any).duration || (d as any).duration_label;
+                        
+                        // If there's a custom duration label, use it
+                        if (durLabel) {
+                          return (
+                            <>
+                              <div className="font-medium text-sm">{durLabel}</div>
+                              <div className="text-xs text-muted-foreground">Custom duration</div>
+                            </>
+                          );
+                        }
+                        
+                        if (years > 0 && months > 0) {
+                          return (
+                            <>
+                              <div className="font-medium text-sm">{years}y {months}m</div>
+                              <div className="text-xs text-muted-foreground">
+                                {years === 1 ? '1 year' : `${years} years`} + {months === 1 ? '1 month' : `${months} months`}
+                              </div>
+                            </>
+                          );
+                        } else if (years > 0) {
+                          return (
+                            <>
+                              <div className="font-medium text-sm">{years}y</div>
+                              <div className="text-xs text-muted-foreground">
+                                {years === 1 ? '1 year' : `${years} years`}
+                              </div>
+                            </>
+                          );
+                        } else if (months > 0) {
+                          return (
+                            <>
+                              <div className="font-medium text-sm">{months}m</div>
+                              <div className="text-xs text-muted-foreground">
+                                {months === 1 ? '1 month' : `${months} months`}
+                              </div>
+                            </>
+                          );
+                        } else {
+                          return (
+                            <>
+                              <div className="font-medium text-sm">N/A</div>
+                              <div className="text-xs text-muted-foreground">No duration</div>
+                            </>
+                          );
+                        }
+                      })()}
+                    </div>
+                  </TableCell>
                   
                   {/* Program */}
                   <TableCell className="text-xs py-2">
-                    <Badge variant="outline" className="text-xs">{
-                      (d as any).type_program || (d as any).program_type || (d as any).program || 'N/A'
-                    }</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {getProgramType(d)}
+                    </Badge>
                   </TableCell>
                   
                   {/* Service */}
@@ -516,14 +575,21 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                   return endDate ? new Date(endDate).toLocaleString() : 'N/A'
                 })()}</div>
                 <div><strong>Duration:</strong> {(() => {
-                  const months = (viewDeal as any)?.duration_months || viewDeal?.durationMonths
-                  const durLabel = (viewDeal as any)?.duration || (viewDeal as any)?.duration_label
-                  if (durLabel) return durLabel
-                  if (months === 12) return 'YEAR'
-                  if (months === 24) return 'TWO YEAR'
-                  if (months > 24) return `${Math.floor(months/12)}Y+${months%12}M`
-                  if (months) return `${months}M`
-                  return 'N/A'
+                  const years = (viewDeal as any)?.duration_years || viewDeal?.durationYears || 0;
+                  const months = (viewDeal as any)?.duration_months || viewDeal?.durationMonths || 0;
+                  const durLabel = (viewDeal as any)?.duration || (viewDeal as any)?.duration_label;
+                  
+                  if (durLabel) return durLabel;
+                  
+                  if (years > 0 && months > 0) {
+                    return `${years} ${years === 1 ? 'year' : 'years'} and ${months} ${months === 1 ? 'month' : 'months'}`;
+                  } else if (years > 0) {
+                    return `${years} ${years === 1 ? 'year' : 'years'}`;
+                  } else if (months > 0) {
+                    return `${months} ${months === 1 ? 'month' : 'months'}`;
+                  } else {
+                    return 'No duration specified';
+                  }
                 })()}</div>
               </div>
 
