@@ -14,7 +14,7 @@ interface RequestCache {
 class RequestManager {
   private cache = new Map<string, RequestCache>();
   private readonly CACHE_TTL = 30000; // 30 seconds
-  private readonly MAX_RETRIES = 2;
+  private readonly MAX_RETRIES = 1; // Reduced retries to prevent overwhelming server
 
   private getCacheKey(url: string, options?: RequestInit): string {
     return `${url}_${JSON.stringify(options?.method || 'GET')}_${JSON.stringify(options?.body || '')}`;
@@ -83,7 +83,7 @@ class RequestManager {
         console.log(`🔄 RequestManager: Attempt ${attempt + 1} for ${url}`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout (increased from 15)
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
         const response = await fetch(url, {
           ...options,

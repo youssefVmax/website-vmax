@@ -25,33 +25,37 @@ interface AdvancedAnalyticsProps {
 
 // Helper function to format dates robustly
 const formatChartDate = (dateValue: any): string => {
-  if (!dateValue) return 'No Date';
+  if (!dateValue) return new Date().toLocaleDateString();
 
   try {
     // Handle different date formats
     let date: Date;
 
     if (typeof dateValue === 'string') {
-      // Try ISO format first (YYYY-MM-DDTHH:mm:ss.sssZ)
+      // Handle common date formats
       if (dateValue.includes('T') || dateValue.includes('-')) {
         date = new Date(dateValue);
+      } else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Handle YYYY-MM-DD format
+        date = new Date(dateValue + 'T00:00:00');
       } else {
         // Try parsing as timestamp
         const timestamp = parseInt(dateValue);
         if (!isNaN(timestamp)) {
-          date = new Date(timestamp);
+          // Handle both seconds and milliseconds timestamps
+          date = new Date(timestamp > 1e10 ? timestamp : timestamp * 1000);
         } else {
-          return 'Invalid Date';
+          return new Date().toLocaleDateString();
         }
       }
     } else if (typeof dateValue === 'number') {
-      date = new Date(dateValue);
+      // Handle both seconds and milliseconds timestamps
+      date = new Date(dateValue > 1e10 ? dateValue : dateValue * 1000);
     } else if (dateValue instanceof Date) {
       date = dateValue;
     } else {
       return 'Invalid Date';
     }
-
     // Check if date is valid
     if (isNaN(date.getTime())) {
       return 'Invalid Date';
@@ -121,7 +125,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       let dashboardData = { success: false, data: {} }
       if (dashboardResponse.ok) {
-        dashboardData = await dashboardResponse.json()
+        const responseData = await dashboardResponse.json()
+        dashboardData = {
+          success: responseData.success || true,
+          data: responseData.data || responseData // Handle both wrapped and direct response formats
+        }
+        console.log('✅ Dashboard API response:', dashboardData)
       } else {
         console.warn('⚠️ Dashboard API response not OK:', dashboardResponse.status)
       }
@@ -147,7 +156,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       let chartsData = { success: false, data: {} }
       if (chartsResponse.ok) {
-        chartsData = await chartsResponse.json()
+        const responseData = await chartsResponse.json()
+        chartsData = {
+          success: responseData.success || true,
+          data: responseData.data || responseData // Handle both wrapped and direct response formats
+        }
+        console.log('✅ Charts API response:', chartsData)
       } else {
         console.warn('⚠️ Charts API response not OK:', chartsResponse.status)
       }
@@ -173,7 +187,14 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       let dealsData = { success: false, deals: [] }
       if (dealsResponse.ok) {
-        dealsData = await dealsResponse.json()
+        const responseData = await dealsResponse.json()
+        dealsData = {
+          success: responseData.success || true,
+          deals: responseData.deals || responseData.data || [] // Handle different response formats
+        }
+        console.log('✅ Deals API response:', { count: dealsData.deals.length })
+      } else {
+        console.warn('⚠️ Deals API response not OK:', dealsResponse.status)
       }
 
       // Process the data similar to team leader logic
@@ -221,7 +242,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       })
 
       const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
-      console.log('➡️ Calling dashboard stats API:', dashboardUrl)
+      console.log('➡️ Calling dashboard stats API for team leader:', dashboardUrl)
       const dashboardResponse = await fetch(dashboardUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         cache: 'no-store',
@@ -230,7 +251,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       let dashboardData = { success: false, data: {} }
       if (dashboardResponse.ok) {
-        dashboardData = await dashboardResponse.json()
+        const responseData = await dashboardResponse.json()
+        dashboardData = {
+          success: responseData.success || true,
+          data: responseData.data || responseData // Handle both wrapped and direct response formats
+        }
+        console.log('✅ Team Leader Dashboard API response:', dashboardData)
       } else {
         console.warn('⚠️ Dashboard API response not OK:', dashboardResponse.status)
       }
@@ -248,7 +274,7 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       })
 
       const chartsUrl = `${baseUrl}/api/charts?${chartsParams.toString()}`
-      console.log('➡️ Calling charts API:', chartsUrl)
+      console.log('➡️ Calling charts API for team leader:', chartsUrl)
       const chartsResponse = await fetch(chartsUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         cache: 'no-store',
@@ -257,7 +283,12 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       let chartsData = { success: false, data: {} }
       if (chartsResponse.ok) {
-        chartsData = await chartsResponse.json()
+        const responseData = await chartsResponse.json()
+        chartsData = {
+          success: responseData.success || true,
+          data: responseData.data || responseData // Handle both wrapped and direct response formats
+        }
+        console.log('✅ Team Leader Charts API response:', chartsData)
       } else {
         console.warn('⚠️ Charts API response not OK:', chartsResponse.status)
       }
@@ -269,13 +300,13 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       const dealsParams = new URLSearchParams({
         userRole,
         userId: user.id,
-        salesTeam: user.managedTeam || '',
+        managedTeam: user.managedTeam || '',
         dateRange,
         limit: '200' // Reduced from 1000 to prevent resource issues
       })
 
       const dealsUrl = `${baseUrl}/api/deals?${dealsParams.toString()}`
-      console.log('➡️ Calling deals API:', dealsUrl)
+      console.log('➡️ Calling deals API for team leader:', dealsUrl)
       const dealsResponse = await fetch(dealsUrl, {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         cache: 'no-store',
@@ -284,20 +315,27 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       let dealsData = { success: false, deals: [] }
       if (dealsResponse.ok) {
-        dealsData = await dealsResponse.json()
+        const responseData = await dealsResponse.json()
+        dealsData = {
+          success: responseData.success || true,
+          deals: responseData.deals || responseData.data || [] // Handle different response formats
+        }
+        console.log('✅ Team Leader Deals API response:', { count: dealsData.deals.length })
+      } else {
+        console.warn('⚠️ Deals API response not OK:', dealsResponse.status)
       }
 
       // Fetch team member callbacks data (sequential, reduced limit)
       const callbacksParams = new URLSearchParams({
         userRole,
         userId: user.id,
-        salesTeam: user.managedTeam || '',
+        managedTeam: user.managedTeam || '',
         dateRange,
         limit: '200' // Reduced from 1000 to prevent resource issues
       })
 
       const callbacksUrl = `${baseUrl}/api/callbacks?${callbacksParams.toString()}`
-      console.log('➡️ Calling callbacks API:', callbacksUrl)
+      console.log('➡️ Calling callbacks API for team leader:', callbacksUrl)
       const callbacksResponse = await fetch(callbacksUrl, {
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
@@ -306,17 +344,171 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
 
       let callbacksData = { success: false, callbacks: [] }
       if (callbacksResponse.ok) {
-        callbacksData = await callbacksResponse.json()
+        const responseData = await callbacksResponse.json()
+        callbacksData = {
+          success: responseData.success || true,
+          callbacks: responseData.callbacks || responseData.data || [] // Handle different response formats
+        }
+        console.log('✅ Team Leader Callbacks API response:', { count: callbacksData.callbacks.length })
+      } else {
+        console.warn('⚠️ Callbacks API response not OK:', callbacksResponse.status)
       }
 
-      return {
-        analytics: dashboardData.success ? dashboardData.data : {},
-        charts: chartsData.success ? chartsData.data : {},
-        deals: dealsData.success ? dealsData.deals : [],
-        callbacks: callbacksData.success ? callbacksData.callbacks : []
+      // Process the data similar to salesman logic
+      const processedData = {
+        dashboardStats: dashboardData.success ? dashboardData.data : {},
+        chartsData: chartsData.success ? chartsData.data : {},
+        dealsData: dealsData.success ? dealsData.deals : [],
+        callbacksData: callbacksData.success ? callbacksData.callbacks : []
       }
+
+      console.log('📊 Team Leader analytics data processed:', processedData)
+      return processedData
     } catch (error) {
       console.error('❌ Error fetching team leader analytics:', error)
+      return null
+    }
+  }
+
+  // Fetch manager analytics directly from APIs
+  const fetchManagerAnalytics = async () => {
+    try {
+      if (userRole !== 'manager') {
+        console.log('⚠️ Not a manager user')
+        return null
+      }
+
+      setLoading(true)
+      setError(null)
+      console.log('🔄 Fetching manager analytics for all teams')
+
+      // Dynamic base URL for localhost development; same-origin in production
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '';
+
+      // Get dashboard stats with manager filtering (no user/team restrictions)
+      const dashboardParams = new URLSearchParams({
+        userRole,
+        dateRange
+      })
+
+      const dashboardUrl = `${baseUrl}/api/dashboard-stats?${dashboardParams.toString()}`
+      console.log('➡️ Calling dashboard stats API for manager:', dashboardUrl)
+      const dashboardResponse = await fetch(dashboardUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
+
+      let dashboardData = { success: false, data: {} }
+      if (dashboardResponse.ok) {
+        const responseData = await dashboardResponse.json()
+        dashboardData = {
+          success: responseData.success || true,
+          data: responseData.data || responseData // Handle both wrapped and direct response formats
+        }
+        console.log('✅ Manager Dashboard API response:', dashboardData)
+      } else {
+        console.warn('⚠️ Dashboard API response not OK:', dashboardResponse.status)
+      }
+
+      // Sequential call - wait to avoid resource issues
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Get charts data with manager filtering (all teams)
+      const chartsParams = new URLSearchParams({
+        userRole,
+        chartType: 'all',
+        dateRange
+      })
+
+      const chartsUrl = `${baseUrl}/api/charts?${chartsParams.toString()}`
+      console.log('➡️ Calling charts API for manager:', chartsUrl)
+      const chartsResponse = await fetch(chartsUrl, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      })
+
+      let chartsData = { success: false, data: {} }
+      if (chartsResponse.ok) {
+        const responseData = await chartsResponse.json()
+        chartsData = {
+          success: responseData.success || true,
+          data: responseData.data || responseData // Handle both wrapped and direct response formats
+        }
+        console.log('✅ Manager Charts API response:', chartsData)
+      } else {
+        console.warn('⚠️ Charts API response not OK:', chartsResponse.status)
+      }
+
+      // Get deals data for manager (all deals)
+      const dealsParams = new URLSearchParams({
+        userRole,
+        limit: '1000', // Get more data for analytics
+        dateRange
+      })
+
+      const dealsUrl = `${baseUrl}/api/deals?${dealsParams.toString()}`
+      console.log('➡️ Calling deals API for manager:', dealsUrl)
+      const dealsResponse = await fetch(dealsUrl, {
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000) // 15 second timeout for larger data
+      })
+
+      let dealsData = { success: false, deals: [] }
+      if (dealsResponse.ok) {
+        const responseData = await dealsResponse.json()
+        dealsData = {
+          success: responseData.success || true,
+          deals: responseData.deals || responseData.data || [] // Handle different response formats
+        }
+        console.log('✅ Manager Deals API response:', { count: dealsData.deals.length })
+      } else {
+        console.warn('⚠️ Deals API response not OK:', dealsResponse.status)
+      }
+
+      // Get callbacks data for manager (all callbacks)
+      const callbacksParams = new URLSearchParams({
+        userRole,
+        limit: '1000',
+        dateRange
+      })
+
+      const callbacksUrl = `${baseUrl}/api/callbacks?${callbacksParams.toString()}`
+      console.log('➡️ Calling callbacks API for manager:', callbacksUrl)
+      const callbacksResponse = await fetch(callbacksUrl, {
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(15000) // 15 second timeout for larger data
+      })
+
+      let callbacksData = { success: false, callbacks: [] }
+      if (callbacksResponse.ok) {
+        const responseData = await callbacksResponse.json()
+        callbacksData = {
+          success: responseData.success || true,
+          callbacks: responseData.callbacks || responseData.data || [] // Handle different response formats
+        }
+        console.log('✅ Manager Callbacks API response:', { count: callbacksData.callbacks.length })
+      } else {
+        console.warn('⚠️ Callbacks API response not OK:', callbacksResponse.status)
+      }
+
+      // Process the data similar to other roles
+      const processedData = {
+        dashboardStats: dashboardData.success ? dashboardData.data : {},
+        chartsData: chartsData.success ? chartsData.data : {},
+        dealsData: dealsData.success ? dealsData.deals : [],
+        callbacksData: callbacksData.success ? callbacksData.callbacks : []
+      }
+
+      console.log('📊 Manager analytics data processed:', processedData)
+      return processedData
+    } catch (error) {
+      console.error('❌ Error fetching manager analytics:', error)
       return null
     }
   }
@@ -343,13 +535,14 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     // Set dashboard stats with proper null checks
     const safeAnalyticsData = analyticsData || {};
     setDashboardStats({
-      total_revenue: safeAnalyticsData.total_revenue || 0,
-      total_deals: safeAnalyticsData.total_deals || 0,
-      avg_deal_size: safeAnalyticsData.avg_deal_size || 0,
-      today_revenue: safeAnalyticsData.today_revenue || 0,
-      total_callbacks: safeAnalyticsData.total_callbacks || 0,
-      pending_callbacks: safeAnalyticsData.pending_callbacks || 0,
-      completed_callbacks: safeAnalyticsData.completed_callbacks || 0,
+      total_revenue: safeAnalyticsData.total_revenue || safeAnalyticsData.revenue || 0,
+      total_deals: safeAnalyticsData.total_deals || safeAnalyticsData.deals || 0,
+      avg_deal_size: safeAnalyticsData.avg_deal_size || safeAnalyticsData.avgDealSize || 0,
+      today_revenue: safeAnalyticsData.today_revenue || safeAnalyticsData.todayRevenue || 0,
+      total_callbacks: safeAnalyticsData.total_callbacks || safeAnalyticsData.callbacks || 0,
+      pending_callbacks: safeAnalyticsData.pending_callbacks || safeAnalyticsData.pendingCallbacks || 0,
+      completed_callbacks: safeAnalyticsData.completed_callbacks || safeAnalyticsData.completedCallbacks || 0,
+      conversion_rate: safeAnalyticsData.conversion_rate || safeAnalyticsData.conversionRate || 0
     })
     
     setChartsData((prevChartsData: any) => {
@@ -592,19 +785,43 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
   const setAnalyticsFromSalesmanAPI = (analyticsResult: any) => {
     console.log('🔄 Processing salesman analytics data:', analyticsResult)
     
-    // Set dashboard stats
-    setDashboardStats(analyticsResult.dashboardStats || {})
-    
-    // Process deals data for service distribution
+    // Extract data from the result
+    const dashboardData = analyticsResult.dashboardStats || {}
+    const chartsApiData = analyticsResult.chartsData || {}
     const dealsData = analyticsResult.dealsData || []
-    console.log('📊 Processing salesman deals for service distribution:', dealsData.length)
+    
+    console.log('📊 Salesman data breakdown:', {
+      dashboardKeys: Object.keys(dashboardData),
+      chartsKeys: Object.keys(chartsApiData),
+      dealsCount: dealsData.length
+    })
+    
+    // Set dashboard stats with proper field mapping
+    setDashboardStats({
+      total_revenue: dashboardData.total_revenue || dashboardData.revenue || 0,
+      total_deals: dashboardData.total_deals || dashboardData.deals || 0,
+      avg_deal_size: dashboardData.avg_deal_size || dashboardData.avgDealSize || 0,
+      today_revenue: dashboardData.today_revenue || dashboardData.todayRevenue || 0,
+      total_callbacks: dashboardData.total_callbacks || dashboardData.callbacks || 0,
+      pending_callbacks: dashboardData.pending_callbacks || dashboardData.pendingCallbacks || 0,
+      completed_callbacks: dashboardData.completed_callbacks || dashboardData.completedCallbacks || 0,
+      conversion_rate: dashboardData.conversion_rate || dashboardData.conversionRate || 0
+    })
+    
+    // Process deals data for service distribution and other calculations
+    console.log('📊 Processing salesman deals for charts:', dealsData.length)
     
     // Calculate service distribution from deals
     const serviceStats = new Map()
+    const agentStats = new Map()
+    const dailyStats = new Map()
+    
     dealsData.forEach((deal: any) => {
       const serviceTier = deal.service_tier || deal.serviceTier || deal.product_type || 'Unknown'
       const amount = Number(deal.amount_paid || deal.amountPaid || 0)
+      const agent = deal.sales_agent_name || deal.sales_agent || deal.SalesAgentID || 'Me'
       
+      // Service tier stats
       if (!serviceStats.has(serviceTier)) {
         serviceStats.set(serviceTier, {
           service: serviceTier,
@@ -612,28 +829,400 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           deals: 0
         })
       }
+      const serviceData = serviceStats.get(serviceTier)
+      serviceData.revenue += amount
+      serviceData.deals += 1
       
-      const stats = serviceStats.get(serviceTier)
-      stats.revenue += amount
-      stats.deals += 1
+      // Agent stats (for salesman, this will mostly be themselves)
+      if (!agentStats.has(agent)) {
+        agentStats.set(agent, {
+          agent: agent,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const agentData = agentStats.get(agent)
+      agentData.revenue += amount
+      agentData.deals += 1
+      
+      // Daily trend stats
+      const dateStr = deal.created_at ? new Date(deal.created_at).toISOString().split('T')[0] : 
+                     deal.signup_date ? new Date(deal.signup_date).toISOString().split('T')[0] : 
+                     new Date().toISOString().split('T')[0]
+      
+      if (!dailyStats.has(dateStr)) {
+        dailyStats.set(dateStr, {
+          date: dateStr,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const dailyData = dailyStats.get(dateStr)
+      dailyData.revenue += amount
+      dailyData.deals += 1
     })
     
     const serviceTierData = Array.from(serviceStats.values())
-    console.log('📊 Calculated service tier data for salesman:', serviceTierData)
+    const salesByAgentData = Array.from(agentStats.values())
+    const salesTrendData = Array.from(dailyStats.values())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(item => ({
+        ...item,
+        date: formatChartDate(item.date)
+      }))
     
-    // Set charts data with calculated service distribution
+    console.log('📊 Calculated chart data for salesman:', {
+      serviceTier: serviceTierData.length,
+      salesByAgent: salesByAgentData.length,
+      salesTrend: salesTrendData.length
+    })
+    
+    // Set charts data with calculated distributions
     setChartsData({
-      salesTrend: analyticsResult.chartsData?.salesTrend || [],
-      salesByAgent: analyticsResult.chartsData?.salesByAgent || [],
-      salesByTeam: analyticsResult.chartsData?.salesByTeam || [],
+      salesTrend: salesTrendData,
+      salesByAgent: salesByAgentData,
+      salesByTeam: chartsApiData.salesByTeam || [],
       serviceTier: serviceTierData
     })
     
-    // Set analytics data
+    // Set analytics data for the useMemo hook
     setAnalyticsData({
-      totalRevenue: dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0),
-      totalDeals: dealsData.length,
-      serviceDistribution: serviceTierData
+      overview: {
+        totalRevenue: dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0),
+        totalDeals: dealsData.length,
+        averageDealSize: dealsData.length > 0 ? dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0) / dealsData.length : 0,
+        totalCallbacks: dashboardData.total_callbacks || dashboardData.callbacks || 0,
+        pendingCallbacks: dashboardData.pending_callbacks || dashboardData.pendingCallbacks || 0,
+        completedCallbacks: dashboardData.completed_callbacks || dashboardData.completedCallbacks || 0,
+        conversionRate: dashboardData.conversion_rate || dashboardData.conversionRate || 0
+      },
+      charts: {
+        dailyTrend: salesTrendData,
+        topAgents: salesByAgentData,
+        teamDistribution: chartsApiData.salesByTeam || [],
+        serviceDistribution: serviceTierData
+      }
+    })
+    
+    setLastUpdated(new Date())
+  }
+
+  // Process team leader analytics data from direct API
+  const setAnalyticsFromTeamLeaderAPI = (analyticsResult: any) => {
+    console.log('🔄 Processing team leader analytics data:', analyticsResult)
+    
+    // Extract data from the result
+    const dashboardData = analyticsResult.dashboardStats || {}
+    const chartsApiData = analyticsResult.chartsData || {}
+    const dealsData = analyticsResult.dealsData || []
+    const callbacksData = analyticsResult.callbacksData || []
+    
+    console.log('📊 Team Leader data breakdown:', {
+      dashboardKeys: Object.keys(dashboardData),
+      chartsKeys: Object.keys(chartsApiData),
+      dealsCount: dealsData.length,
+      callbacksCount: callbacksData.length,
+      sampleDeal: dealsData[0],
+      sampleCallback: callbacksData[0]
+    })
+    
+    // Set dashboard stats with proper field mapping
+    setDashboardStats({
+      total_revenue: dashboardData.total_revenue || dashboardData.revenue || 0,
+      total_deals: dashboardData.total_deals || dashboardData.deals || 0,
+      avg_deal_size: dashboardData.avg_deal_size || dashboardData.avgDealSize || 0,
+      today_revenue: dashboardData.today_revenue || dashboardData.todayRevenue || 0,
+      total_callbacks: dashboardData.total_callbacks || dashboardData.callbacks || 0,
+      pending_callbacks: dashboardData.pending_callbacks || dashboardData.pendingCallbacks || 0,
+      completed_callbacks: dashboardData.completed_callbacks || dashboardData.completedCallbacks || 0,
+      conversion_rate: dashboardData.conversion_rate || dashboardData.conversionRate || 0
+    })
+    
+    // Process deals data for service distribution and other calculations
+    console.log('📊 Processing team leader deals for charts:', dealsData.length)
+    
+    // Calculate service distribution from deals
+    const serviceStats = new Map()
+    const agentStats = new Map()
+    const teamStats = new Map()
+    const dailyStats = new Map()
+    
+    dealsData.forEach((deal: any) => {
+      const serviceTier = deal.service_tier || deal.serviceTier || deal.product_type || 'Unknown'
+      const amount = Number(deal.amount_paid || deal.amountPaid || 0)
+      const agent = deal.sales_agent || deal.created_by || deal.sales_agent_name || 'Unknown Agent'
+      const team = deal.sales_team || 'Unknown Team'
+      
+      // Service tier stats
+      if (!serviceStats.has(serviceTier)) {
+        serviceStats.set(serviceTier, {
+          service: serviceTier,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const serviceData = serviceStats.get(serviceTier)
+      serviceData.revenue += amount
+      serviceData.deals += 1
+      
+      // Agent stats
+      if (!agentStats.has(agent)) {
+        agentStats.set(agent, {
+          agent: agent,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const agentData = agentStats.get(agent)
+      agentData.revenue += amount
+      agentData.deals += 1
+      
+      // Team stats
+      if (!teamStats.has(team)) {
+        teamStats.set(team, {
+          team: team,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const teamData = teamStats.get(team)
+      teamData.revenue += amount
+      teamData.deals += 1
+      
+      // Daily trend stats
+      const dateStr = deal.created_at ? new Date(deal.created_at).toISOString().split('T')[0] : 
+                     deal.signup_date ? new Date(deal.signup_date).toISOString().split('T')[0] : 
+                     new Date().toISOString().split('T')[0]
+      
+      if (!dailyStats.has(dateStr)) {
+        dailyStats.set(dateStr, {
+          date: dateStr,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const dailyData = dailyStats.get(dateStr)
+      dailyData.revenue += amount
+      dailyData.deals += 1
+    })
+    
+    const serviceTierData = Array.from(serviceStats.values())
+    const salesByAgentData = Array.from(agentStats.values()).sort((a, b) => b.revenue - a.revenue)
+    const salesByTeamData = Array.from(teamStats.values()).sort((a, b) => b.revenue - a.revenue)
+    const salesTrendData = Array.from(dailyStats.values())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(item => ({
+        ...item,
+        date: formatChartDate(item.date)
+      }))
+    
+    console.log('📊 Calculated chart data for team leader:', {
+      serviceTier: serviceTierData.length,
+      salesByAgent: salesByAgentData.length,
+      salesByTeam: salesByTeamData.length,
+      salesTrend: salesTrendData.length
+    })
+    
+    // Set charts data with calculated distributions
+    setChartsData({
+      salesTrend: salesTrendData,
+      salesByAgent: salesByAgentData,
+      salesByTeam: salesByTeamData,
+      serviceTier: serviceTierData
+    })
+    
+    // Set team sales comparison data for team leader specific components
+    setTeamSalesComparison(salesByAgentData)
+    
+    // Process callbacks data for team leader callbacks comparison
+    const callbacksStats = new Map()
+    callbacksData.forEach((callback: any) => {
+      // Prioritize sales_agent field which contains the actual name
+      const agent = callback.sales_agent || callback.created_by || callback.sales_agent_name || 'Unknown Agent'
+      
+      if (!callbacksStats.has(agent)) {
+        callbacksStats.set(agent, {
+          agent: agent,
+          count: 0,
+          callbacks: 0,
+          conversions: 0
+        })
+      }
+      
+      const agentCallbacks = callbacksStats.get(agent)
+      agentCallbacks.count += 1
+      agentCallbacks.callbacks += 1
+      
+      // Count conversions (completed callbacks)
+      if (callback.status === 'completed' || callback.status === 'converted') {
+        agentCallbacks.conversions += 1
+      }
+    })
+    
+    const callbacksComparisonData = Array.from(callbacksStats.values()).sort((a, b) => b.callbacks - a.callbacks)
+    setCallbacksComparison(callbacksComparisonData)
+    
+    // Set analytics data for the useMemo hook
+    setAnalyticsData({
+      overview: {
+        totalRevenue: dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0),
+        totalDeals: dealsData.length,
+        averageDealSize: dealsData.length > 0 ? dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0) / dealsData.length : 0,
+        totalCallbacks: callbacksData.length,
+        pendingCallbacks: callbacksData.filter((cb: any) => cb.status === 'pending').length,
+        completedCallbacks: callbacksData.filter((cb: any) => cb.status === 'completed').length,
+        conversionRate: callbacksData.length > 0 ? (callbacksData.filter((cb: any) => cb.status === 'completed').length / callbacksData.length) * 100 : 0
+      },
+      charts: {
+        dailyTrend: salesTrendData,
+        topAgents: salesByAgentData,
+        teamDistribution: salesByTeamData,
+        serviceDistribution: serviceTierData
+      }
+    })
+    
+    setLastUpdated(new Date())
+  }
+
+  // Process manager analytics data from direct API
+  const setAnalyticsFromManagerAPI = (analyticsResult: any) => {
+    console.log('🔄 Processing manager analytics data:', analyticsResult)
+    
+    // Extract data from the result
+    const dashboardData = analyticsResult.dashboardStats || {}
+    const chartsApiData = analyticsResult.chartsData || {}
+    const dealsData = analyticsResult.dealsData || []
+    const callbacksData = analyticsResult.callbacksData || []
+    
+    console.log('📊 Manager data breakdown:', {
+      dashboardKeys: Object.keys(dashboardData),
+      chartsKeys: Object.keys(chartsApiData),
+      dealsCount: dealsData.length,
+      callbacksCount: callbacksData.length
+    })
+    
+    // Set dashboard stats with proper field mapping
+    setDashboardStats({
+      total_revenue: dashboardData.total_revenue || dashboardData.revenue || 0,
+      total_deals: dashboardData.total_deals || dashboardData.deals || 0,
+      avg_deal_size: dashboardData.avg_deal_size || dashboardData.avgDealSize || 0,
+      today_revenue: dashboardData.today_revenue || dashboardData.todayRevenue || 0,
+      total_callbacks: dashboardData.total_callbacks || dashboardData.callbacks || 0,
+      pending_callbacks: dashboardData.pending_callbacks || dashboardData.pendingCallbacks || 0,
+      completed_callbacks: dashboardData.completed_callbacks || dashboardData.completedCallbacks || 0,
+      conversion_rate: dashboardData.conversion_rate || dashboardData.conversionRate || 0
+    })
+    
+    // Process deals data for service distribution and other calculations
+    console.log('📊 Processing manager deals for charts:', dealsData.length)
+    
+    // Calculate service distribution from all deals
+    const serviceStats = new Map()
+    const agentStats = new Map()
+    const teamStats = new Map()
+    const dailyStats = new Map()
+    
+    dealsData.forEach((deal: any) => {
+      const serviceTier = deal.service_tier || deal.serviceTier || deal.product_type || 'Unknown'
+      const amount = Number(deal.amount_paid || deal.amountPaid || 0)
+      const agent = deal.sales_agent_name || deal.sales_agent || deal.SalesAgentID || 'Unknown Agent'
+      const team = deal.sales_team || 'Unknown Team'
+      
+      // Service tier stats
+      if (!serviceStats.has(serviceTier)) {
+        serviceStats.set(serviceTier, {
+          service: serviceTier,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const serviceData = serviceStats.get(serviceTier)
+      serviceData.revenue += amount
+      serviceData.deals += 1
+      
+      // Agent stats (system-wide for managers)
+      if (!agentStats.has(agent)) {
+        agentStats.set(agent, {
+          agent: agent,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const agentData = agentStats.get(agent)
+      agentData.revenue += amount
+      agentData.deals += 1
+      
+      // Team stats (system-wide for managers)
+      if (!teamStats.has(team)) {
+        teamStats.set(team, {
+          team: team,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const teamData = teamStats.get(team)
+      teamData.revenue += amount
+      teamData.deals += 1
+      
+      // Daily trend stats
+      const dateStr = deal.created_at ? new Date(deal.created_at).toISOString().split('T')[0] : 
+                     deal.signup_date ? new Date(deal.signup_date).toISOString().split('T')[0] : 
+                     new Date().toISOString().split('T')[0]
+      
+      if (!dailyStats.has(dateStr)) {
+        dailyStats.set(dateStr, {
+          date: dateStr,
+          revenue: 0,
+          deals: 0
+        })
+      }
+      const dailyData = dailyStats.get(dateStr)
+      dailyData.revenue += amount
+      dailyData.deals += 1
+    })
+    
+    const serviceTierData = Array.from(serviceStats.values()).sort((a, b) => b.revenue - a.revenue)
+    const salesByAgentData = Array.from(agentStats.values()).sort((a, b) => b.revenue - a.revenue)
+    const salesByTeamData = Array.from(teamStats.values()).sort((a, b) => b.revenue - a.revenue)
+    const salesTrendData = Array.from(dailyStats.values())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(item => ({
+        ...item,
+        date: formatChartDate(item.date)
+      }))
+    
+    console.log('📊 Calculated chart data for manager:', {
+      serviceTier: serviceTierData.length,
+      salesByAgent: salesByAgentData.length,
+      salesByTeam: salesByTeamData.length,
+      salesTrend: salesTrendData.length
+    })
+    
+    // Set charts data with calculated distributions
+    setChartsData({
+      salesTrend: salesTrendData,
+      salesByAgent: salesByAgentData,
+      salesByTeam: salesByTeamData,
+      serviceTier: serviceTierData
+    })
+    
+    // Set analytics data for the useMemo hook
+    setAnalyticsData({
+      overview: {
+        totalRevenue: dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0),
+        totalDeals: dealsData.length,
+        averageDealSize: dealsData.length > 0 ? dealsData.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0) / dealsData.length : 0,
+        totalCallbacks: callbacksData.length,
+        pendingCallbacks: callbacksData.filter((cb: any) => cb.status === 'pending').length,
+        completedCallbacks: callbacksData.filter((cb: any) => cb.status === 'completed').length,
+        conversionRate: callbacksData.length > 0 ? (callbacksData.filter((cb: any) => cb.status === 'completed').length / callbacksData.length) * 100 : 0
+      },
+      charts: {
+        dailyTrend: salesTrendData,
+        topAgents: salesByAgentData,
+        teamDistribution: salesByTeamData,
+        serviceDistribution: serviceTierData
+      }
     })
     
     setLastUpdated(new Date())
@@ -651,18 +1240,85 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
         managedTeam: user.managedTeam,
         dateRange
       })
-
       // Use appropriate API calls based on user role
       let analyticsResult = null
       if (userRole === 'salesman') {
         analyticsResult = await fetchSalesmanAnalytics()
       } else if (userRole === 'team_leader') {
         analyticsResult = await fetchTeamLeaderAnalytics()
+      } else if (userRole === 'manager') {
+        analyticsResult = await fetchManagerAnalytics()
+      } else {
+        console.log('⚠️ Unknown user role:', userRole)
       }
       
       if (!analyticsResult) {
-        // Direct APIs failed, try fallback
-        console.log('⚠️ Direct APIs failed, trying fallback service...')
+        // Direct APIs failed, try direct API calls as fallback
+        console.log('⚠️ Role-specific APIs failed, trying direct API calls...')
+        
+        try {
+          const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+            ? 'http://localhost:3001' 
+            : '';
+
+          // Build parameters based on role
+          const params = new URLSearchParams({ dateRange })
+          if (userRole === 'salesman') {
+            params.set('userRole', 'salesman')
+            params.set('userId', user.id)
+          } else if (userRole === 'team_leader') {
+            params.set('userRole', 'team_leader')
+            params.set('userId', user.id)
+            if (user.managedTeam) params.set('managedTeam', user.managedTeam)
+          } else if (userRole === 'manager') {
+            params.set('userRole', 'manager')
+          }
+
+          // Fetch dashboard stats
+          const dashboardResponse = await fetch(`${baseUrl}/api/dashboard-stats?${params.toString()}`)
+          const dashboardData = dashboardResponse.ok ? await dashboardResponse.json() : { success: false }
+
+          // Fetch deals data
+          const dealsResponse = await fetch(`${baseUrl}/api/deals?${params.toString()}&limit=1000`)
+          const dealsData = dealsResponse.ok ? await dealsResponse.json() : { success: false }
+
+          if (dashboardData.success || dealsData.success) {
+            // Process the fallback data
+            const fallbackResult = {
+              analytics: dashboardData.success ? dashboardData.data : {},
+              charts: { salesTrend: [], salesByAgent: [], salesByTeam: [], serviceTier: [] },
+              deals: dealsData.success ? dealsData.deals : [],
+              callbacks: []
+            }
+
+            // Calculate basic analytics from deals if dashboard stats failed
+            if (!dashboardData.success && dealsData.success && dealsData.deals) {
+              const deals = dealsData.deals
+              const totalRevenue = deals.reduce((sum: number, deal: any) => sum + Number(deal.amount_paid || deal.amountPaid || 0), 0)
+              const totalDeals = deals.length
+              
+              fallbackResult.analytics = {
+                total_revenue: totalRevenue,
+                total_deals: totalDeals,
+                avg_deal_size: totalDeals > 0 ? totalRevenue / totalDeals : 0,
+                today_revenue: 0,
+                today_deals: 0,
+                total_callbacks: 0,
+                pending_callbacks: 0,
+                completed_callbacks: 0,
+                conversion_rate: 0
+              }
+            }
+
+            setAnalyticsFromDirectAPI(fallbackResult)
+            return
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback API calls also failed:', fallbackError)
+        }
+
+        // If all else fails, try unified service
+        console.log('⚠️ Trying unified analytics service as last resort...')
         const userContext = {
           id: user.id,
           name: user.full_name || user.username || '',
@@ -671,12 +1327,18 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           managedTeam: user.managedTeam
         }
         
-        const fallbackResult = await unifiedAnalyticsService.getAnalytics(userContext, dateRange === '30' ? 'month' : dateRange === '7' ? 'week' : dateRange === '90' ? 'quarter' : 'all')
-        if (fallbackResult) {
-          setAnalyticsFromUnified(fallbackResult)
+        const unifiedResult = await unifiedAnalyticsService.getAnalytics(userContext, dateRange === '30' ? 'month' : dateRange === '7' ? 'week' : dateRange === '90' ? 'quarter' : 'all')
+        if (unifiedResult) {
+          setAnalyticsFromUnified(unifiedResult)
           return
         }
-        throw new Error('All analytics services failed')
+        
+        // Set empty data instead of throwing error
+        console.warn('⚠️ All analytics services failed, setting empty data')
+        setDashboardStats({})
+        setChartsData({ salesTrend: [], salesByAgent: [], salesByTeam: [], serviceTier: [] })
+        setAnalyticsData(null)
+        return
       }
 
       if (analyticsResult) {
@@ -685,7 +1347,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           if (userRole === 'salesman') {
             setAnalyticsFromSalesmanAPI(analyticsResult)
           } else if (userRole === 'team_leader') {
-            setAnalyticsFromDirectAPI(analyticsResult)
+            setAnalyticsFromTeamLeaderAPI(analyticsResult)
+          } else if (userRole === 'manager') {
+            setAnalyticsFromManagerAPI(analyticsResult)
           }
         } catch (processingError) {
           console.error('❌ Error processing analytics data:', processingError)
@@ -763,13 +1427,15 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     })
     
     console.log('🎯 Service Performance for', userRole, ':', charts.serviceTier)
+    console.log('📊 Dashboard Stats:', stats)
+    console.log('📊 Overview Data:', overview)
 
     return {
       totalRevenue: stats.total_revenue || overview.totalRevenue || 0,
       totalDeals: stats.total_deals || overview.totalDeals || 0,
       averageDealSize: stats.avg_deal_size || overview.averageDealSize || 0,
-      revenueToday: stats.today_revenue || 0,
-      dealsToday: stats.today_deals || 0,
+      revenueToday: stats.today_revenue || stats.todayRevenue || 0,
+      dealsToday: stats.today_deals || stats.todayDeals || 0,
       revenueThisWeek: 0, // Can be calculated from charts data if needed
       dealsThisWeek: 0,
       dailyTrend: charts.salesTrend || [],
@@ -786,9 +1452,9 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
       totalCallbacks: stats.total_callbacks || overview.totalCallbacks || 0,
       pendingCallbacks: stats.pending_callbacks || overview.pendingCallbacks || 0,
       completedCallbacks: stats.completed_callbacks || overview.completedCallbacks || 0,
-      conversionRate: stats.conversion_rate || overview.conversionRate || 0
+      conversionRate: (stats.conversion_rate || overview.conversionRate || 0) / (stats.conversion_rate > 1 ? 100 : 1) // Handle percentage vs decimal
     }
-  }, [dashboardStats, analyticsData, chartsData, dateRange, selectedTeam, selectedService])
+  }, [dashboardStats, analyticsData, chartsData, dateRange, selectedTeam, selectedService, userRole])
 
   // Export function
   const handleExport = () => {
@@ -1358,8 +2024,8 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Team Conversion Rate</p>
-                <p className="text-2xl font-bold">{(analytics.conversionRate * 100).toFixed(1)}%</p>
+                <p className="text-sm font-medium text-muted-foreground">{userRole === 'salesman' ? 'My' : 'Team'} Conversion Rate</p>
+                <p className="text-2xl font-bold">{analytics.conversionRate > 1 ? analytics.conversionRate.toFixed(1) : (analytics.conversionRate * 100).toFixed(1)}%</p>
                 <p className="text-xs text-purple-600">Callback conversions</p>
               </div>
               <Phone className="h-8 w-8 text-purple-600" />

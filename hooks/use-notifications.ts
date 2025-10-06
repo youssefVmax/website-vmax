@@ -36,6 +36,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         console.log('🔄 NotificationsProvider: Loading notifications for user:', user.id, 'role:', user.role);
         // Pass user team information for team leader filtering
         const userTeam = (user as any).managedTeam || (user as any).team || (user as any).sales_team;
+        console.log('🔍 NotificationsProvider: User team for filtering:', userTeam);
         const data = await notificationService.getNotifications(user.id, user.role, userTeam)
         // Notifications are already in the correct format from MySQL service
         const mapped: Notification[] = data.map((n: any) => ({
@@ -108,7 +109,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const refresh = async () => {
     try {
       if (!user?.id || !user?.role) return
-      const data = await notificationService.getNotifications(user.id, user.role)
+      const userTeam = (user as any).managedTeam || (user as any).team || (user as any).sales_team;
+      const data = await notificationService.getNotifications(user.id, user.role, userTeam)
       // Notifications are already in the correct format from MySQL service
       const mapped: Notification[] = data.map((n: any) => ({
         id: n.id,

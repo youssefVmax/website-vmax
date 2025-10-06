@@ -61,40 +61,15 @@ class MySQLNotificationService implements NotificationService {
         userId,
       };
       // Add team information for team leader filtering
-      if (userTeam) {
-        filters.userTeam = userTeam;
+      if (userTeam && userRole === 'team_leader') {
+        filters.managedTeam = userTeam;
       }
-      // Filter notifications based on user role and targeting
-      if (userRole !== 'manager') {
-        // API supports userRole/userId filtering; no need to send 'to' explicitly, but keep as hint
-        filters.to = userId;
-      }
+      
+      console.log('🔍 MySQLNotificationService: Fetching notifications with filters:', filters);
       const notifications = await directMySQLService.getNotifications(filters);
       
-      return notifications.map(this.mapNotification).filter((notification: Notification) => {
-        // Additional filtering logic
-        if (userRole === 'manager') {
-          return true; // Managers see all notifications
-        }
-        
-        if (userRole === 'team_leader') {
-          // Team leaders see notifications from their team members
-          const targetArray = Array.isArray(notification.to) ? notification.to : [];
-          const isTargetedToTeamLeaders = targetArray.includes('ALL') || targetArray.includes('team_leader');
-          
-          if (isTargetedToTeamLeaders) {
-            // Get user's team from filters (should be passed from frontend)
-            const userTeam = filters.userTeam;
-            // Show notification if it's from the same team or if no team info available (fallback)
-            return !notification.teamName || notification.teamName === userTeam || notification.teamName === 'Unknown Team';
-          }
-          return false;
-        }
-        
-        // For salesmen, check if notification is targeted to this specific user
-        const targetArray = Array.isArray(notification.to) ? notification.to : [];
-        return targetArray.includes('ALL') || targetArray.includes(userId);
-      });
+      // The API route now handles all role-based filtering, so we just map the notifications
+      return notifications.map(this.mapNotification);
     } catch (error) {
       console.error('Error fetching notifications:', error);
       return [];
@@ -269,12 +244,21 @@ class MySQLNotificationService implements NotificationService {
 
   // Utility methods for creating specific notification types
   async createCallbackNotification(callbackData: any, type: 'created' | 'updated' | 'overdue'): Promise<string> {
+    // IMPORTANT: Callback notifications should ONLY go to the specific salesman who owns the callback
+    // and their team leader (if any), NOT to all users
+    const targetUsers = [];
+    
+    // Always include the callback owner
+    if (callbackData.salesAgentId) {
+      targetUsers.push(callbackData.salesAgentId);
+    }
+    
     const notification = {
       title: `Callback ${type}`,
       message: `Callback for ${callbackData.customerName} has been ${type}`,
       type: type === 'overdue' ? 'warning' : 'info',
       priority: type === 'overdue' ? 'high' : 'medium',
-      to: callbackData.salesAgentId ? [callbackData.salesAgentId] : ['ALL'],
+      to: targetUsers.length > 0 ? targetUsers : [callbackData.salesAgentId || 'unknown'],
       customerName: callbackData.customerName,
       customerPhone: callbackData.phoneNumber,
       customerEmail: callbackData.email,
@@ -285,19 +269,33 @@ class MySQLNotificationService implements NotificationService {
       callbackReason: callbackData.callbackReason,
       teamName: callbackData.salesTeam,
       scheduledDate: callbackData.scheduledDate,
-      scheduledTime: callbackData.scheduledTime
+      scheduledTime: callbackData.scheduledTime,
+      isManagerMessage: false // This is not a manager message
     };
 
+    console.log('🔔 Creating callback notification targeted to:', targetUsers);
     return this.addNotification(notification);
   }
 
   async createDealNotification(dealData: any, type: 'created' | 'updated' | 'closed'): Promise<string> {
+    // IMPORTANT: Deal notifications should ONLY go to the specific salesman who owns the deal
+    // and their team leader (if any), NOT to all users
+    const targetUsers = [];
+    
+    // Always include the deal owner
+    if (dealData.salesAgentId) {
+      targetUsers.push(dealData.salesAgentId);
+    }
+    
+    // Include team leader if this is from a managed team
+    // Note: This would need team leader lookup, for now just target the owner
+    
     const notification = {
       title: `Deal ${type}`,
       message: `Deal for ${dealData.customerName} has been ${type}`,
       type: type === 'closed' ? 'success' : 'info',
       priority: type === 'closed' ? 'high' : 'medium',
-      to: dealData.salesAgentId ? [dealData.salesAgentId] : ['ALL'],
+      to: targetUsers.length > 0 ? targetUsers : [dealData.salesAgentId || 'unknown'],
       customerName: dealData.customerName,
       customerPhone: dealData.phoneNumber,
       customerEmail: dealData.email,
@@ -307,9 +305,11 @@ class MySQLNotificationService implements NotificationService {
       dealName: `${dealData.customerName} - ${dealData.serviceTier}`,
       dealStage: dealData.stage,
       dealValue: dealData.amountPaid,
-      teamName: dealData.salesTeam
+      teamName: dealData.salesTeam,
+      isManagerMessage: false // This is not a manager message
     };
 
+    console.log('🔔 Creating deal notification targeted to:', targetUsers);
     return this.addNotification(notification);
   }
 
@@ -327,6 +327,138 @@ class MySQLNotificationService implements NotificationService {
     };
 
     return this.addNotification(notification);
+  }
+
+  // Debug function to check notification targeting
+  async debugUserNotifications(userId: string, userRole: string): Promise<void> {
+    try {
+      console.log('🔍 DEBUG: Checking notifications for user:', userId, 'role:', userRole);
+      
+      // Get all notifications for this user
+      const notifications = await this.getNotifications(userId, userRole);
+      
+      console.log('📊 DEBUG: Found', notifications.length, 'notifications for user');
+      
+      notifications.forEach((notification, index) => {
+        console.log(`📝 DEBUG Notification ${index + 1}:`, {
+          id: notification.id,
+          title: notification.title,
+          to: notification.to,
+          salesAgentId: notification.salesAgentId,
+          teamName: notification.teamName,
+          isManagerMessage: notification.isManagerMessage,
+          from: notification.from
+        });
+      });
+    } catch (error) {
+      console.error('❌ DEBUG: Error checking notifications:', error);
+    }
+  }
+
+  // Function to create manager-only notifications (for system announcements)
+  async createManagerNotification(title: string, message: string, priority: 'low' | 'medium' | 'high' = 'medium'): Promise<string> {
+    const notification = {
+      title,
+      message,
+      type: 'info' as const,
+      priority,
+      to: ['manager'], // Only managers see this
+      from: 'System',
+      isManagerMessage: true
+    };
+
+    console.log('🔔 Creating manager-only notification');
+    return this.addNotification(notification);
+  }
+
+  // Function to create user-specific notifications (most secure)
+  async createUserSpecificNotification(
+    userId: string, 
+    title: string, 
+    message: string, 
+    type: 'info' | 'success' | 'warning' | 'error' = 'info',
+    priority: 'low' | 'medium' | 'high' = 'medium'
+  ): Promise<string> {
+    const notification = {
+      title,
+      message,
+      type,
+      priority,
+      to: [userId], // Only this specific user
+      from: 'System',
+      isManagerMessage: false
+    };
+
+    console.log('🔔 Creating user-specific notification for:', userId);
+    return this.addNotification(notification);
+  }
+
+  // Function to clean up problematic notifications (manager only)
+  async cleanupProblematicNotifications(): Promise<number> {
+    try {
+      console.log('🧹 Starting notification cleanup...');
+      
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '';
+      
+      const response = await fetch(`${baseUrl}/api/notifications?action=cleanup&userRole=manager`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Cleanup completed:', result);
+        return result.cleaned || 0;
+      } else {
+        console.error('❌ Cleanup failed:', response.status);
+        return 0;
+      }
+    } catch (error) {
+      console.error('❌ Error during cleanup:', error);
+      return 0;
+    }
+  }
+
+  // Function to verify user notifications are properly filtered
+  async verifyUserNotifications(userId: string, userRole: string): Promise<boolean> {
+    try {
+      console.log('🔍 VERIFICATION: Checking notifications for user:', userId, 'role:', userRole);
+      
+      const notifications = await this.getNotifications(userId, userRole);
+      let hasProblems = false;
+
+      notifications.forEach((notification, index) => {
+        const targetArray = Array.isArray(notification.to) ? notification.to : [];
+        const isTargetedToUser = targetArray.includes(userId) || targetArray.includes('ALL') || targetArray.includes('all');
+        const isFromUser = notification.from === userId;
+        const isManagerMessage = notification.isManagerMessage && targetArray.includes(userId);
+
+        // Check if this notification should be visible to this user
+        if (userRole === 'salesman') {
+          if (!isTargetedToUser && !isFromUser && !isManagerMessage) {
+            console.warn(`⚠️ PROBLEM: Salesman ${userId} can see notification ${notification.id} that's not targeted to them:`, {
+              to: notification.to,
+              salesAgentId: notification.salesAgentId,
+              from: notification.from
+            });
+            hasProblems = true;
+          }
+        }
+      });
+
+      if (!hasProblems) {
+        console.log('✅ VERIFICATION: All notifications properly filtered for user');
+      }
+
+      return !hasProblems;
+    } catch (error) {
+      console.error('❌ VERIFICATION ERROR:', error);
+      return false;
+    }
   }
 }
 

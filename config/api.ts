@@ -3,6 +3,10 @@
  * This is the ONLY file that should be used for API requests throughout the application
  */
 
+// Request debounce map to prevent rapid-fire requests
+const requestDebounceMap = new Map<string, number>();
+const DEBOUNCE_DELAY = 500; // 500ms debounce
+
 // API Configuration
 export const API_CONFIG = {
   BASE_URL: process.env.NODE_ENV === 'production' 
@@ -95,10 +99,26 @@ async function apiRequest<T = any>(
     method = 'GET',
     headers = {},
     body,
-    retries = 3,
-    retryDelay = 1000,
-    timeout = 30000,
+    retries = 1,
+    retryDelay = 2000,
+    timeout = 15000,
   } = options;
+
+  // Debounce check to prevent rapid-fire requests
+  const requestKey = `${method}:${endpoint}`;
+  const now = Date.now();
+  const lastRequest = requestDebounceMap.get(requestKey);
+  
+  if (lastRequest && (now - lastRequest) < DEBOUNCE_DELAY) {
+    console.log(`🚫 Request debounced: ${requestKey}`);
+    return {
+      success: false,
+      error: 'Request debounced - too many rapid requests',
+      message: 'Please wait before making another request'
+    };
+  }
+  
+  requestDebounceMap.set(requestKey, now);
 
   // Build the full URL with cache-busting parameter
   const baseUrl = process.env.NODE_ENV === 'production' 
@@ -215,8 +235,14 @@ async function apiRequest<T = any>(
         willRetry: attempt < retries
       });
 
-      // Don't retry on certain errors
+      // Don't retry on certain errors or signal aborts
       if (error instanceof ApiError && error.status && error.status < 500) {
+        break;
+      }
+      
+      // Don't retry on abort errors (signal aborted)
+      if (lastError.name === 'AbortError' || lastError.message.includes('signal is aborted')) {
+        console.log('🚫 Request aborted, not retrying');
         break;
       }
 

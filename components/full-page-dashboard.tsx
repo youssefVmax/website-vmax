@@ -65,7 +65,7 @@ import apiService, { Deal } from "@/lib/api-service"
 
 export default function FullPageDashboard() {
   const { user, logout } = useAuth()
-  const [activeTab, setActiveTab] = useState("Dashboard")
+  const [activeTab, setActiveTab] = useState("dashboard")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDark, setIsDark] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -201,6 +201,7 @@ export default function FullPageDashboard() {
   }
 
   console.log('FullPageDashboard: User loaded:', user.full_name || user.username, user.role)
+  console.log('FullPageDashboard: Current activeTab:', activeTab)
 
   const getNavItems = () => {
     const baseItems = [
@@ -544,17 +545,40 @@ function PageContent({
   user, 
   uploadedFiles, 
   setUploadedFiles,
-  setActiveTab
+  setActiveTab,
+  selectedMonth,
+  selectedYear,
+  setSelectedMonth,
+  setSelectedYear,
+  setDateFilterKey
 }: { 
   activeTab: string; 
   user: any;
   uploadedFiles: string[];
   setUploadedFiles: (files: string[]) => void;
   setActiveTab: (tab: string) => void;
+  selectedMonth: string;
+  selectedYear: string;
+  setSelectedMonth: (month: string) => void;
+  setSelectedYear: (year: string) => void;
+  setDateFilterKey: (key: number | ((prev: number) => number)) => void;
 }) {
   switch (activeTab) {
     case "dashboard":
-      return <DashboardOverview user={user} setActiveTab={setActiveTab} />
+      try {
+        return <DashboardOverview user={user} setActiveTab={setActiveTab} />
+      } catch (error) {
+        console.error('Error rendering dashboard:', error)
+        return (
+          <div className="p-6">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-4">Welcome, {user?.name || user?.username}!</h2>
+              <p className="text-gray-600 mb-4">Your dashboard is loading...</p>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+          </div>
+        )
+      }
     case "sales-dashboard":
       return <SalesAnalysisDashboard userRole={user.role} user={user} />
     case "analytics":
@@ -601,6 +625,22 @@ function PageContent({
       return <AdminCallbacksTablePage user={user} setActiveTab={setActiveTab} />
     case "settings":
       return <ProfileSettings user={user} />
+    default:
+      console.log('PageContent: Unknown activeTab:', activeTab, 'defaulting to dashboard')
+      try {
+        return <DashboardOverview user={user} setActiveTab={setActiveTab} />
+      } catch (error) {
+        console.error('Error rendering DashboardOverview:', error)
+        return (
+          <div className="p-6">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-4">Welcome to VMAX Sales Dashboard</h2>
+              <p className="text-gray-600 mb-4">Loading your dashboard...</p>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+          </div>
+        )
+      }
   }
 }
 

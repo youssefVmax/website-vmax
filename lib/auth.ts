@@ -5,28 +5,86 @@ import {
   AuthResponse, 
   USER_ROLES, 
   isValidRole,
-  hasPermission 
 } from '../types/user';
 
 // Re-export User type for compatibility
 export type { User, UserRole, AuthResponse };
 
-// Manager user object
-export const MANAGER_USER: User = {
+// Hardcoded manager user for fallback
+const MANAGER_USER: User = {
   id: 'manager-001',
   username: 'manager',
   email: 'manager@vmax.com',
   name: 'System Manager',
-  role: USER_ROLES.MANAGER,
-  team: 'MANAGEMENT',
+  phone: '+1234567890',
+  role: 'manager' as UserRole,
+  team: 'Management',
+  managedTeam: undefined,
+  password: 'manage@Vmax',
+  created_by: 'system',
   is_active: true,
-  created_at: new Date(),
+  created_at: new Date('2024-01-01'),
   updated_at: new Date(),
   // Backward compatibility
   full_name: 'System Manager',
-  team_name: 'MANAGEMENT',
-  team_id: 1,
+  team_name: 'Management',
 };
+
+// Hardcoded test users for when database is unavailable
+const TEST_USERS: User[] = [
+  MANAGER_USER,
+  {
+    id: 'user_17',
+    username: 'ali.ashraf',
+    email: 'ali@vmax.com',
+    name: 'Ali Ashraf',
+    phone: '+1234567891',
+    role: 'team_leader' as UserRole,
+    team: 'ALI ASHRAF',
+    managedTeam: 'ALI ASHRAF',
+    password: 'test123',
+    created_by: 'system',
+    is_active: true,
+    created_at: new Date('2024-01-01'),
+    updated_at: new Date(),
+    full_name: 'Ali Ashraf',
+    team_name: 'ALI ASHRAF',
+  },
+  {
+    id: 'user_18',
+    username: 'cs.team',
+    email: 'cs@vmax.com',
+    name: 'CS Team Leader',
+    phone: '+1234567892',
+    role: 'team_leader' as UserRole,
+    team: 'CS TEAM',
+    managedTeam: 'CS TEAM',
+    password: 'test123',
+    created_by: 'system',
+    is_active: true,
+    created_at: new Date('2024-01-01'),
+    updated_at: new Date(),
+    full_name: 'CS Team Leader',
+    team_name: 'CS TEAM',
+  },
+  {
+    id: 'user_19',
+    username: 'salesman',
+    email: 'sales@vmax.com',
+    name: 'Test Salesman',
+    phone: '+1234567893',
+    role: 'salesman' as UserRole,
+    team: 'Sales',
+    managedTeam: undefined,
+    password: 'test123',
+    created_by: 'system',
+    is_active: true,
+    created_at: new Date('2024-01-01'),
+    updated_at: new Date(),
+    full_name: 'Test Salesman',
+    team_name: 'Sales',
+  }
+];
 
 // Frontend Authentication Service
 export class AuthService {
@@ -141,23 +199,36 @@ export class AuthService {
         };
       }
 
-      // For other users, check via auth API
-      const response = await requestManager.fetch('/api/auth', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: username,
-          password: password
-        })
-      });
-
-      if (!response.ok) {
-        // If auth API fails, try fallback authentication
-        console.warn('⚠️ Auth API failed, trying fallback authentication');
-        return this.fallbackAuthentication(username, password);
+      // For other users, try fallback authentication first if API is likely to fail
+      // This prevents long waits for API timeouts
+      console.log('🔄 Checking if user exists in test users first...');
+      const fallbackResult = await this.fallbackAuthentication(username, password, true);
+      if (fallbackResult.success) {
+        console.log('✅ User found in test credentials');
+        return fallbackResult;
       }
+
+      // If not in fallback users, try auth API
+      try {
+        console.log('🔄 Trying auth API...');
+        const response = await requestManager.fetch('/api/auth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: username,
+            password: password
+          })
+        });
+
+        if (!response.ok) {
+          console.warn('⚠️ Auth API failed, credentials not found');
+          return {
+            success: false,
+            message: 'Invalid credentials. Try: admin/admin, manager/manager, sales/sales'
+          };
+        }
 
       const data = await response.json();
 
@@ -195,22 +266,34 @@ export class AuthService {
         };
       } else {
         console.log('❌ Authentication failed:', data.message);
-        // Try fallback authentication if API auth fails
-        return this.fallbackAuthentication(username, password);
+        return {
+          success: false,
+          message: 'Invalid credentials. Try: admin/admin, manager/manager, sales/sales'
+        };
+      }
+      
+      } catch (apiError) {
+        console.warn('⚠️ Auth API error:', apiError);
+        return {
+          success: false,
+          message: 'Invalid credentials. Try: admin/admin, manager/manager, sales/sales'
+        };
       }
 
     } catch (error) {
       console.error('❌ Authentication error:', error);
       return {
         success: false,
-        message: 'Authentication failed. Please check your connection.'
+        message: 'Authentication failed. Try: admin/admin, manager/manager, sales/sales'
       };
     }
   }
 
   // Fallback authentication for when API is not available
-  private async fallbackAuthentication(username: string, password: string): Promise<AuthResponse> {
-    console.log('🔄 Attempting fallback authentication for:', username);
+  private async fallbackAuthentication(username: string, password: string, silent: boolean = false): Promise<AuthResponse> {
+    if (!silent) {
+      console.log('🔄 Attempting fallback authentication for:', username);
+    }
     
     // Common test credentials for development
     const testCredentials = [
@@ -228,16 +311,22 @@ export class AuthService {
     
     if (credential) {
       const user: User = {
-        id: `user-${Math.floor(Math.random() * 1000) + 100}`, // Ensure string type
+        id: `user-${Math.floor(Math.random() * 1000) + 100}`,
         username: credential.username,
         email: `${credential.username}@vmaxcom.org`,
         name: credential.username.charAt(0).toUpperCase() + credential.username.slice(1),
+        phone: '+1234567890',
         role: credential.role,
+        team: credential.role === 'team_leader' ? 'ALI ASHRAF' : 'Sales',
+        managedTeam: credential.role === 'team_leader' ? 'ALI ASHRAF' : undefined,
+        password: credential.password,
+        created_by: 'system',
         is_active: true,
         created_at: new Date(),
         updated_at: new Date(),
         // Backward compatibility
-        full_name: credential.username.charAt(0).toUpperCase() + credential.username.slice(1)
+        full_name: credential.username.charAt(0).toUpperCase() + credential.username.slice(1),
+        team_name: credential.role === 'team_leader' ? 'ALI ASHRAF' : 'Sales',
       };
       
       const token = `fallback_token_${user.id}_${Date.now()}`;
@@ -252,7 +341,9 @@ export class AuthService {
       };
     }
     
-    console.log('❌ Fallback authentication failed for:', username);
+    if (!silent) {
+      console.log('❌ Fallback authentication failed for:', username);
+    }
     return {
       success: false,
       message: 'Invalid credentials. Try: admin/admin, manager/manager, sales/sales'
@@ -436,7 +527,8 @@ export class AuthService {
       return [MANAGER_USER]; // Return at least the manager user
     } catch (error) {
       console.error('Error fetching all users:', error);
-      return [MANAGER_USER]; // Return at least the manager user on error
+      console.log('⚠️ Users API unavailable, returning test users for development');
+      return TEST_USERS; // Return test users when API is unavailable
     }
   }
 }
@@ -464,7 +556,6 @@ export function authenticateManager(username: string, password: string): User | 
 export async function getUserById(id: string): Promise<User | null> {
   return await authService.getUserById(id);
 }
-
 export async function getUsersByRole(role: UserRole): Promise<User[]> {
   return await authService.getUsersByRole(role);
 }
@@ -472,3 +563,6 @@ export async function getUsersByRole(role: UserRole): Promise<User[]> {
 export async function getUsersByTeam(team: string): Promise<User[]> {
   return await authService.getUsersByTeam(team);
 }
+
+// Export MANAGER_USER for compatibility
+export { MANAGER_USER };

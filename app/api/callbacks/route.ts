@@ -34,7 +34,6 @@ function formatDateForMySQL(dateValue: any): string | null {
   
   return null;
 }
-
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 GET /api/callbacks - Starting request processing');
@@ -42,6 +41,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const salesAgentId = searchParams.get('salesAgentId') || searchParams.get('SalesAgentID');
     const salesTeam = searchParams.get('salesTeam') || searchParams.get('team');
+    const managedTeam = searchParams.get('managedTeam');
     const status = searchParams.get('status');
     const userRole = searchParams.get('userRole');
     const userId = searchParams.get('userId');

@@ -21,53 +21,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check for stored auth on mount
     const bootstrap = async () => {
-      const storedUser = localStorage.getItem('vmax_user');
-      if (storedUser) {
-        try {
-          const parsedUser = JSON.parse(storedUser);
-          
-          // Validate user object has required properties
-          if (parsedUser && parsedUser.role && ['manager', 'team_leader', 'salesman'].includes(parsedUser.role)) {
-            // Ensure user has all required properties with proper field mapping
-            const validatedUser = {
-              ...parsedUser,
-              id: parsedUser.id || 'user-001',
-              username: parsedUser.username || 'unknown',
-              name: parsedUser.name || parsedUser.full_name || parsedUser.username || 'Unknown User',
-              email: parsedUser.email || `${parsedUser.username}@vmax.com`,
-              role: parsedUser.role,
-              team: parsedUser.team || parsedUser.team_name || parsedUser.managedTeam || (parsedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL'),
-              managedTeam: parsedUser.managedTeam,
-              is_active: parsedUser.is_active !== false,
-              created_at: parsedUser.created_at ? new Date(parsedUser.created_at) : new Date(),
-              updated_at: parsedUser.updated_at ? new Date(parsedUser.updated_at) : new Date(),
-              // Backward compatibility properties
-              full_name: parsedUser.name || parsedUser.full_name || parsedUser.username || 'Unknown User',
-              team_name: parsedUser.team || parsedUser.team_name || parsedUser.managedTeam || (parsedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL')
-            };
+      try {
+        console.log('🔄 useAuth: Bootstrapping authentication...');
+        const storedUser = localStorage.getItem('vmax_user');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
             
-            console.log('✅ useAuth: Restored valid user from localStorage:', validatedUser.username, validatedUser.role);
-            setUser(validatedUser);
-          } else {
-            console.warn('⚠️ useAuth: Invalid user data in localStorage, clearing...');
+            // Validate user object has required properties
+            if (parsedUser && parsedUser.role && ['manager', 'team_leader', 'salesman'].includes(parsedUser.role)) {
+              // Ensure user has all required properties with proper field mapping
+              const validatedUser = {
+                ...parsedUser,
+                id: parsedUser.id || 'user-001',
+                username: parsedUser.username || 'unknown',
+                name: parsedUser.name || parsedUser.full_name || parsedUser.username || 'Unknown User',
+                email: parsedUser.email || `${parsedUser.username}@vmax.com`,
+                role: parsedUser.role,
+                team: parsedUser.team || parsedUser.team_name || parsedUser.managedTeam || (parsedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL'),
+                managedTeam: parsedUser.managedTeam,
+                is_active: parsedUser.is_active !== false,
+                created_at: parsedUser.created_at ? new Date(parsedUser.created_at) : new Date(),
+                updated_at: parsedUser.updated_at ? new Date(parsedUser.updated_at) : new Date(),
+                // Backward compatibility properties
+                full_name: parsedUser.name || parsedUser.full_name || parsedUser.username || 'Unknown User',
+                team_name: parsedUser.team || parsedUser.team_name || parsedUser.managedTeam || (parsedUser.role === 'manager' ? 'MANAGEMENT' : 'GENERAL')
+              };
+              
+              console.log('✅ useAuth: Restored valid user from localStorage:', validatedUser.username, validatedUser.role);
+              setUser(validatedUser);
+            } else {
+              console.warn('⚠️ useAuth: Invalid user data in localStorage, clearing...');
+              localStorage.removeItem('vmax_user');
+            }
+          } catch (error) {
+            console.error('❌ useAuth: Failed to parse stored user:', error);
             localStorage.removeItem('vmax_user');
           }
-        } catch (error) {
-          console.error('❌ useAuth: Failed to parse stored user:', error);
-          localStorage.removeItem('vmax_user');
+        } else {
+          console.log('ℹ️ useAuth: No stored user found');
         }
+      } catch (error) {
+        console.error('❌ useAuth: Bootstrap error:', error);
+      } finally {
+        console.log('✅ useAuth: Bootstrap complete, setting loading to false');
+        setLoading(false);
       }
-      setLoading(false);
     }
-    void bootstrap();
+    
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ useAuth: Bootstrap timeout, forcing loading to false');
+      setLoading(false);
+    }, 3000);
+    
+    bootstrap().finally(() => {
+      clearTimeout(timeoutId);
+    });
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
     console.log('useAuth: Starting login process for:', username);
     setLoading(true);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
     
     const authenticatedUser = await authenticateUser(username, password);
     console.log('useAuth: Authentication result:', authenticatedUser ? 'SUCCESS' : 'FAILED');

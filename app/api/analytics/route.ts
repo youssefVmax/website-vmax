@@ -33,6 +33,8 @@ export async function OPTIONS() {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 Analytics API called:', request.url);
+    
     const { searchParams } = new URL(request.url);
     const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team_leader';
     const userId = searchParams.get('userId');
@@ -40,8 +42,16 @@ export async function GET(request: NextRequest) {
     const managedTeam = searchParams.get('managedTeam');
     const dateRange = searchParams.get('dateRange') || 'all';
 
+    console.log('📋 Analytics request params:', { userRole, userId, userName, managedTeam, dateRange });
+
     if (!userRole) {
-      return NextResponse.json({ error: 'userRole is required' }, { status: 400 });
+      console.error('❌ Missing userRole parameter');
+      return addCorsHeaders(NextResponse.json({ error: 'userRole is required' }, { status: 400 }));
+    }
+
+    if (!userId && userRole !== 'manager') {
+      console.error('❌ Missing userId parameter for non-manager role');
+      return addCorsHeaders(NextResponse.json({ error: 'userId is required for non-manager roles' }, { status: 400 }));
     }
 
     // Build base queries based on role
@@ -55,18 +65,15 @@ export async function GET(request: NextRequest) {
       dealsQuery += ' AND (d.SalesAgentID = ? OR d.ClosingAgentID = ?)';
       callbacksQuery += ' AND SalesAgentID = ?';
       targetsQuery += ' AND agentId = ?';
-      queryParams.push(userId, userId, userId, userId);
     } else if (userRole === 'team_leader' && userId) {
       if (managedTeam) {
         dealsQuery += ' AND (d.SalesAgentID = ? OR d.sales_team = ?)';
         callbacksQuery += ' AND (SalesAgentID = ? OR sales_team = ?)';
         targetsQuery += ' AND (managerId = ? OR agentId = ?)';
-        queryParams.push(userId, managedTeam, userId, managedTeam, managedTeam, userId);
       } else {
         dealsQuery += ' AND d.SalesAgentID = ?';
         callbacksQuery += ' AND SalesAgentID = ?';
         targetsQuery += ' AND agentId = ?';
-        queryParams.push(userId, userId, userId);
       }
     }
     // Manager sees all data (no additional filters)
@@ -81,39 +88,105 @@ export async function GET(request: NextRequest) {
     }
 
     // Execute queries with proper parameter handling
-    console.log('Executing queries:', { dealsQuery, callbacksQuery, targetsQuery, queryParams });
+    const dealsParams = getQueryParams(userRole, userId, managedTeam, 'deals');
+    const callbacksParams = getQueryParams(userRole, userId, managedTeam, 'callbacks');
+    const targetsParams = getQueryParams(userRole, userId, managedTeam, 'targets');
+    
+    console.log('📊 Executing queries:', { 
+      dealsQuery, 
+      callbacksQuery, 
+      targetsQuery,
+      dealsParams,
+      callbacksParams,
+      targetsParams
+    });
     
     let deals: any[] = [];
     let callbacks: any[] = [];
     let targets: any[] = [];
 
+    // Execute queries with timeout protection
+    const queryTimeout = 10000; // 10 seconds timeout
+
     try {
-      const [dealsResult] = await query(dealsQuery, getQueryParams(userRole, userId, managedTeam, 'deals'));
-      deals = Array.isArray(dealsResult) ? dealsResult : [];
-      console.log(`Found ${deals.length} deals`);
+      console.log('🔍 Fetching deals...');
+      const dealsPromise = query(dealsQuery, dealsParams);
+      const dealsResult: any = await Promise.race([
+        dealsPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Deals query timeout')), queryTimeout))
+      ]);
+      deals = Array.isArray(dealsResult) ? dealsResult : (Array.isArray(dealsResult[0]) ? dealsResult[0] : []);
+      console.log(`✅ Found ${deals.length} deals`);
     } catch (error) {
-      console.error('Error fetching deals:', error);
+      console.error('❌ Error fetching deals:', error);
+      deals = [];
     }
 
     try {
-      const [callbacksResult] = await query(callbacksQuery, getQueryParams(userRole, userId, managedTeam, 'callbacks'));
-      callbacks = Array.isArray(callbacksResult) ? callbacksResult : [];
-      console.log(`Found ${callbacks.length} callbacks`);
+      console.log('📞 Fetching callbacks...');
+      const callbacksPromise = query(callbacksQuery, callbacksParams);
+      const callbacksResult: any = await Promise.race([
+        callbacksPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Callbacks query timeout')), queryTimeout))
+      ]);
+      callbacks = Array.isArray(callbacksResult) ? callbacksResult : (Array.isArray(callbacksResult[0]) ? callbacksResult[0] : []);
+      console.log(`✅ Found ${callbacks.length} callbacks`);
     } catch (error) {
-      console.error('Error fetching callbacks:', error);
+      console.error('❌ Error fetching callbacks:', error);
+      callbacks = [];
     }
 
     try {
-      const [targetsResult] = await query(targetsQuery, getQueryParams(userRole, userId, managedTeam, 'targets'));
-      targets = Array.isArray(targetsResult) ? targetsResult : [];
-      console.log(`Found ${targets.length} targets`);
+      console.log('🎯 Fetching targets...');
+      const targetsPromise = query(targetsQuery, targetsParams);
+      const targetsResult: any = await Promise.race([
+        targetsPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Targets query timeout')), queryTimeout))
+      ]);
+      targets = Array.isArray(targetsResult) ? targetsResult : (Array.isArray(targetsResult[0]) ? targetsResult[0] : []);
+      console.log(`✅ Found ${targets.length} targets`);
     } catch (error) {
-      console.error('Error fetching targets:', error);
+      console.error('❌ Error fetching targets:', error);
+      targets = [];
     }
 
     // Calculate analytics
-    const analytics = calculateAnalytics(deals, callbacks, targets, userRole);
+    console.log('📊 Calculating analytics...');
+    let analytics;
+    try {
+      analytics = calculateAnalytics(deals, callbacks, targets, userRole);
+      console.log('✅ Analytics calculated successfully');
+    } catch (error) {
+      console.error('❌ Error calculating analytics:', error);
+      analytics = {
+        overview: {
+          totalDeals: deals.length,
+          totalRevenue: 0,
+          averageDealSize: 0,
+          totalCallbacks: callbacks.length,
+          pendingCallbacks: 0,
+          completedCallbacks: 0,
+          conversionRate: 0
+        },
+        charts: {
+          topAgents: [],
+          serviceDistribution: [],
+          teamDistribution: [],
+          dailyTrend: []
+        },
+        tables: {
+          recentDeals: deals.slice(0, 10),
+          recentCallbacks: callbacks.slice(0, 10)
+        },
+        targets: {
+          total: targets.length,
+          achieved: 0,
+          progress: []
+        }
+      };
+    }
 
+    console.log('🎉 Analytics API response ready');
     return addCorsHeaders(NextResponse.json({
       success: true,
       data: {
@@ -158,13 +231,23 @@ function getQueryParams(userRole: string, userId?: string | null, managedTeam?: 
     } else if (queryType === 'targets') {
       params.push(userId); // agentId
     }
-  } else if (userRole === 'team_leader' && managedTeam && userId) {
-    if (queryType === 'deals') {
-      params.push(managedTeam, userId); // sales_team, SalesAgentID
-    } else if (queryType === 'callbacks') {
-      params.push(managedTeam, userId); // sales_team, SalesAgentID
-    } else if (queryType === 'targets') {
-      params.push(managedTeam, userId); // managerId, agentId
+  } else if (userRole === 'team_leader' && userId) {
+    if (managedTeam) {
+      if (queryType === 'deals') {
+        params.push(userId, managedTeam); // SalesAgentID, sales_team
+      } else if (queryType === 'callbacks') {
+        params.push(userId, managedTeam); // SalesAgentID, sales_team
+      } else if (queryType === 'targets') {
+        params.push(managedTeam, userId); // managerId, agentId
+      }
+    } else {
+      if (queryType === 'deals') {
+        params.push(userId); // SalesAgentID only
+      } else if (queryType === 'callbacks') {
+        params.push(userId); // SalesAgentID only
+      } else if (queryType === 'targets') {
+        params.push(userId); // agentId only
+      }
     }
   }
   // Manager needs no params (sees all data)

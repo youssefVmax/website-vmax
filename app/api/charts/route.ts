@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
     const chartType = searchParams.get('chartType') || 'all';
     const dateRange = searchParams.get('dateRange') || '30'; // days
 
-    console.log('🔍 Charts API - Parameters:', { userRole, userId, managedTeam, chartType, dateRange });
 
     // Test database connection
     try {
@@ -281,9 +280,7 @@ export async function GET(request: NextRequest) {
       `;
 
       const monthlyRevenue = await query<any>(monthlyRevenueQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
-      
-      console.log('📊 Monthly revenue raw data:', monthlyRevenue.slice(0, 3)); // Log first 3 entries
-      
+            
       charts.monthlyRevenue = monthlyRevenue.map(row => {
         // Handle invalid or null months
         let monthString = 'Invalid Month';

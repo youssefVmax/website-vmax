@@ -84,9 +84,9 @@ export default function ManageCallbacksPage() {
   const [editForm, setEditForm] = useState<Partial<CallbackRow>>({});
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CallbackRow["status"]>("all");
   const [agentFilter, setAgentFilter] = useState<string>('all')
-  const [phoneFilter, setPhoneFilter] = useState<string>('')
   const [historyForPhone, setHistoryForPhone] = useState<string | null>(null)
 
   // Pagination state
@@ -133,6 +133,14 @@ export default function ManageCallbacksPage() {
     return map
   }, [callbacks])
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   // Load callbacks with pagination (for team leaders, load all on first page)
   const loadCallbacks = async (page: number) => {
     
@@ -142,7 +150,7 @@ export default function ManageCallbacksPage() {
       const params: any = {
         page: user?.role === 'team_leader' ? 1 : page,  // Always load page 1 for team leaders
         limit: effectiveLimit,
-        search: search.trim(),
+        search: debouncedSearch.trim(),
         status: statusFilter === 'all' ? '' : statusFilter,
         // CRITICAL: provide role context so API applies correct filtering
         userRole: user?.role || '',
@@ -150,8 +158,9 @@ export default function ManageCallbacksPage() {
       };
 
       // Optional hints for some views (backend primarily uses userRole/userId)
-      if (user?.role === 'team_leader' && user?.managedTeam) {
-        params.team = user.managedTeam;
+      if (user?.role === 'team_leader' && (user as any)?.managedTeam) {
+        params.team = (user as any).managedTeam;
+        params.managedTeam = (user as any).managedTeam;
       }
 
       // Add additional filters
@@ -200,23 +209,16 @@ export default function ManageCallbacksPage() {
     }
   }, [user]);
 
-  // Reload when filters change
+  // Reload when filters or debounced search change
   useEffect(() => {
-    if (user && pagination) {
+    if (user) {
       loadCallbacks(1);
     }
-  }, [statusFilter, agentFilter]);
+  }, [debouncedSearch, statusFilter, agentFilter, user]);
 
-  // Apply search function
-  const handleSearch = () => {
-    loadCallbacks(1);
-  };
-
-  // Handle search on Enter key
-  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+  // Reset to first page when filters change
+  const resetToFirstPage = () => {
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
 
   // Pagination Controls Component (only show for non-team leaders)
@@ -455,17 +457,20 @@ export default function ManageCallbacksPage() {
         <CardContent>
           <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between mb-4">
             <div className="flex gap-2 items-center flex-wrap">
-              <Input
-                placeholder="Search customer, email, phone, or agent..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyPress={handleSearchKeyPress}
-                className="w-72"
-              />
-              <Button onClick={handleSearch} size="sm">
-                <Search className="h-4 w-4 mr-2" />
-                Search
-              </Button>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search customer, email, phone, or agent..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-72 pl-8 pr-8"
+                />
+                {loading && debouncedSearch !== search && (
+                  <div className="absolute right-2 top-2.5">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  </div>
+                )}
+              </div>
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
                 <SelectTrigger className="w-44">
                   <SelectValue placeholder="Status" />
@@ -492,13 +497,6 @@ export default function ManageCallbacksPage() {
                   </SelectContent>
                 </Select>
               )}
-              {/* Quick filter: Phone */}
-              <Input
-                placeholder="Filter by phone"
-                value={phoneFilter}
-                onChange={(e) => setPhoneFilter(e.target.value)}
-                className="w-56"
-              />
             </div>
           </div>
 

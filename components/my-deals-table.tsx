@@ -57,7 +57,8 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
         if (user.role === 'salesman') {
           filters.salesAgentId = user.id
         } else if (user.role === 'team_leader' && (user as any).managedTeam) {
-          filters.salesTeam = (user as any).managedTeam
+          // Team leaders should use managedTeam parameter for proper API filtering
+          filters.managedTeam = (user as any).managedTeam
         }
         
         // Add user context for proper role-based filtering
@@ -289,7 +290,7 @@ export default function MyDealsTable({ user }: MyDealsTableProps) {
                 {services.map(s=> <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
-            {user.role !== 'salesman' && (
+            {user.role === 'manager' && (
               <Select value={teamFilter ?? "__all__"} onValueChange={(v)=>{setTeamFilter(v === '__all__' ? undefined : v); setPage(1)}}>
                 <SelectTrigger className="w-40"><SelectValue placeholder="Team" /></SelectTrigger>
                 <SelectContent>

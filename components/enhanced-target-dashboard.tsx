@@ -33,29 +33,46 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
     try {
       setLoading(true)
       setError(null)
+      console.log(`🔄 Loading targets for ${userRole}:`, user.username);
 
       let targetsData: any[] = []
 
+      // Build API URL with role-based filtering
+      const targetsUrl = new URL('/api/targets', window.location.origin);
+      targetsUrl.searchParams.set('limit', '100');
+
       if (userRole === 'manager') {
-        // Managers see all targets they created
-        targetsData = await targetsService.getTargets({ managerId: user.id })
+        // Managers see all targets
+        targetsUrl.searchParams.set('userRole', 'manager');
+        targetsUrl.searchParams.set('userId', user.id);
       } else if (userRole === 'team_leader') {
-        // Team leaders see their own targets plus all targets (we'll filter on frontend)
-        const [personalTargets, allTargets] = await Promise.all([
-          targetsService.getTargets({ agentId: user.id }),
-          targetsService.getTargets({}) // Get all targets, filter on frontend
-        ])
-        // Combine personal targets with all targets, then filter on frontend
-        targetsData = [...personalTargets, ...allTargets.filter(target => target.agentId !== user.id)]
-        // Filter to only show personal targets and targets for team members
-        targetsData = targetsData.filter(target => target.agentId === user.id || target.salesTeam === user.managedTeam)
-      } else {
-        // Salesmen see only their own individual targets
-        targetsData = await targetsService.getTargets({ agentId: user.id })
+        // Team leaders see their own targets + managed team targets
+        targetsUrl.searchParams.set('userRole', 'team_leader');
+        targetsUrl.searchParams.set('userId', user.id);
+        if (user.managedTeam) {
+          targetsUrl.searchParams.set('managedTeam', user.managedTeam);
+        }
+      } else if (userRole === 'salesman') {
+        // Salesmen see only their own targets
+        targetsUrl.searchParams.set('userRole', 'salesman');
+        targetsUrl.searchParams.set('userId', user.id);
+        targetsUrl.searchParams.set('agentId', user.id);
       }
 
-      // For now, just set targets without progress to avoid timeouts
-      // Progress will be shown as 0 until we implement a more efficient progress loading
+      console.log('🔍 Fetching targets:', targetsUrl.toString());
+
+      // Fetch targets from API
+      const response = await fetch(targetsUrl.toString());
+      if (!response.ok) {
+        throw new Error(`Targets API error: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      targetsData = Array.isArray(result) ? result : (result?.targets || result?.data || []);
+
+      console.log(`✅ Targets loaded for ${userRole}:`, targetsData.length);
+
+      // Set targets with default progress values
       const targetsWithDefaultProgress = targetsData.map((target: any) => ({
         ...target,
         currentAmount: 0, // Will be calculated later
@@ -65,13 +82,29 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
         dealsProgress: 0,
         month: target.period?.split(' ')[0] || '',
         year: target.period?.split(' ')[1] || '',
-        salesAgentName: target.agentName || target.salesAgentName
-      }))
+        salesAgentName: target.agentName || target.salesAgentName || 'Unknown'
+      }));
 
-      setTargets(targetsWithDefaultProgress)
+      // Separate personal and team targets for team leaders
+      if (userRole === 'team_leader') {
+        const personalTargets = targetsWithDefaultProgress.filter(target => 
+          target.agentId === user.id || target.salesAgentId === user.id
+        );
+        const teamTargets = targetsWithDefaultProgress.filter(target => 
+          target.salesTeam === user.managedTeam && target.agentId !== user.id
+        );
+        
+        console.log('📊 Team Leader Targets:', {
+          personal: personalTargets.length,
+          team: teamTargets.length,
+          managedTeam: user.managedTeam
+        });
+        
+        setTargets([...personalTargets, ...teamTargets]);
+      } else {
+        setTargets(targetsWithDefaultProgress);
+      }
 
-      // Load progress data in background (non-blocking)
-      loadProgressData(targetsData)
     } catch (err) {
       console.error('Error loading targets:', err)
       setError('Failed to load targets')
@@ -80,7 +113,25 @@ export function EnhancedTargetDashboard({ userRole, user }: EnhancedTargetDashbo
     }
   }
 
-  // Separate function to load progress data without blocking UI
+  // Calculate target analytics
+  const targetAnalytics = useMemo(() => {
+    if (!targets.length) return { personal: [], team: [] };
+    
+    if (userRole === 'team_leader') {
+      const personalTargets = targets.filter(target => 
+        target.agentId === user.id || target.salesAgentId === user.id
+      );
+      const teamTargets = targets.filter(target => 
+        target.salesTeam === user.managedTeam && target.agentId !== user.id
+      );
+      
+      return { personal: personalTargets, team: teamTargets };
+    }
+    
+    return { personal: targets, team: [] };
+  }, [targets, userRole, user.id, user.managedTeam]);
+
+  // Load progress data function (simplified)
   const loadProgressData = async (targetsData: any[]) => {
     try {
       // Load progress for each target with a delay to avoid overwhelming the API

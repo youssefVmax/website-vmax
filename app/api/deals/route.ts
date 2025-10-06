@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     const salesAgentId = searchParams.get("salesAgentId") || searchParams.get("SalesAgentID");
     const salesTeam = searchParams.get("salesTeam") || searchParams.get("team");
     const status = searchParams.get("status");
+    const stage = searchParams.get("stage");
     const userRole = searchParams.get("userRole");
     const userId = searchParams.get("userId");
     const managedTeam = searchParams.get("managedTeam");
@@ -85,6 +86,10 @@ export async function GET(request: NextRequest) {
       where.push("d.`status` = ?");
       params.push(status);
     }
+    if (stage) {
+      where.push("d.`stage` = ?");
+      params.push(stage);
+    }
 
     // Month/Year filter (supports both data_month/data_year and signup_date)
     const month = monthParam ? parseInt(monthParam, 10) : undefined;
@@ -102,6 +107,7 @@ export async function GET(request: NextRequest) {
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
       where.push('(d.`customer_name` LIKE ? OR d.`phone_number` LIKE ? OR d.`email` LIKE ? OR d.`sales_agent` LIKE ? OR d.`SalesAgentID` LIKE ?)');
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
       console.log('🔍 Search applied:', { search: search.trim(), searchTerm });
     }
     if (dateRange && dateRange !== 'all') {
@@ -141,11 +147,7 @@ export async function GET(request: NextRequest) {
     // For pagination, we need to append LIMIT and OFFSET to the query string
     // since MySQL has issues with prepared statements for LIMIT/OFFSET
     const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
-
-    console.log('📝 Executing deals query:', paginatedSql);
-    console.log('📝 With params:', params);
-    console.log('📝 Request context:', { userRole, userId, managedTeam, search, page, limit });
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
     const [rows] = await query<any>(paginatedSql, params);
 
     const [totals] = await query<any>(countSql, params);

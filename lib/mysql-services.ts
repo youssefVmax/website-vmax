@@ -66,9 +66,24 @@ export const userService = {
     return await response.json();
   },
   getUserByUsername: async (username: string) => {
-    const { authService } = await import('./auth');
-    const users = await authService.getAllUsers();
-    return users.find(user => user.username === username) || null;
+    try {
+      // Try to get user directly from API instead of fetching all users
+      const response = await fetch(`/api/users?username=${encodeURIComponent(username)}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.users && data.users.length > 0) {
+          return data.users[0];
+        }
+      }
+      
+      // Fallback: if API fails, try the auth service
+      const { authService } = await import('./auth');
+      const users = await authService.getAllUsers();
+      return users.find(user => user.username === username) || null;
+    } catch (error) {
+      console.error('Error getting user by username:', error);
+      return null;
+    }
   },
   deleteUser: async (id: string) => {
     // This would need to be implemented via API call

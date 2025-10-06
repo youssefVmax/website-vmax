@@ -19,23 +19,23 @@ export async function OPTIONS(request: NextRequest) {
   return addCorsHeaders(response);
 }
 
-// Next-only Analytics API (no placeholders, no PHP proxy)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const endpoint = searchParams.get('endpoint');
-    const userRole = searchParams.get('user_role');
-    const userId = searchParams.get('user_id');
-    const dateRange = searchParams.get('date_range');
+    const userRole = searchParams.get('userRole');
+    const userId = searchParams.get('userId');
     const team = searchParams.get('team');
     const managedTeam = searchParams.get('managed_team');
 
-    console.log('🔍 Analytics API - Endpoint:', endpoint, 'Role:', userRole, 'Team:', team, 'UserId:', userId);
-    console.log('🔍 Full request URL:', request.url);
-    console.log('🔍 All search params:', Object.fromEntries(searchParams.entries()));
+    // Date filtering parameters
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const month = searchParams.get('month');
+    const year = searchParams.get('year');
 
     console.log('🔍 Analytics API - Processing request...');
-
+    
     // Build comprehensive filters
     const dealWhere: string[] = [];
     const dealParams: any[] = [];
@@ -64,15 +64,16 @@ export async function GET(request: NextRequest) {
     }
     
     // Date range filtering
-    if (dateRange === 'today') {
-      dealWhere.push('DATE(`created_at`) = CURDATE()');
-      cbWhere.push('DATE(`created_at`) = CURDATE()');
-    } else if (dateRange === 'week') {
-      dealWhere.push('`created_at` >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
-      cbWhere.push('`created_at` >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
-    } else if (dateRange === 'month') {
-      dealWhere.push('`created_at` >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
-      cbWhere.push('`created_at` >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+    if (startDate && endDate) {
+      dealWhere.push('DATE(`created_at`) BETWEEN ? AND ?');
+      dealParams.push(startDate, endDate);
+      cbWhere.push('DATE(`created_at`) BETWEEN ? AND ?');
+      cbParams.push(startDate, endDate);
+    } else if (month && year) {
+      dealWhere.push('YEAR(`created_at`) = ? AND MONTH(`created_at`) = ?');
+      dealParams.push(parseInt(year), parseInt(month));
+      cbWhere.push('YEAR(`created_at`) = ? AND MONTH(`created_at`) = ?');
+      cbParams.push(parseInt(year), parseInt(month));
     }
 
     const dealWhereSql = dealWhere.length ? `WHERE ${dealWhere.join(' AND ')}` : '';
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
         success: true,
         message: 'Analytics API is working',
         timestamp: new Date().toISOString(),
-        params: { endpoint, userRole, userId, team, managedTeam, dateRange }
+        params: { endpoint, userRole, userId, team, managedTeam, startDate, endDate, month, year }
       });
       return addCorsHeaders(response);
     }
@@ -205,7 +206,7 @@ export async function GET(request: NextRequest) {
           monthly_trends: Array.isArray(monthlyTrends) ? monthlyTrends : [],
           
           // Metadata
-          filters: { userRole, userId, team, managedTeam, dateRange },
+          filters: { userRole, userId, team, managedTeam, startDate, endDate, month, year },
           timestamp: new Date().toISOString()
         };
 

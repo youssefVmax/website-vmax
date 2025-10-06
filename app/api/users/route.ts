@@ -76,9 +76,6 @@ export async function GET(request: NextRequest) {
     // Use string interpolation for LIMIT and OFFSET to avoid MySQL prepared statement issues
     const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
     
-    console.log('📝 Executing users query:', paginatedSql);
-    console.log('📝 With params:', params);
-    console.log('📝 Pagination values:', { limit, offset, page });
     
     const [rows] = await query<any>(paginatedSql, params);
 

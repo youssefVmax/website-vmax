@@ -33,16 +33,46 @@ export async function GET(request: NextRequest) {
 
     // Role-based data filtering for notifications
     if (userRole === 'salesman' && userId) {
-      // Salesmen can see notifications sent to them OR created by them
-      // Check multiple ways the user might be in the "to" field
-      where.push('(`salesAgentId` = ? OR JSON_CONTAINS(`to`, ?) OR JSON_CONTAINS(`to`, ?) OR JSON_CONTAINS(`to`, ?) OR `from` = ?)');
-      params.push(userId, `"${userId}"`, `"all"`, `"ALL"`, userId);
+      // ULTRA STRICT: Salesmen can ONLY see notifications that are:
+      // 1. Specifically targeted to their exact user ID in the "to" JSON array
+      // 2. Broadcast to "ALL" users (system announcements only)
+      // 3. Created by themselves (from field matches their ID)
+      // 4. Manager messages where they are specifically listed in "to" field
+      // IMPORTANT: NO salesAgentId filtering to prevent cross-user visibility
+      where.push('((JSON_CONTAINS(`to`, ?) = 1) OR (JSON_CONTAINS(`to`, ?) = 1) OR (JSON_CONTAINS(`to`, ?) = 1) OR (`from` = ?) OR (`isManagerMessage` = 1 AND JSON_CONTAINS(`to`, ?) = 1))');
+      params.push(`"${userId}"`, `"all"`, `"ALL"`, userId, `"${userId}"`);
+      
+      // Additional security: Exclude notifications that have salesAgentId of other users
+      where.push('(`salesAgentId` IS NULL OR `salesAgentId` = ? OR `salesAgentId` = "")');
+      params.push(userId);
     } else if (userRole === 'team_leader' && userId) {
-      // Team leaders see notifications sent to them OR created by them
-      where.push('(`salesAgentId` = ? OR JSON_CONTAINS(`to`, ?) OR JSON_CONTAINS(`to`, ?) OR JSON_CONTAINS(`to`, ?) OR `from` = ?)');
-      params.push(userId, `"${userId}"`, `"all"`, `"ALL"`, userId);
+      const managedTeam = searchParams.get('managedTeam');
+      console.log('🔍 Team Leader filtering - userId:', userId, 'managedTeam:', managedTeam);
+      
+      if (managedTeam) {
+        // STRICT Team Leader filtering:
+        // 1. Notifications specifically targeted to them
+        // 2. Broadcast notifications ("ALL")
+        // 3. Notifications they created
+        // 4. Notifications from their EXACT managed team only
+        // 5. Manager messages targeted to them
+        // EXCLUDE notifications from other teams or other users
+        where.push('((JSON_CONTAINS(`to`, ?) = 1) OR (JSON_CONTAINS(`to`, ?) = 1) OR (JSON_CONTAINS(`to`, ?) = 1) OR (`from` = ?) OR (`teamName` = ? AND `salesAgentId` != ? AND `salesAgentId` IS NOT NULL) OR (`isManagerMessage` = 1 AND JSON_CONTAINS(`to`, ?) = 1))');
+        params.push(`"${userId}"`, `"all"`, `"ALL"`, userId, managedTeam, userId, `"${userId}"`);
+        
+        // Additional security: Only show notifications from their team or targeted to them
+        where.push('(`teamName` IS NULL OR `teamName` = ? OR `teamName` = "" OR JSON_CONTAINS(`to`, ?) = 1 OR `from` = ?)');
+        params.push(managedTeam, `"${userId}"`, userId);
+      } else {
+        // If no managed team, ONLY personal notifications
+        where.push('((JSON_CONTAINS(`to`, ?) = 1) OR (JSON_CONTAINS(`to`, ?) = 1) OR (JSON_CONTAINS(`to`, ?) = 1) OR (`from` = ?) OR (`isManagerMessage` = 1 AND JSON_CONTAINS(`to`, ?) = 1))');
+        params.push(`"${userId}"`, `"all"`, `"ALL"`, userId, `"${userId}"`);
+        
+        // Exclude notifications that belong to specific teams
+        where.push('(`teamName` IS NULL OR `teamName` = "" OR JSON_CONTAINS(`to`, ?) = 1 OR `from` = ?)');
+        params.push(`"${userId}"`, userId);
+      }
     }
-    // DO NOT filter by userRole for salesmen - this was preventing them from seeing manager notifications
     // Managers can see all notifications (no additional filtering)
 
     // Additional filters
@@ -65,6 +95,8 @@ export async function GET(request: NextRequest) {
       const baseSql = `SELECT * FROM notifications ${whereSql} ORDER BY COALESCE(timestamp, created_at) DESC, id DESC`;
       const countSql = `SELECT COUNT(*) as c FROM notifications ${whereSql}`;
       const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
+      
+      
       const [rowsResult] = await query<any>(paginatedSql, params);
       rows = rowsResult || [];
       
@@ -103,6 +135,7 @@ export async function GET(request: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log('🔄 Creating notification with data:', body);
 
     // Generate unique ID
     const id = `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -157,6 +190,51 @@ export async function POST(req: NextRequest) {
       error: 'Failed to create notification',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 502 }));
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const action = searchParams.get('action');
+    const userRole = searchParams.get('userRole');
+    const userId = searchParams.get('userId');
+
+    // Special cleanup action for removing problematic notifications
+    if (action === 'cleanup' && userRole === 'manager') {
+      console.log('🧹 CLEANUP: Removing problematic notifications...');
+      
+      // Remove notifications that have broad targeting but specific salesAgentId
+      // These are likely causing cross-user visibility issues
+      const cleanupQuery = `
+        DELETE FROM notifications 
+        WHERE (JSON_CONTAINS(\`to\`, '"ALL"') = 1 OR JSON_CONTAINS(\`to\`, '"all"') = 1)
+        AND \`salesAgentId\` IS NOT NULL 
+        AND \`salesAgentId\` != ''
+        AND \`salesAgentId\` != 'System'
+      `;
+      
+      const [result] = await query<any>(cleanupQuery);
+      console.log('✅ CLEANUP: Removed', (result as any).affectedRows, 'problematic notifications');
+      
+      return addCorsHeaders(NextResponse.json({ 
+        success: true, 
+        cleaned: (result as any).affectedRows,
+        message: 'Cleanup completed'
+      }));
+    }
+
+    // Regular delete by ID
+    const id = searchParams.get('id');
+    if (!id) {
+      return addCorsHeaders(NextResponse.json({ success: false, error: 'Notification ID is required' }, { status: 400 }));
+    }
+
+    const [result] = await query<any>("DELETE FROM notifications WHERE id = ?", [id]);
+    return addCorsHeaders(NextResponse.json({ success: true, affected: (result as any).affectedRows }));
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    return addCorsHeaders(NextResponse.json({ success: false, error: 'Failed to delete notification' }, { status: 502 }));
   }
 }
 

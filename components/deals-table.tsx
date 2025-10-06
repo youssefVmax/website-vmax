@@ -68,12 +68,16 @@ export default function DealsTablePage() {
   const [deals, setDeals] = useState<DealData[]>([])
   const [totalDeals, setTotalDeals] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [teamMembersLoading, setTeamMembersLoading] = useState(false)
   const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [stageFilter, setStageFilter] = useState<string>('all')
   const [teamFilter, setTeamFilter] = useState<string>('all')
+  const [monthFilter, setMonthFilter] = useState<string>('all')
+  const [yearFilter, setYearFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   // Server pagination hook
@@ -97,7 +101,7 @@ export default function DealsTablePage() {
   useEffect(() => {
     if (debouncedSearchTerm !== searchTerm) return; // Wait for debounce
     paginationActions.goToFirstPage();
-  }, [debouncedSearchTerm, statusFilter, stageFilter, teamFilter]);
+  }, [debouncedSearchTerm, statusFilter, monthFilter, yearFilter, ...(user?.role !== 'team_leader' ? [stageFilter, teamFilter] : [])]);
 
   // Fetch deals with server-side pagination
   const fetchDeals = useCallback(async (
@@ -106,7 +110,9 @@ export default function DealsTablePage() {
     search: string = debouncedSearchTerm,
     statusFilterParam: string = statusFilter,
     stageFilterParam: string = stageFilter,
-    teamFilterParam: string = teamFilter
+    teamFilterParam: string = teamFilter,
+    monthFilterParam: string = monthFilter,
+    yearFilterParam: string = yearFilter
   ) => {
     try {
       paginationActions.setIsLoading(true)
@@ -143,16 +149,24 @@ export default function DealsTablePage() {
         params.append('status', statusFilterParam)
       }
       
-      // Add stage filter if not 'all'
-      if (stageFilterParam && stageFilterParam !== 'all') {
+      // Add stage filter if not 'all' and not team leader
+      if (user?.role !== 'team_leader' && stageFilterParam && stageFilterParam !== 'all') {
         params.append('stage', stageFilterParam)
       }
       
       // Add team filter only for manager; team leaders are locked to their managedTeam by API
-      if (user?.role !== 'team_leader') {
+      if (user?.role === 'manager') {
         if (teamFilterParam && teamFilterParam !== 'all') {
           params.append('salesTeam', teamFilterParam)
         }
+      }
+      
+      // Add month/year filter if provided
+      if (monthFilterParam && monthFilterParam !== 'all') {
+        params.append('month', monthFilterParam)
+      }
+      if (yearFilterParam && yearFilterParam !== 'all') {
+        params.append('year', yearFilterParam)
       }
       
       // Fetch from API - use localhost in development, same-origin in production to avoid CORS
@@ -257,7 +271,7 @@ export default function DealsTablePage() {
     } finally {
       paginationActions.setIsLoading(false)
     }
-  }, [paginationState.currentPage, paginationState.itemsPerPage, debouncedSearchTerm, statusFilter, stageFilter, teamFilter, paginationActions])
+  }, [paginationState.currentPage, paginationState.itemsPerPage, debouncedSearchTerm, statusFilter, stageFilter, teamFilter, monthFilter, yearFilter, paginationActions])
 
   // Fetch deals with debouncing for search
   useEffect(() => {
@@ -270,6 +284,54 @@ export default function DealsTablePage() {
     }
   }, [fetchDeals])
 
+  // Fetch team members for team leaders
+  const fetchTeamMembers = useCallback(async () => {
+    if (user?.role !== 'team_leader' || !user.managedTeam) return
+    
+    try {
+      setTeamMembersLoading(true)
+      
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '';
+      
+      const params = new URLSearchParams({
+        role: 'salesman',
+        team: (user as any).managedTeam
+      })
+      
+      const apiUrl = `${baseUrl}/api/users?${params.toString()}`;
+      console.log('🔍 Fetching team members from:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        cache: 'no-store'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      console.log('✅ Team members data:', data)
+      
+      setTeamMembers(data.users || data || [])
+    } catch (error) {
+      console.error('❌ Error fetching team members:', error)
+      setTeamMembers([])
+    } finally {
+      setTeamMembersLoading(false)
+    }
+  }, [user?.role, (user as any)?.managedTeam])
+
+  // Fetch team members on component mount for team leaders
+  useEffect(() => {
+    if (user?.role === 'team_leader') {
+      fetchTeamMembers()
+    }
+  }, [fetchTeamMembers])
 
   const exportToCSV = () => {
     const headers = [
@@ -364,7 +426,11 @@ export default function DealsTablePage() {
   const pageDealsCount = deals.length
   const totalRevenue = deals.reduce((sum, deal) => sum + (Number(deal.amountPaid) || 0), 0)
   const averageDealSize = pageDealsCount > 0 ? totalRevenue / pageDealsCount : 0
-  const uniqueAgents = new Set(deals.map(deal => deal.salesAgentName)).size
+  
+  // For team leaders, show actual team members count; for others, show unique agents from deals
+  const activeAgentsCount = user?.role === 'team_leader' 
+    ? teamMembers.length 
+    : new Set(deals.map(deal => deal.salesAgentName)).size
 
   if (paginationState.isLoading && deals.length === 0) {
     return (
@@ -435,9 +501,15 @@ export default function DealsTablePage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{uniqueAgents}</div>
+            <div className="text-2xl font-bold">
+              {teamMembersLoading && user?.role === 'team_leader' ? (
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              ) : (
+                activeAgentsCount
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Unique sales agents
+              {user?.role === 'team_leader' ? 'Team salesmen' : 'Unique sales agents'}
             </p>
           </CardContent>
         </Card>
@@ -450,76 +522,131 @@ export default function DealsTablePage() {
             <Filter className="h-5 w-5" />
             Filters & Search
           </CardTitle>
+          {user?.role === 'team_leader' && (
+            <CardDescription>
+              Showing deals for your team: {(user as any)?.managedTeam || 'your team'}
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-            <div className="lg:col-span-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search deals..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
+          {user?.role === 'team_leader' ? (
+            // Simplified filters for team leaders - only search and month
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search deals by customer, phone, email, or agent..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
               </div>
+              <Select value={`${monthFilter}-${yearFilter}`} onValueChange={(value) => {
+                const [month, year] = value.split('-')
+                setMonthFilter(month)
+                setYearFilter(year)
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-all">All Months</SelectItem>
+                  {(() => {
+                    const months = []
+                    const currentDate = new Date()
+                    const currentYear = currentDate.getFullYear()
+                    const currentMonth = currentDate.getMonth()
+                    
+                    // Generate last 12 months
+                    for (let i = 0; i < 12; i++) {
+                      const date = new Date(currentYear, currentMonth - i, 1)
+                      const month = (date.getMonth() + 1).toString()
+                      const year = date.getFullYear().toString()
+                      const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                      months.push(
+                        <SelectItem key={`${month}-${year}`} value={`${month}-${year}`}>
+                          {monthName}
+                        </SelectItem>
+                      )
+                    }
+                    return months
+                  })()}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={stageFilter} onValueChange={setStageFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Stage" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Stages</SelectItem>
-                <SelectItem value="lead">Lead</SelectItem>
-                <SelectItem value="qualified">Qualified</SelectItem>
-                <SelectItem value="proposal">Proposal</SelectItem>
-                <SelectItem value="negotiation">Negotiation</SelectItem>
-                <SelectItem value="closed-won">Closed Won</SelectItem>
-                <SelectItem value="closed-lost">Closed Lost</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={teamFilter} onValueChange={setTeamFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Team" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Teams</SelectItem>
-                <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
-                <SelectItem value="CS TEAM">CS TEAM</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
-              const [field, order] = value.split('-')
-              setSortBy(field)
-              setSortOrder(order as 'asc' | 'desc')
-            }}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="created_at-desc">Newest First</SelectItem>
-                <SelectItem value="created_at-asc">Oldest First</SelectItem>
-                <SelectItem value="amount_paid-desc">Highest Amount</SelectItem>
-                <SelectItem value="amount_paid-asc">Lowest Amount</SelectItem>
-                <SelectItem value="customer_name-asc">Customer A-Z</SelectItem>
-                <SelectItem value="customer_name-desc">Customer Z-A</SelectItem>
-                <SelectItem value="sales_agent-asc">Agent A-Z</SelectItem>
-                <SelectItem value="sales_agent-desc">Agent Z-A</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          ) : (
+            // Full filters for managers and other roles
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+              <div className="lg:col-span-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search deals..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={stageFilter} onValueChange={setStageFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stages</SelectItem>
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="qualified">Qualified</SelectItem>
+                  <SelectItem value="proposal">Proposal</SelectItem>
+                  <SelectItem value="negotiation">Negotiation</SelectItem>
+                  <SelectItem value="closed-won">Closed Won</SelectItem>
+                  <SelectItem value="closed-lost">Closed Lost</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={teamFilter} onValueChange={setTeamFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Team" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Teams</SelectItem>
+                  <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
+                  <SelectItem value="CS TEAM">CS TEAM</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
+                const [field, order] = value.split('-')
+                setSortBy(field)
+                setSortOrder(order as 'asc' | 'desc')
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created_at-desc">Newest First</SelectItem>
+                  <SelectItem value="created_at-asc">Oldest First</SelectItem>
+                  <SelectItem value="amount_paid-desc">Highest Amount</SelectItem>
+                  <SelectItem value="amount_paid-asc">Lowest Amount</SelectItem>
+                  <SelectItem value="customer_name-asc">Customer A-Z</SelectItem>
+                  <SelectItem value="customer_name-desc">Customer Z-A</SelectItem>
+                  <SelectItem value="sales_agent-asc">Agent A-Z</SelectItem>
+                  <SelectItem value="sales_agent-desc">Agent Z-A</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </CardContent>
       </Card>
 
