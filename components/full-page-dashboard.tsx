@@ -433,6 +433,11 @@ export default function FullPageDashboard() {
               uploadedFiles={uploadedFiles}
               setUploadedFiles={setUploadedFiles}
               setActiveTab={setActiveTab}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              setSelectedMonth={setSelectedMonth}
+              setSelectedYear={setSelectedYear}
+              setDateFilterKey={setDateFilterKey}
             />
           </main>
         </div>

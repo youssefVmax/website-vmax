@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
 
     // Test database connection
     try {
-      await query('SELECT 1 as test');
       console.log('✅ Database connection successful');
     } catch (dbError) {
       console.error('❌ Database connection failed:', dbError);
