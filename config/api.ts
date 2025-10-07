@@ -5,7 +5,40 @@
 
 // Request debounce map to prevent rapid-fire requests
 const requestDebounceMap = new Map<string, number>();
-const DEBOUNCE_DELAY = 500; // 500ms debounce
+const DEBOUNCE_DELAY = 5000; 
+
+// Request cache to prevent duplicate requests
+const requestCache = new Map<string, { promise: Promise<any>; timestamp: number }>();
+const CACHE_TTL = 5000; // 5 seconds cache
+
+// Clean up expired cache entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of requestCache.entries()) {
+    if (now - entry.timestamp > CACHE_TTL) {
+      requestCache.delete(key);
+    }
+  }
+  // Also clean up old debounce entries
+  for (const [key, timestamp] of requestDebounceMap.entries()) {
+    if (now - timestamp > DEBOUNCE_DELAY * 2) {
+      requestDebounceMap.delete(key);
+    }
+  }
+}, 100000); // Clean up every 10 seconds
+
+// Utility functions for debugging
+export const debugUtils = {
+  clearRequestCache: () => {
+    requestCache.clear();
+    requestDebounceMap.clear();
+    console.log('🗑️ Cleared all request caches');
+  },
+  getCacheStats: () => ({
+    cacheSize: requestCache.size,
+    debounceSize: requestDebounceMap.size
+  })
+};
 
 // API Configuration
 export const API_CONFIG = {
@@ -104,13 +137,25 @@ async function apiRequest<T = any>(
     timeout = 15000,
   } = options;
 
-  // Debounce check to prevent rapid-fire requests
+  // Create unique request key including query parameters for better caching
   const requestKey = `${method}:${endpoint}`;
   const now = Date.now();
-  const lastRequest = requestDebounceMap.get(requestKey);
   
+  // Check if there's a cached request in progress
+  const cachedRequest = requestCache.get(requestKey);
+  if (cachedRequest && (now - cachedRequest.timestamp) < CACHE_TTL) {
+    console.log(`📦 Returning cached request: ${requestKey}`);
+    return cachedRequest.promise;
+  }
+  
+  // Check debounce only for rapid successive requests
+  const lastRequest = requestDebounceMap.get(requestKey);
   if (lastRequest && (now - lastRequest) < DEBOUNCE_DELAY) {
     console.log(`🚫 Request debounced: ${requestKey}`);
+    // Return cached result if available, otherwise return debounce error
+    if (cachedRequest) {
+      return cachedRequest.promise;
+    }
     return {
       success: false,
       error: 'Request debounced - too many rapid requests',
@@ -159,9 +204,23 @@ async function apiRequest<T = any>(
     fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
   }
 
-  let lastError: Error | null = null;
+  // Create and cache the request promise
+  const requestPromise = executeRequest();
+  requestCache.set(requestKey, { promise: requestPromise, timestamp: now });
+  
+  // Clean up cache after completion
+  requestPromise.finally(() => {
+    setTimeout(() => {
+      requestCache.delete(requestKey);
+    }, CACHE_TTL);
+  });
+  
+  return requestPromise;
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  async function executeRequest(): Promise<ApiResponse<T>> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       console.log(`🚀 API Request (attempt ${attempt + 1}/${retries + 1}):`, {
         method: fetchOptions.method || 'GET',
@@ -258,6 +317,7 @@ async function apiRequest<T = any>(
     success: false,
     error: lastError?.message || 'Request failed after all retries'
   };
+  }
 }
 
 /**
