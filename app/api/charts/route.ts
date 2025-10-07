@@ -96,7 +96,6 @@ export async function GET(request: NextRequest) {
 
       const salesTrend = await query<any>(salesTrendQuery, params.slice(0, userRole === 'team_leader' ? 2 : 1));
       
-      console.log('📊 Sales trend raw data:', salesTrend.slice(0, 3)); // Log first 3 entries
       
       charts.salesTrend = salesTrend.map(row => {
         // Handle invalid or null dates

@@ -56,8 +56,9 @@ export async function GET(request: NextRequest) {
 
     // Build base queries based on role
     let dealsQuery = 'SELECT d.*, COALESCE(u1.name, \'Unknown Agent\') as sales_agent_name, COALESCE(u2.name, d.closing_agent, \'Unknown Agent\') as closing_agent_name FROM deals d LEFT JOIN users u1 ON d.SalesAgentID = u1.id LEFT JOIN users u2 ON d.ClosingAgentID = u2.id WHERE 1=1';
-    let callbacksQuery = 'SELECT * FROM callbacks WHERE 1=1';
+    let callbacksQuery = 'SELECT c.*, COALESCE(u.name, c.sales_agent, \'Unknown Agent\') as agent_name, COALESCE(u.role, \'salesman\') as agent_role, COALESCE(u.team, c.sales_team, \'Unknown Team\') as agent_team FROM callbacks c LEFT JOIN users u ON (c.SalesAgentID = u.id OR c.created_by_id = u.id) WHERE 1=1';
     let targetsQuery = 'SELECT * FROM targets WHERE 1=1';
+    let usersQuery = 'SELECT id, name, username, role, team FROM users WHERE 1=1';
     const queryParams: any[] = [];
 
     // Apply role-based filtering using correct field names
@@ -104,9 +105,10 @@ export async function GET(request: NextRequest) {
     let deals: any[] = [];
     let callbacks: any[] = [];
     let targets: any[] = [];
+    let users: any[] = [];
 
     // Execute queries with timeout protection
-    const queryTimeout = 10000; // 10 seconds timeout
+    const queryTimeout = 20000; // 20 seconds timeout for complex queries
 
     try {
       console.log('🔍 Fetching deals...');
@@ -150,11 +152,25 @@ export async function GET(request: NextRequest) {
       targets = [];
     }
 
+    try {
+      console.log('👥 Fetching users...');
+      const usersPromise = query(usersQuery, []);
+      const usersResult: any = await Promise.race([
+        usersPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Users query timeout')), queryTimeout))
+      ]);
+      users = Array.isArray(usersResult) ? usersResult : (Array.isArray(usersResult[0]) ? usersResult[0] : []);
+      console.log(`✅ Found ${users.length} users`);
+    } catch (error) {
+      console.error('❌ Error fetching users:', error);
+      users = [];
+    }
+
     // Calculate analytics
     console.log('📊 Calculating analytics...');
     let analytics;
     try {
-      analytics = calculateAnalytics(deals, callbacks, targets, userRole);
+      analytics = calculateAnalytics(deals, callbacks, targets, users, userRole);
       console.log('✅ Analytics calculated successfully');
     } catch (error) {
       console.error('❌ Error calculating analytics:', error);
@@ -172,7 +188,8 @@ export async function GET(request: NextRequest) {
           topAgents: [],
           serviceDistribution: [],
           teamDistribution: [],
-          dailyTrend: []
+          dailyTrend: [],
+          topCallbackCreators: []
         },
         tables: {
           recentDeals: deals.slice(0, 10),
@@ -274,8 +291,8 @@ function getDateCondition(dateRange: string): string | null {
   }
 }
 
-function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], userRole: string) {
-  console.log(`📊 Calculating analytics for ${deals.length} deals, ${callbacks.length} callbacks, ${targets.length} targets`);
+function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], users: any[], userRole: string) {
+  console.log(`📊 Calculating analytics for ${deals.length} deals, ${callbacks.length} callbacks, ${targets.length} targets, ${users.length} users`);
   
   // Calculate basic metrics
   const totalDeals = deals.length;
@@ -288,8 +305,85 @@ function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], user
   const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length;
   const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
 
-  console.log(`💰 Revenue: $${totalRevenue}, Deals: ${totalDeals}, Callbacks: ${totalCallbacks}`);
 
+  // Calculate Top Callback Creators with proper field mapping
+  const callbackCreatorMap: { [key: string]: { 
+    agentId: string; 
+    userName: string; 
+    userTeam: string; 
+    userRole: string; 
+    callbackCount: number; 
+    completedCallbacks: number; 
+    pendingCallbacks: number; 
+    successRate: number;
+  } } = {};
+
+  callbacks.forEach((callback, index) => {
+    // Use the JOINed user data from the query for better accuracy
+    const agentId = callback.SalesAgentID || callback.salesAgentId || callback.created_by_id || callback.sales_agent_id || callback.created_by;
+    const agentName = callback.agent_name || callback.sales_agent || callback.salesAgentName || callback.created_by || 'Unknown Agent';
+    const agentTeam = callback.agent_team || callback.sales_team || callback.team || 'Unknown Team';
+    const agentRole = callback.agent_role || 'salesman';
+    
+    // Debug logging for first few callbacks
+    if (index < 3) {
+      console.log(`📞 Callback ${index + 1} field mapping:`, {
+        agentId,
+        agentName,
+        agentTeam,
+        agentRole,
+        status: callback.status,
+        rawFields: {
+          SalesAgentID: callback.SalesAgentID,
+          agent_name: callback.agent_name,
+          agent_team: callback.agent_team,
+          agent_role: callback.agent_role,
+          sales_agent: callback.sales_agent,
+          created_by: callback.created_by
+        }
+      });
+    }
+    
+    if (agentId || agentName) {
+      const creatorKey = agentId || agentName;
+      
+      if (!callbackCreatorMap[creatorKey]) {
+        callbackCreatorMap[creatorKey] = {
+          agentId: creatorKey,
+          userName: agentName,
+          userTeam: agentTeam,
+          userRole: agentRole,
+          callbackCount: 0,
+          completedCallbacks: 0,
+          pendingCallbacks: 0,
+          successRate: 0
+        };
+      }
+      
+      const creator = callbackCreatorMap[creatorKey];
+      creator.callbackCount += 1;
+      
+      if (callback.status === 'completed') {
+        creator.completedCallbacks += 1;
+      } else if (callback.status === 'pending') {
+        creator.pendingCallbacks += 1;
+      }
+      
+      // Calculate success rate
+      creator.successRate = creator.callbackCount > 0 ? 
+        (creator.completedCallbacks / creator.callbackCount) * 100 : 0;
+    }
+  });
+
+  // Get top 3 callback creators sorted by callback count
+  const topCallbackCreators = Object.values(callbackCreatorMap)
+    .sort((a, b) => b.callbackCount - a.callbackCount)
+    .slice(0, 3)
+    .map((creator, index) => ({
+      ...creator,
+      rank: index + 1,
+      successRate: parseFloat(creator.successRate.toFixed(1))
+    }));
   // Sales by agent (using correct field names)
   const salesByAgent: { [key: string]: { agent: string; sales: number; deals: number } } = {};
   deals.forEach(deal => {
@@ -365,7 +459,8 @@ function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], user
       topAgents,
       serviceDistribution,
       teamDistribution,
-      dailyTrend: dailyTrendArray
+      dailyTrend: dailyTrendArray,
+      topCallbackCreators
     },
     tables: {
       recentDeals,

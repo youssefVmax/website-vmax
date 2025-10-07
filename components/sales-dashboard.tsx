@@ -134,6 +134,7 @@ function SalesAnalysisDashboard({
   const [targets, setTargets] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
 
   const handleRefresh = async () => {
     try {
@@ -258,7 +259,12 @@ function SalesAnalysisDashboard({
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           try {
             console.log(`📊 Fetching ${name} data... (attempt ${attempt + 1}/${maxRetries + 1})`);
-            const res = await fetch(url);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
             if (!res.ok) throw new Error(`${name} API error: ${res.status}`);
             const data = await res.json();
             console.log(`✅ ${name} data fetched successfully`);
@@ -299,18 +305,34 @@ function SalesAnalysisDashboard({
 
       const usersRes = await fetchWithRetry(usersUrl.toString(), 'users');
 
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Fetch callback creators data from dedicated endpoint
+      const callbackCreatorsUrl = new URL('/api/callback-creators', window.location.origin);
+      callbackCreatorsUrl.searchParams.set('userRole', userRole);
+      callbackCreatorsUrl.searchParams.set('userId', user.id);
+      if (user.managedTeam) {
+        callbackCreatorsUrl.searchParams.set('managedTeam', user.managedTeam);
+      }
+      callbackCreatorsUrl.searchParams.set('limit', '3'); // Top 3 creators
+
+      const callbackCreatorsRes = await fetchWithRetry(callbackCreatorsUrl.toString(), 'callback-creators');
+
       // Process responses with better error handling
       const dealsData = Array.isArray(dealsRes) ? dealsRes : (dealsRes?.deals || dealsRes?.data || []);
       const callbacksData = Array.isArray(callbacksRes) ? callbacksRes : (callbacksRes?.callbacks || callbacksRes?.data || []);
       const targetsData = Array.isArray(targetsRes) ? targetsRes : (targetsRes?.targets || targetsRes?.data || []);
       const notificationsData = Array.isArray(notificationsRes) ? notificationsRes : (notificationsRes?.notifications || notificationsRes?.data || []);
       const usersData = Array.isArray(usersRes) ? usersRes : (usersRes?.users || usersRes?.data || []);
+      const callbackCreatorsApiData = callbackCreatorsRes?.success ? callbackCreatorsRes.data : null;
 
       setDeals(dealsData);
       setCallbacks(callbacksData);
       setTargets(targetsData);
       setNotifications(notificationsData);
       setUsers(usersData);
+      setAnalyticsData(callbackCreatorsApiData);
 
       console.log(`✅ ${userRole} data loaded successfully:`, {
         deals: dealsData.length,
@@ -639,7 +661,6 @@ function SalesAnalysisDashboard({
         successRate: creator.callbackCount > 0 ? ((creator.completedCallbacks / creator.callbackCount) * 100).toFixed(1) : '0.0'
       }));
 
-    console.log('🏆 Top 3 Callback Creators:', topCallbackCreators);
 
     return {
       totalRevenue,
@@ -664,10 +685,10 @@ function SalesAnalysisDashboard({
       dealSizeData,
       funnelData,
       agentPerformanceData,
-      // Top callback creators data
-      topCallbackCreators
+      // Top callback creators data - use API data if available, otherwise calculate locally
+      topCallbackCreators: analyticsData?.topCallbackCreators || topCallbackCreators
     };
-  }, [deals, callbacks, targets, users, selectedMonth, selectedYear, refreshing]);
+  }, [deals, callbacks, targets, users, selectedMonth, selectedYear, refreshing, analyticsData]);
 
   // Check if data is ready and stable for chart rendering
   const isDataReady = !refreshing && deals.length >= 0 && callbacks.length >= 0;
@@ -1025,7 +1046,7 @@ function SalesAnalysisDashboard({
                     Top 3 Callback Creators
                   </h4>
                   <div className="space-y-3">
-                    {analytics.topCallbackCreators.map((creator, index) => (
+                    {analytics.topCallbackCreators.map((creator: any, index: number) => (
                       <div 
                         key={creator.agentId} 
                         className={`flex items-center justify-between p-4 rounded-lg border ${
