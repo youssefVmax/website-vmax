@@ -506,13 +506,14 @@ function SalesAnalysisDashboard({
       { range: '$25K+', min: 25000, max: Infinity }
     ];
 
-    const dealSizeData = dealSizeRanges.map(({ range, min, max }) => ({
-      range: range || 'Unknown', // Ensure range is never null/undefined
+    const dealSizeData = dealSizeRanges.map(({ range, min, max }, index) => ({
+      range: range || `Range ${index + 1}`, // Ensure range is never null/undefined and unique
       count: deals.filter(deal => {
         const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
-        return amount >= min && amount < max;
-      }).length
-    })).filter(item => item.range && item.range !== 'Unknown' && typeof item.count === 'number' && !isNaN(item.count)); // Filter out any invalid entries
+        return amount >= min && (max === Infinity ? true : amount < max);
+      }).length,
+      id: `deal-size-${index}` // Add unique identifier
+    })).filter(item => item.range && typeof item.count === 'number' && !isNaN(item.count)); // Filter out any invalid entries
 
     // Conversion Funnel Data
     const funnelData = [
@@ -757,12 +758,12 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.callbackStatusData}>
+              <BarChart data={analytics.callbackStatusData} key="callback-status-chart">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="value" fill="#2563eb">
+                <Bar dataKey="value" fill="#2563eb" key="callback-status-bar">
                   {analytics.callbackStatusData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
@@ -830,7 +831,7 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={analytics.weeklyData}>
+              <ComposedChart data={analytics.weeklyData} key="weekly-performance-chart">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" />
                 <YAxis yAxisId="left" />
@@ -840,8 +841,8 @@ function SalesAnalysisDashboard({
                   name === 'deals' ? 'Deals' : 'Revenue'
                 ]} />
                 <Legend />
-                <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" />
-                <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#82ca9d" strokeWidth={3} name="Revenue" />
+                <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" key="weekly-deals-bar" />
+                <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#82ca9d" strokeWidth={3} name="Revenue" key="weekly-revenue-line" />
               </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
@@ -874,7 +875,7 @@ function SalesAnalysisDashboard({
                   <XAxis type="number" />
                   <YAxis dataKey="range" type="category" width={80} />
                   <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
-                  <Bar dataKey="count" fill="#fbbf24" />
+                  <Bar dataKey="count" fill="#fbbf24" key="deal-size-bar" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -926,7 +927,7 @@ function SalesAnalysisDashboard({
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={analytics.agentPerformanceData}>
+                <BarChart data={analytics.agentPerformanceData} key="agent-performance-chart">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
                   <YAxis yAxisId="left" />
@@ -936,8 +937,8 @@ function SalesAnalysisDashboard({
                     name === 'deals' ? 'Deals' : 'Revenue'
                   ]} />
                   <Legend />
-                  <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" />
-                  <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" />
+                  <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" key="agent-deals-bar" />
+                  <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" key="agent-revenue-bar" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

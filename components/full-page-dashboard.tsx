@@ -817,7 +817,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Team Sales" : "My Sales"}
                 </p>
                 <p className="text-2xl font-bold">
@@ -833,7 +833,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Total Deals" : "My Deals"}
                 </p>
                 <p className="text-2xl font-bold">
@@ -849,7 +849,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Total Users" : "Performance Score"}
                 </p>
                 <p className="text-2xl font-bold">
@@ -868,7 +868,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Avg Deal Size" : "Weekly Target"}
                 </p>
                 <p className="text-2xl font-bold">
