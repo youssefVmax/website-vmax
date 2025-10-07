@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { apiService } from "@/lib/api-service"
 import { dataCenterService, DataCenterEntry, DataFeedback } from "@/lib/data-center-service"
+import { FeedbackManagementTable } from "@/components/feedback-management-table"
 import { formatDisplayDate, sanitizeObject } from "@/lib/timestamp-utils"
 import { showInfo } from "@/lib/sweetalert"
 
@@ -207,11 +208,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
 
   const isManager = userRole === 'manager'
   
-  // Define available teams
+  // Define available teams (matching database teams)
   const teams = [
-    { id: 'sales', name: 'Sales Team' },
-    { id: 'support', name: 'Customer Support' },
-    { id: 'closing', name: 'Closing Team' },
+    { id: 'ali_ashraf', name: 'ALI ASHRAF' },
+    { id: 'cs_team', name: 'CS TEAM' },
+    { id: 'sales_team', name: 'Sales Team' },
     { id: 'management', name: 'Management' }
   ]
 
@@ -220,15 +221,22 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     const loadUsers = async () => {
       try {
         setUserLoading(true)
+        console.log('🔄 Loading users from API...')
         const allUsers = await apiService.getUsers({})
-        setUsers(allUsers)
+        console.log('✅ Users loaded:', allUsers)
+        console.log('📊 Users count:', allUsers?.length || 0)
+        if (allUsers && allUsers.length > 0) {
+          console.log('📝 Sample user:', allUsers[0])
+        }
+        setUsers(allUsers || [])
       } catch (error) {
-        console.error('Error loading users:', error)
+        console.error('❌ Error loading users:', error)
         toast({
           title: "Error Loading Users",
           description: "Failed to load user information.",
           variant: "destructive"
         })
+        setUsers([]) // Set empty array on error
       } finally {
         setUserLoading(false)
       }
@@ -340,10 +348,8 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         }
       )
       
-      toast({
-        title: "Feedback Submitted",
-        description: "Thank you for your feedback!"
-      })
+      // Show SweetAlert success notification
+      await showInfo("Feedback Submitted", "Thank you for your feedback! Your feedback has been successfully submitted.")
       
       // Reset form
       setFeedbackForm({
@@ -951,10 +957,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                     <SelectValue placeholder="Select team (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
-                    <SelectItem value="CS TEAM">CS TEAM</SelectItem>
-                    <SelectItem value="Sales Team">Sales Team</SelectItem>
-                    <SelectItem value="Management">Management</SelectItem>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.name}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -966,11 +973,17 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                     <SelectValue placeholder="Select user (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {users.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name} ({user.role})
-                      </SelectItem>
-                    ))}
+                    {userLoading ? (
+                      <SelectItem value="loading" disabled>Loading users...</SelectItem>
+                    ) : users.length === 0 ? (
+                      <SelectItem value="no-users" disabled>No users found</SelectItem>
+                    ) : (
+                      users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name} ({user.role})
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1280,10 +1293,11 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                       <SelectValue placeholder="Select team" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ALI ASHRAF">ALI ASHRAF</SelectItem>
-                      <SelectItem value="CS TEAM">CS TEAM</SelectItem>
-                      <SelectItem value="Sales Team">Sales Team</SelectItem>
-                      <SelectItem value="Management">Management</SelectItem>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.name}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1297,11 +1311,17 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                       <SelectValue placeholder="Select user" />
                     </SelectTrigger>
                     <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))}
+                      {userLoading ? (
+                        <SelectItem value="loading" disabled>Loading users...</SelectItem>
+                      ) : users.length === 0 ? (
+                        <SelectItem value="no-users" disabled>No users found</SelectItem>
+                      ) : (
+                        users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name} ({user.role})
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1340,7 +1360,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
               className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
             >
               <Upload className="h-4 w-4 mr-2" />
-              Upload File
+              Upload & Share File
             </Button>
           )}
           <Button 
@@ -1350,15 +1370,6 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
             <Plus className="h-4 w-4 mr-2" />
             {userRole === 'salesman' ? 'Share Feedback' : 'Share Data'}
           </Button>
-          {isManager && (
-            <Button 
-              onClick={() => setShowShareFileModal(true)}
-              className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Share File
-            </Button>
-          )}
         </div>
       </div>
 
@@ -2000,7 +2011,29 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
         </Card>
       </div>
 
-      {/* Quick Actions */}
+      {/* Feedback Management Section - Manager Only */}
+      {isManager && (
+        <div className="mt-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <MessageCircle className="h-5 w-5 mr-2" />
+                User Feedback Management
+              </CardTitle>
+              <CardDescription>
+                View and manage all feedback submitted by users on shared data
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FeedbackManagementTable 
+                userRole={userRole}
+                user={user}
+                showAllFeedback={true}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
       {isManager && (
         <Card>
           <CardHeader>

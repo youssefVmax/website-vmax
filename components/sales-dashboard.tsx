@@ -134,11 +134,16 @@ function SalesAnalysisDashboard({
   const [targets, setTargets] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
 
-  const handleRefresh = () => {
-    setLoading(true)
-    setDateFilterKey(prev => prev + 1)
-    fetchData()
-    setTimeout(() => setLoading(false), 1000)
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      setDateFilterKey(prev => prev + 1);
+      await fetchData();
+    } catch (error) {
+      console.error('❌ Error during refresh:', error);
+    } finally {
+      setTimeout(() => setLoading(false), 1000);
+    }
   }
 
   const handleDateChange = (month: string, year: string) => {
@@ -163,7 +168,10 @@ function SalesAnalysisDashboard({
     }
   }
 
-  // Fetch role-based data from APIs
+  // Add debouncing to prevent rapid API calls
+  const [fetchTimeout, setFetchTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Fetch role-based data from APIs with staggered requests to avoid debouncing
   const fetchData = async () => {
     try {
       setRefreshing(true);
@@ -240,44 +248,48 @@ function SalesAnalysisDashboard({
         });
       }
 
-      console.log(`🔍 Fetching ${userRole} data:`, {
-        deals: dealsUrl.toString(),
-        callbacks: callbacksUrl.toString(),
-        targets: targetsUrl.toString(),
-        notifications: notificationsUrl.toString()
-      });
+      console.log(`🔍 Fetching ${userRole} data with staggered requests to avoid debouncing...`);
 
-      // Fetch all data in parallel with error handling
-      const [dealsRes, callbacksRes, targetsRes, notificationsRes] = await Promise.all([
-        fetch(dealsUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Deals API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Deals API error:', err);
-          return { success: false, deals: [] };
-        }),
-        fetch(callbacksUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Callbacks API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Callbacks API error:', err);
-          return { success: false, callbacks: [] };
-        }),
-        fetch(targetsUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Targets API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Targets API error:', err);
-          return { success: false, targets: [] };
-        }),
-        fetch(notificationsUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Notifications API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Notifications API error:', err);
-          return { success: false, notifications: [] };
-        })
-      ]);
+      // Helper function to fetch with retry logic
+      const fetchWithRetry = async (url: string, name: string, maxRetries = 2) => {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(`📊 Fetching ${name} data... (attempt ${attempt + 1}/${maxRetries + 1})`);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`${name} API error: ${res.status}`);
+            const data = await res.json();
+            console.log(`✅ ${name} data fetched successfully`);
+            return data;
+          } catch (err) {
+            console.error(`❌ ${name} API error (attempt ${attempt + 1}):`, err);
+            if (attempt === maxRetries) {
+              console.error(`❌ ${name} API failed after ${maxRetries + 1} attempts`);
+              return { success: false, [name.toLowerCase()]: [] };
+            }
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          }
+        }
+      };
+
+      // Fetch data sequentially with small delays to avoid debouncing
+      // Start with deals (most important for salesman dashboard)
+      const dealsRes = await fetchWithRetry(dealsUrl.toString(), 'deals');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const callbacksRes = await fetchWithRetry(callbacksUrl.toString(), 'callbacks');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const targetsRes = await fetchWithRetry(targetsUrl.toString(), 'targets');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const notificationsRes = await fetchWithRetry(notificationsUrl.toString(), 'notifications');
 
       // Process responses with better error handling
       const dealsData = Array.isArray(dealsRes) ? dealsRes : (dealsRes?.deals || dealsRes?.data || []);
@@ -290,7 +302,7 @@ function SalesAnalysisDashboard({
       setTargets(targetsData);
       setNotifications(notificationsData);
 
-      console.log(`✅ ${userRole} data loaded:`, {
+      console.log(`✅ ${userRole} data loaded successfully:`, {
         deals: dealsData.length,
         callbacks: callbacksData.length,
         targets: targetsData.length,
@@ -320,10 +332,28 @@ function SalesAnalysisDashboard({
     }
   };
 
-  // Load data on component mount and when filters change
+  // Load data on component mount and when filters change with debouncing
   useEffect(() => {
     if (user?.id) {
-      fetchData();
+      // Clear any existing timeout
+      if (fetchTimeout) {
+        clearTimeout(fetchTimeout);
+      }
+      
+      // Set a new timeout to debounce rapid filter changes
+      const timeout = setTimeout(() => {
+        console.log('🔄 Debounced data fetch triggered');
+        fetchData();
+      }, 300); // 300ms debounce for faster response
+      
+      setFetchTimeout(timeout);
+      
+      // Cleanup timeout on unmount
+      return () => {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+      };
     }
   }, [user?.id, selectedMonth, selectedYear, dateFilterKey]);
 
@@ -477,12 +507,12 @@ function SalesAnalysisDashboard({
     ];
 
     const dealSizeData = dealSizeRanges.map(({ range, min, max }) => ({
-      range,
+      range: range || 'Unknown', // Ensure range is never null/undefined
       count: deals.filter(deal => {
         const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
         return amount >= min && amount < max;
       }).length
-    }));
+    })).filter(item => item.range && item.range !== 'Unknown' && typeof item.count === 'number' && !isNaN(item.count)); // Filter out any invalid entries
 
     // Conversion Funnel Data
     const funnelData = [
@@ -531,7 +561,10 @@ function SalesAnalysisDashboard({
       funnelData,
       agentPerformanceData
     };
-  }, [deals, callbacks, targets, selectedMonth, selectedYear]);
+  }, [deals, callbacks, targets, selectedMonth, selectedYear, refreshing]);
+
+  // Check if data is ready and stable for chart rendering
+  const isDataReady = !refreshing && deals.length >= 0 && callbacks.length >= 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -589,67 +622,69 @@ function SalesAnalysisDashboard({
         />
       </div>
 
-      {/* Target Progress */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5" />
-            {userRole === 'team_leader' ? 'Personal & Team Targets' : 'Target Progress'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Personal Target (always shown) */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {userRole === 'team_leader' ? 'My Personal Target' : 'Monthly Target'}
-                </span>
-                <span className="text-sm text-gray-600">${analytics.targetRevenue.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
-                  style={{ width: `${Math.min(analytics.targetProgress, 100)}%` }}
-                ></div>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Progress: {analytics.targetProgress.toFixed(1)}%</span>
-                <span className="font-medium">${analytics.totalRevenue.toLocaleString()} / ${analytics.targetRevenue.toLocaleString()}</span>
-              </div>
-            </div>
-
-            {/* Team Target (only for team leaders if exists) */}
-            {analytics.hasTeamTarget && (
-              <>
-                <hr className="border-gray-200" />
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-purple-700">
-                      Team Target ({user.managedTeam})
-                    </span>
-                    <span className="text-sm text-purple-600">
-                      ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="w-full bg-purple-100 rounded-full h-3">
-                    <div 
-                      className="bg-purple-600 h-3 rounded-full transition-all duration-300" 
-                      style={{ width: `${Math.min(50, 100)}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-purple-600">Team Progress: 50.0%</span>
-                    <span className="font-medium text-purple-700">
-                      $0 / ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
-                    </span>
-                  </div>
+      {/* Target Progress - Hidden for managers */}
+      {userRole !== 'manager' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" />
+              {userRole === 'team_leader' ? 'Personal & Team Targets' : 'Target Progress'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Personal Target (always shown) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    {userRole === 'team_leader' ? 'My Personal Target' : 'Monthly Target'}
+                  </span>
+                  <span className="text-sm text-gray-600">${analytics.targetRevenue.toLocaleString()}</span>
                 </div>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div 
+                    className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                    style={{ width: `${Math.min(analytics.targetProgress, 100)}%` }}
+                  ></div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Progress: {analytics.targetProgress.toFixed(1)}%</span>
+                  <span className="font-medium">${analytics.totalRevenue.toLocaleString()} / ${analytics.targetRevenue.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Team Target (only for team leaders if exists) */}
+              {analytics.hasTeamTarget && (
+                <>
+                  <hr className="border-gray-200" />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-purple-700">
+                        Team Target ({user.managedTeam})
+                      </span>
+                      <span className="text-sm text-purple-600">
+                        ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="w-full bg-purple-100 rounded-full h-3">
+                      <div 
+                        className="bg-purple-600 h-3 rounded-full transition-all duration-300" 
+                        style={{ width: `${Math.min(50, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-purple-600">Team Progress: 50.0%</span>
+                      <span className="font-medium text-purple-700">
+                        $0 / ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -821,19 +856,35 @@ function SalesAnalysisDashboard({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.dealSizeData} layout="horizontal">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis dataKey="range" type="category" width={80} />
-                <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
-                <Bar dataKey="count" fill="#fbbf24">
-                  {analytics.dealSizeData.map((entry, index) => (
-                    <Cell key={`deal-size-${index}-${entry.range}`} fill="#fbbf24" />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {refreshing ? (
+              <div className="flex items-center justify-center h-[300px] text-gray-500">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                  <p>Loading deal size data...</p>
+                </div>
+              </div>
+            ) : isDataReady && analytics.dealSizeData && analytics.dealSizeData.length > 0 && analytics.dealSizeData.every(item => item.range && typeof item.count === 'number') ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart 
+                  key={`deal-size-chart-${analytics.dealSizeData.length}-${Date.now()}`}
+                  data={analytics.dealSizeData} 
+                  layout="horizontal"
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="range" type="category" width={80} />
+                  <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
+                  <Bar dataKey="count" fill="#fbbf24" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-gray-500">
+                <div className="text-center">
+                  <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No deal size data available</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -24,11 +24,11 @@ export interface DataCenterEntry {
 
 export interface DataFeedback {
   id: string;
-  data_id?: string; // For legacy data_feedback table
+  data_id: string;
   user_id: string;
-  feedback_text?: string; // For legacy compatibility
-  message?: string; // For new feedback table
-  subject?: string; // For new feedback table
+  feedback_text: string;
+  message?: string; // Alias for feedback_text from API
+  subject?: string; // Generated from feedback_text in API
   rating?: number;
   feedback_type: string;
   status: 'active' | 'archived' | 'deleted' | 'pending' | 'in_progress' | 'resolved' | 'closed';
@@ -38,9 +38,10 @@ export interface DataFeedback {
   user_name?: string;
   user_username?: string;
   user_role?: string;
-  response?: string;
-  response_by?: string;
-  response_at?: string;
+  data_title?: string;
+  data_description?: string;
+  sent_by_id?: string;
+  sent_by_name?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -549,7 +550,7 @@ export class DataCenterService {
       rating?: string;
       search?: string;
     } = {}
-  ): Promise<PaginatedFeedbackResponse<DataFeedback & { data_title?: string; data_description?: string; sent_by_name?: string }>> {
+  ): Promise<PaginatedFeedbackResponse<DataFeedback>> {
     try {
       const params = new URLSearchParams({
         user_id: userId,
@@ -563,6 +564,7 @@ export class DataCenterService {
       if (filters.search) params.append('search', filters.search);
 
       console.log('🔄 DataCenterService: Fetching all feedback...', filters);
+      console.log('🔗 API URL:', `${this.baseUrl}/api/data-feedback-all?${params.toString()}`);
 
       const response = await fetch(`${this.baseUrl}/api/data-feedback-all?${params.toString()}`, {
         method: 'GET',
@@ -578,12 +580,14 @@ export class DataCenterService {
       }
 
       const result = await response.json();
+      console.log('📊 API Response:', result);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to fetch all feedback');
       }
 
       console.log('✅ DataCenterService: All feedback fetched successfully');
+      console.log('📝 Sample feedback data:', result.data?.slice(0, 2));
       return result;
     } catch (error) {
       console.error('❌ DataCenterService: Get all feedback error:', error);

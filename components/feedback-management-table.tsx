@@ -70,18 +70,62 @@ export function FeedbackManagementTable({
   // Load feedback data
   useEffect(() => {
     loadFeedback()
-  }, [user.id, dataId, showAllFeedback])
+  }, [user.id, dataId, showAllFeedback, userRole, currentPage, itemsPerPage, filterType, searchTerm])
 
   const loadFeedback = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      // Import the data center service
-      const { dataCenterService } = await import('@/lib/data-center-service')
+      console.log('🔄 Loading feedback...', { showAllFeedback, dataId, userRole, userId: user.id })
       
-      // Managers: show all feedback across data entries
-      if (showAllFeedback) {
+      // Import the data center service
+      
+      // Test API directly for debugging
+      if (showAllFeedback && userRole === 'manager') {
+        console.log('🧪 Testing API directly...')
+        try {
+          const apiUrl = '/api/data-feedback-all?user_id=' + user.id + '&user_role=' + userRole + '&page=1&limit=50'
+          console.log('🔗 Testing API URL:', apiUrl)
+          console.log('🔍 User details:', { id: user.id, role: userRole })
+          
+          const response = await fetch(apiUrl)
+          console.log('📡 API Response status:', response.status, response.statusText)
+          
+          if (!response.ok) {
+            console.error('❌ API Response not OK:', response.status, response.statusText)
+            const errorText = await response.text()
+            console.error('❌ API Error text:', errorText)
+            return
+          }
+          
+          const testResult = await response.json()
+          console.log('🔍 Direct API test result:', testResult)
+          console.log('🔍 API response keys:', Object.keys(testResult))
+          console.log('🔍 Stats from API:', testResult.stats)
+          console.log('🔍 Pagination from API:', testResult.pagination)
+          
+          if (testResult.success && testResult.data) {
+            console.log('✅ API returned data array length:', testResult.data.length)
+            if (testResult.data.length > 0) {
+              console.log('📝 Sample feedback item:', testResult.data[0])
+              console.log('📝 All feedback items:', testResult.data)
+            } else {
+              console.warn('⚠️ API returned empty data array but success=true')
+              console.log('🔍 Expected data based on SQL: 2 records with user_id=user_1759448557316_gwcutnsq')
+            }
+            setFeedback(testResult.data)
+            console.log('✅ Feedback loaded directly from API:', testResult.data.length, 'items')
+            return
+          } else {
+            console.warn('⚠️ API success but no data:', testResult)
+          }
+        } catch (testError) {
+          console.error('❌ Direct API test failed:', testError)
+        }
+      }
+      if (showAllFeedback && userRole === 'manager') {
+        console.log('📊 Loading all feedback for manager...')
         const result = await dataCenterService.getAllFeedback(user.id, userRole, {
           page: currentPage,
           limit: itemsPerPage,
@@ -89,26 +133,31 @@ export function FeedbackManagementTable({
           search: searchTerm || undefined
         })
         
+        console.log('✅ All feedback loaded:', result)
         setFeedback(result.data || [])
         setStats(result.stats || {})
-      } else {
-        const result = await dataCenterService.getAllFeedback(user.id, userRole, { limit: 100 })
-        // result.data already in DataFeedback shape
-        setFeedback(result.data)
+        
+        // If no feedback found, show helpful message
+        if (!result.data || result.data.length === 0) {
+          console.log('ℹ️ No feedback found in database. You can add test feedback by submitting feedback on shared data entries.')
+        }
         return
       }
 
       // If a specific data entry is provided
       if (dataId) {
+        console.log('📝 Loading feedback for specific data entry:', dataId)
         const result = await dataCenterService.getFeedback(dataId, user.id, userRole, { limit: 100 })
-        setFeedback(result.data)
+        setFeedback(result.data || [])
         return
       }
 
-      // Fallback: no dataId and not manager-all -> empty
-      setFeedback([])
+      // Fallback: show user's own feedback
+      console.log('👤 Loading user feedback...')
+      const result = await dataCenterService.getAllFeedback(user.id, userRole, { limit: 100 })
+      setFeedback(result.data || [])
     } catch (err) {
-      console.error('Error loading feedback:', err)
+      console.error('❌ Error loading feedback:', err)
       setError(err instanceof Error ? err.message : 'Failed to load feedback')
     } finally {
       setLoading(false)
@@ -337,11 +386,10 @@ export function FeedbackManagementTable({
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Message</TableHead>
+                <TableHead>Data Entry</TableHead>
+                <TableHead>Feedback</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -354,31 +402,37 @@ export function FeedbackManagementTable({
                       <div className="flex items-center space-x-2">
                         <User className="h-4 w-4" />
                         <div>
-                          <div className="font-medium">{item.user_name || 'Unknown User'}</div>
-                          <div className="text-sm text-gray-500">{item.user_role || 'Unknown'}</div>
+                          <div className="font-medium">{item.user_name || item.user_id || 'Unknown User'}</div>
+                          <div className="text-sm text-gray-500">{item.user_role || 'user'}</div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{item.subject || 'No Subject'}</div>
+                      <div className="font-medium">{item.data_title || item.subject || 'Feedback'}</div>
+                      <div className="text-xs text-gray-500">ID: {item.data_id || 'N/A'}</div>
                     </TableCell>
                     <TableCell className="max-w-md">
-                      <p className="text-sm line-clamp-2">{item.message || item.feedback_text || item.subject}</p>
+                      <p className="text-sm line-clamp-2">{item.feedback_text || item.message || 'No content'}</p>
+                      {item.rating && (
+                        <div className="flex items-center mt-1">
+                          <span className="text-xs text-yellow-600">★ {item.rating}/5</span>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge className={getFeedbackTypeColor(item.feedback_type)}>
-                        {item.feedback_type}
+                        {item.feedback_type || 'general'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={item.status === 'resolved' ? 'default' : item.status === 'in_progress' ? 'secondary' : 'outline'}>
-                        {item.status}
+                      <Badge variant={item.status === 'active' ? 'default' : item.status === 'archived' ? 'secondary' : 'outline'}>
+                        {item.status || 'active'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={item.priority === 'urgent' ? 'bg-red-100 text-red-800' : item.priority === 'high' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}>
-                        {item.priority}
-                      </Badge>
+                      <div className="text-sm">
+                        {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
@@ -423,7 +477,7 @@ export function FeedbackManagementTable({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <div className="text-gray-500">
                       <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p>No feedback found</p>
