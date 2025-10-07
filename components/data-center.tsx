@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
   Upload, Download, Database, FileText, Users, Trash2, Plus, X, 
-  Send, MessageCircle, Star, Eye, Edit, Calendar, User, AlertCircle,
+  Send, MessageCircle, Star, Eye, Edit, Calendar, User as UserIcon, AlertCircle,
   CheckCircle, Clock, Archive
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -221,19 +221,75 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
     const loadUsers = async () => {
       try {
         setUserLoading(true)
-        console.log('🔄 Loading users from API...')
-        const allUsers = await apiService.getUsers({})
-        console.log('✅ Users loaded:', allUsers)
-        console.log('📊 Users count:', allUsers?.length || 0)
-        if (allUsers && allUsers.length > 0) {
-          console.log('📝 Sample user:', allUsers[0])
+        console.log('🔄 DataCenter: Loading users from API...')
+        
+        // Test direct API call first with higher limit to get all users
+        console.log('🔍 DataCenter: Testing direct API call to /api/users')
+        const directResponse = await fetch('/api/users?limit=1000')
+        console.log('🔍 DataCenter: Direct API response status:', directResponse.status)
+        
+        let allUsers = [];
+        
+        if (directResponse.ok) {
+          const directData = await directResponse.json()
+          console.log('🔍 DataCenter: Direct API data structure:', {
+            success: directData.success,
+            usersCount: directData.users?.length || 0,
+            totalUsers: directData.total,
+            hasUsers: !!directData.users
+          })
+          
+          if (directData.success && directData.users && Array.isArray(directData.users)) {
+            allUsers = directData.users;
+            console.log('✅ DataCenter: Using direct API users:', allUsers.length)
+            
+            if (allUsers.length > 0) {
+              console.log('📝 DataCenter: Sample user from direct API:', {
+                id: allUsers[0].id,
+                name: allUsers[0].name,
+                username: allUsers[0].username,
+                role: allUsers[0].role,
+                team: allUsers[0].team,
+                email: allUsers[0].email
+              })
+            }
+          }
         }
-        setUsers(allUsers || [])
+        
+        // Fallback to apiService if direct API didn't work
+        if (allUsers.length === 0) {
+          console.log('🔄 DataCenter: Trying apiService as fallback...')
+          const serviceUsers = await apiService.getUsers({})
+          console.log('🔍 DataCenter: ApiService response:', serviceUsers)
+          
+          if (Array.isArray(serviceUsers)) {
+            allUsers = serviceUsers;
+            console.log('✅ DataCenter: Using apiService users:', allUsers.length)
+          }
+        }
+        
+        // Final validation and logging
+        console.log('📊 DataCenter: Final users count:', allUsers.length)
+        if (allUsers.length > 0) {
+          console.log('📝 DataCenter: Users by team:', allUsers.reduce((acc: Record<string, number>, user: any) => {
+            const team = user.team || 'No Team';
+            acc[team] = (acc[team] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>))
+          
+          console.log('📝 DataCenter: Users by role:', allUsers.reduce((acc: Record<string, number>, user: any) => {
+            const role = user.role || 'No Role';
+            acc[role] = (acc[role] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>))
+        }
+        
+        setUsers(allUsers)
       } catch (error) {
-        console.error('❌ Error loading users:', error)
+        console.error('❌ DataCenter: Error loading users:', error)
         toast({
           title: "Error Loading Users",
-          description: "Failed to load user information.",
+          description: "Failed to load user information. Please check console for details.",
           variant: "destructive"
         })
         setUsers([]) // Set empty array on error
@@ -832,11 +888,17 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                         <SelectValue placeholder="Choose a user" />
                       </SelectTrigger>
                       <SelectContent>
-                        {users.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name} ({user.role})
-                          </SelectItem>
-                        ))}
+                        {userLoading ? (
+                          <SelectItem value="loading" disabled>Loading users...</SelectItem>
+                        ) : users.length === 0 ? (
+                          <SelectItem value="no-users" disabled>No users found</SelectItem>
+                        ) : (
+                          users.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              {user.name || user.full_name || user.username} ({user.role}) - {user.team || user.team_name || 'No Team'}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -976,13 +1038,36 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                     {userLoading ? (
                       <SelectItem value="loading" disabled>Loading users...</SelectItem>
                     ) : users.length === 0 ? (
-                      <SelectItem value="no-users" disabled>No users found</SelectItem>
+                      <SelectItem value="no-users" disabled>No users found - Check console for details</SelectItem>
                     ) : (
-                      users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))
+                      users
+                        .sort((a, b) => {
+                          // Sort by team first, then by name
+                          const teamA = a.team || 'ZZZ_No Team';
+                          const teamB = b.team || 'ZZZ_No Team';
+                          if (teamA !== teamB) return teamA.localeCompare(teamB);
+                          
+                          const nameA = a.name || a.username || '';
+                          const nameB = b.name || b.username || '';
+                          return nameA.localeCompare(nameB);
+                        })
+                        .map((user) => {
+                          const displayName = user.name || user.username || 'Unnamed User';
+                          const team = user.team || 'No Team';
+                          const role = user.role || 'No Role';
+                          const email = user.email ? ` (${user.email})` : '';
+                          
+                          return (
+                            <SelectItem key={user.id} value={user.id}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{displayName}</span>
+                                <span className="text-xs text-gray-500">
+                                  {role} • {team}{email}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })
                     )}
                   </SelectContent>
                 </Select>
@@ -1318,7 +1403,7 @@ export function DataCenter({ userRole, user }: DataCenterProps) {
                       ) : (
                         users.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
-                            {user.name} ({user.role})
+                            {user.name || user.full_name || user.username} ({user.role}) - {user.team || user.team_name || 'No Team'}
                           </SelectItem>
                         ))
                       )}

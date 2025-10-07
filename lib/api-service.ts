@@ -20,6 +20,10 @@ export interface User {
   createdAt?: string;
   updatedAt?: string;
   isActive?: boolean;
+  // Additional backward compatibility fields
+  full_name?: string;
+  team_name?: string;
+  team_id?: number;
 }
 
 export interface Deal {

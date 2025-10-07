@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DateFilter } from '@/components/ui/date-filter';
@@ -133,6 +133,7 @@ function SalesAnalysisDashboard({
   const [callbacks, setCallbacks] = useState<any[]>([]);
   const [targets, setTargets] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
 
   const handleRefresh = async () => {
     try {
@@ -182,12 +183,14 @@ function SalesAnalysisDashboard({
       const callbacksUrl = new URL('/api/callbacks', window.location.origin);
       const targetsUrl = new URL('/api/targets', window.location.origin);
       const notificationsUrl = new URL('/api/notifications', window.location.origin);
+      const usersUrl = new URL('/api/users', window.location.origin);
 
       // Add role-based parameters
       dealsUrl.searchParams.set('limit', '1000');
       callbacksUrl.searchParams.set('limit', '1000');
       targetsUrl.searchParams.set('limit', '100');
       notificationsUrl.searchParams.set('limit', '50');
+      usersUrl.searchParams.set('limit', '1000'); // Get all users for callback creator analysis
 
       // Add user context for role-based filtering
       if (userRole === 'salesman') {
@@ -291,22 +294,30 @@ function SalesAnalysisDashboard({
 
       const notificationsRes = await fetchWithRetry(notificationsUrl.toString(), 'notifications');
 
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const usersRes = await fetchWithRetry(usersUrl.toString(), 'users');
+
       // Process responses with better error handling
       const dealsData = Array.isArray(dealsRes) ? dealsRes : (dealsRes?.deals || dealsRes?.data || []);
       const callbacksData = Array.isArray(callbacksRes) ? callbacksRes : (callbacksRes?.callbacks || callbacksRes?.data || []);
       const targetsData = Array.isArray(targetsRes) ? targetsRes : (targetsRes?.targets || targetsRes?.data || []);
       const notificationsData = Array.isArray(notificationsRes) ? notificationsRes : (notificationsRes?.notifications || notificationsRes?.data || []);
+      const usersData = Array.isArray(usersRes) ? usersRes : (usersRes?.users || usersRes?.data || []);
 
       setDeals(dealsData);
       setCallbacks(callbacksData);
       setTargets(targetsData);
       setNotifications(notificationsData);
+      setUsers(usersData);
 
       console.log(`✅ ${userRole} data loaded successfully:`, {
         deals: dealsData.length,
         callbacks: callbacksData.length,
         targets: targetsData.length,
-        notifications: notificationsData.length
+        notifications: notificationsData.length,
+        users: usersData.length
       });
 
       // Debug: Show sample data structure
@@ -323,6 +334,27 @@ function SalesAnalysisDashboard({
       
       if (callbacksData.length > 0) {
         console.log('📞 Sample callback data:', callbacksData[0]);
+        console.log('📞 Available callback fields:', {
+          SalesAgentID: callbacksData[0].SalesAgentID,
+          salesAgentId: callbacksData[0].salesAgentId,
+          created_by_id: callbacksData[0].created_by_id,
+          sales_agent: callbacksData[0].sales_agent,
+          salesAgentName: callbacksData[0].salesAgentName,
+          agent_name: callbacksData[0].agent_name
+        });
+      }
+
+      if (usersData.length > 0) {
+        console.log('👤 Sample user data:', usersData[0]);
+        console.log('👤 Available user fields:', {
+          id: usersData[0].id,
+          name: usersData[0].name,
+          username: usersData[0].username,
+          full_name: usersData[0].full_name,
+          team: usersData[0].team,
+          team_name: usersData[0].team_name,
+          role: usersData[0].role
+        });
       }
 
     } catch (error) {
@@ -359,7 +391,7 @@ function SalesAnalysisDashboard({
 
   // Calculate KPIs and analytics
   const analytics = useMemo(() => {
-    console.log('📊 Calculating analytics from deals:', deals.length, 'callbacks:', callbacks.length);
+    console.log('📊 Calculating analytics from deals:', deals.length, 'callbacks:', callbacks.length, 'users:', users.length);
     
     // Handle multiple field name variations for amount
     const totalRevenue = deals.reduce((sum, deal) => {
@@ -538,6 +570,77 @@ function SalesAnalysisDashboard({
 
     const agentPerformanceData = Object.values(agentPerformance);
 
+    // Top Callback Creators - Join callbacks with users data
+    const callbackCreatorMap = new Map();
+    
+    // First, create a user lookup map for faster access
+    const userLookup = new Map();
+    users.forEach(user => {
+      userLookup.set(user.id, user);
+      // Also map by username for additional matching
+      if (user.username) {
+        userLookup.set(user.username, user);
+      }
+    });
+
+    console.log('👥 User lookup created with', userLookup.size, 'users');
+    console.log('📞 Processing', callbacks.length, 'callbacks for creator analysis');
+    
+    callbacks.forEach(callback => {
+      // Try multiple field variations for agent ID
+      const agentId = callback.SalesAgentID || callback.salesAgentId || callback.created_by_id || callback.sales_agent_id;
+      const agentName = callback.sales_agent || callback.salesAgentName || callback.agent_name;
+      
+      if (agentId || agentName) {
+        // Try to find user by ID first, then by name
+        let user = null;
+        if (agentId) {
+          user = userLookup.get(agentId) || userLookup.get(agentId.toString());
+        }
+        if (!user && agentName) {
+          // Try to find user by name matching
+          user = Array.from(userLookup.values()).find(u => 
+            u.name === agentName || u.username === agentName || u.full_name === agentName
+          );
+        }
+
+        const creatorKey = agentId || agentName || 'unknown';
+        
+        if (!callbackCreatorMap.has(creatorKey)) {
+          callbackCreatorMap.set(creatorKey, {
+            agentId: creatorKey,
+            callbackCount: 0,
+            completedCallbacks: 0,
+            pendingCallbacks: 0,
+            userName: user ? (user.name || user.full_name || user.username || 'Unknown User') : (agentName || 'Unknown User'),
+            userTeam: user ? (user.team || user.team_name || 'Unknown Team') : 'Unknown Team',
+            userRole: user ? (user.role || 'Unknown Role') : 'Unknown Role'
+          });
+        }
+        
+        const creator = callbackCreatorMap.get(creatorKey);
+        creator.callbackCount += 1;
+        
+        if (callback.status === 'completed') {
+          creator.completedCallbacks += 1;
+        } else if (callback.status === 'pending') {
+          creator.pendingCallbacks += 1;
+        }
+      }
+    });
+
+    // Get top 3 callback creators sorted by total callback count
+    const topCallbackCreators = Array.from(callbackCreatorMap.values())
+      .sort((a, b) => b.callbackCount - a.callbackCount)
+      .slice(0, 3)
+      .map((creator, index) => ({
+        ...creator,
+        rank: index + 1,
+        successRate: creator.callbackCount > 0 ? ((creator.completedCallbacks / creator.callbackCount) * 100).toFixed(1) : '0.0'
+      }));
+
+    console.log('🏆 Top 3 Callback Creators:', topCallbackCreators);
+
     return {
       totalRevenue,
       totalDeals,
@@ -560,9 +663,11 @@ function SalesAnalysisDashboard({
       hourlyPerformance,
       dealSizeData,
       funnelData,
-      agentPerformanceData
+      agentPerformanceData,
+      // Top callback creators data
+      topCallbackCreators
     };
-  }, [deals, callbacks, targets, selectedMonth, selectedYear, refreshing]);
+  }, [deals, callbacks, targets, users, selectedMonth, selectedYear, refreshing]);
 
   // Check if data is ready and stable for chart rendering
   const isDataReady = !refreshing && deals.length >= 0 && callbacks.length >= 0;
@@ -774,46 +879,90 @@ function SalesAnalysisDashboard({
         </Card>
 
         {/* Performance Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+        <Card className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               Performance Summary
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <DollarSign className="h-5 w-5 text-blue-600" />
-                  <span className="font-medium">Revenue This Month</span>
-                </div>
-                <span className="text-lg font-bold text-blue-600">${analytics.totalRevenue.toLocaleString()}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Target className="h-5 w-5 text-green-600" />
-                  <span className="font-medium">Deals Closed</span>
-                </div>
-                <span className="text-lg font-bold text-green-600">{analytics.totalDeals}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Phone className="h-5 w-5 text-orange-600" />
-                  <span className="font-medium">Active Callbacks</span>
-                </div>
-                <span className="text-lg font-bold text-orange-600">{analytics.pendingCallbacks}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-purple-600" />
-                  <span className="font-medium">Conversion Rate</span>
-                </div>
-                <span className="text-lg font-bold text-purple-600">{analytics.conversionRate.toFixed(1)}%</span>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Revenue This Month */}
+              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-800/50 rounded-lg">
+                        <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Revenue This Month</p>
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          ${analytics.totalRevenue.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Deals Closed */}
+              <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 dark:bg-green-800/50 rounded-lg">
+                        <Target className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Deals Closed</p>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          {analytics.totalDeals}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Active Callbacks */}
+              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-orange-100 dark:bg-orange-800/50 rounded-lg">
+                        <Phone className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Active Callbacks</p>
+                        <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                          {analytics.pendingCallbacks}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Conversion Rate */}
+              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-purple-100 dark:bg-purple-800/50 rounded-lg">
+                        <CheckCircle className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Conversion Rate</p>
+                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                          {analytics.conversionRate.toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </CardContent>
         </Card>
@@ -848,41 +997,77 @@ function SalesAnalysisDashboard({
           </CardContent>
         </Card>
 
-        {/* Deal Size Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChart className="h-5 w-5" />
-              Deal Size Distribution
+        {/* Callback Analytics Dashboard */}
+        <Card className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <Phone className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              Callback Analytics
             </CardTitle>
+            <CardDescription className="text-slate-600 dark:text-slate-400">
+              Real-time callback performance and conversion tracking
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {refreshing ? (
-              <div className="flex items-center justify-center h-[300px] text-gray-500">
+              <div className="flex items-center justify-center h-[300px] text-slate-500 dark:text-slate-400">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                  <p>Loading deal size data...</p>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-2"></div>
+                  <p>Loading callback analytics...</p>
                 </div>
               </div>
-            ) : isDataReady && analytics.dealSizeData && analytics.dealSizeData.length > 0 && analytics.dealSizeData.every(item => item.range && typeof item.count === 'number') ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart 
-                  key={`deal-size-chart-${analytics.dealSizeData.length}-${Date.now()}`}
-                  data={analytics.dealSizeData} 
-                  layout="horizontal"
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="range" type="category" width={80} />
-                  <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
-                  <Bar dataKey="count" fill="#fbbf24" key="deal-size-bar" />
-                </BarChart>
-              </ResponsiveContainer>
+            ) : isDataReady && analytics.topCallbackCreators && analytics.topCallbackCreators.length > 0 ? (
+              <div className="space-y-6">
+                {/* Top 3 Callback Creators */}
+                <div>
+                  <h4 className="text-sm font-medium text-black dark:text-gray-200 mb-4 flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-yellow-500" />
+                    Top 3 Callback Creators
+                  </h4>
+                  <div className="space-y-3">
+                    {analytics.topCallbackCreators.map((creator, index) => (
+                      <div 
+                        key={creator.agentId} 
+                        className={`flex items-center justify-between p-4 rounded-lg border ${
+                          index === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/50' :
+                          index === 1 ? 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700/50' :
+                          'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold ${
+                            index === 0 ? 'bg-yellow-500 text-white' :
+                            index === 1 ? 'bg-gray-500 text-white' :
+                            'bg-orange-500 text-white'
+                          }`}>
+                            {creator.rank}
+                          </div>
+                          <div>
+                            <p className="font-medium text-black dark:text-gray-200 text-base">{creator.userName}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {creator.userTeam} • {creator.userRole}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-black dark:text-gray-200">
+                            {creator.callbackCount}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {creator.successRate}% success
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-gray-500">
+              <div className="flex items-center justify-center h-[300px] text-slate-500 dark:text-slate-400">
                 <div className="text-center">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No deal size data available</p>
+                  <Phone className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No callback data available</p>
+                  <p className="text-sm mt-1">Callback analytics will appear here once data is available</p>
                 </div>
               </div>
             )}
