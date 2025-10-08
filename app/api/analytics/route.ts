@@ -167,11 +167,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate analytics
-    console.log('📊 Calculating analytics...');
     let analytics;
     try {
       analytics = calculateAnalytics(deals, callbacks, targets, users, userRole);
-      console.log('✅ Analytics calculated successfully');
     } catch (error) {
       console.error('❌ Error calculating analytics:', error);
       analytics = {
@@ -203,7 +201,6 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    console.log('🎉 Analytics API response ready');
     return addCorsHeaders(NextResponse.json({
       success: true,
       data: {
@@ -292,7 +289,7 @@ function getDateCondition(dateRange: string): string | null {
 }
 
 function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], users: any[], userRole: string) {
-  console.log(`📊 Calculating analytics for ${deals.length} deals, ${callbacks.length} callbacks, ${targets.length} targets, ${users.length} users`);
+  console.log(`📊 ${deals.length} deals, ${callbacks.length} callbacks, ${targets.length} targets, ${users.length} users`);
   
   // Calculate basic metrics
   const totalDeals = deals.length;

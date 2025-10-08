@@ -413,7 +413,6 @@ function SalesAnalysisDashboard({
 
   // Calculate KPIs and analytics
   const analytics = useMemo(() => {
-    console.log('📊 Calculating analytics from deals:', deals.length, 'callbacks:', callbacks.length, 'users:', users.length);
     
     // Handle multiple field name variations for amount
     const totalRevenue = deals.reduce((sum, deal) => {
@@ -493,6 +492,31 @@ function SalesAnalysisDashboard({
         revenue: monthRevenue,
         deals: monthDeals.length,
         callbacks: monthCallbacks.length
+      });
+    }
+
+    // Daily callback timeline for selected month
+    const dailyCallbackData = [];
+    const selectedDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
+    const daysInMonth = new Date(parseInt(selectedYear), parseInt(selectedMonth), 0).getDate();
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, day);
+      const dayCallbacks = callbacks.filter(cb => {
+        const cbDate = new Date(cb.created_at || cb.createdAt);
+        return cbDate.getFullYear() === date.getFullYear() && 
+               cbDate.getMonth() === date.getMonth() &&
+               cbDate.getDate() === date.getDate();
+      });
+      
+      dailyCallbackData.push({
+        day: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: date.toISOString().split('T')[0],
+        callbacks: dayCallbacks.length,
+        pending: dayCallbacks.filter(cb => cb.status === 'pending').length,
+        contacted: dayCallbacks.filter(cb => cb.status === 'contacted').length,
+        completed: dayCallbacks.filter(cb => cb.status === 'completed').length,
+        cancelled: dayCallbacks.filter(cb => cb.status === 'cancelled').length
       });
     }
 
@@ -685,6 +709,8 @@ function SalesAnalysisDashboard({
       dealSizeData,
       funnelData,
       agentPerformanceData,
+      // Daily callback timeline data
+      dailyCallbackData,
       // Top callback creators data - use API data if available, otherwise calculate locally
       topCallbackCreators: analyticsData?.topCallbackCreators || topCallbackCreators
     };
@@ -1017,83 +1043,75 @@ function SalesAnalysisDashboard({
             </ResponsiveContainer>
           </CardContent>
         </Card>
+{/* Callback Analytics Dashboard */}
+<Card className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
+  <CardHeader className="pb-4">
+    <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
+      <Phone className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+      Callback Analytics
+    </CardTitle>
+    <CardDescription className="text-slate-600 dark:text-slate-400">
+      Real-time callback performance and conversion tracking
+    </CardDescription>
+  </CardHeader>
 
-        {/* Callback Analytics Dashboard */}
-        <Card className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
-              <Phone className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-              Callback Analytics
-            </CardTitle>
-            <CardDescription className="text-slate-600 dark:text-slate-400">
-              Real-time callback performance and conversion tracking
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {refreshing ? (
-              <div className="flex items-center justify-center h-[300px] text-slate-500 dark:text-slate-400">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-2"></div>
-                  <p>Loading callback analytics...</p>
-                </div>
-              </div>
-            ) : isDataReady && analytics.topCallbackCreators && analytics.topCallbackCreators.length > 0 ? (
-              <div className="space-y-6">
-                {/* Top 3 Callback Creators */}
-                <div>
-                  <h4 className="text-sm font-medium text-black dark:text-gray-200 mb-4 flex items-center gap-2">
-                    <Trophy className="h-4 w-4 text-yellow-500" />
-                    Top 3 Callback Creators
-                  </h4>
-                  <div className="space-y-3">
-                    {analytics.topCallbackCreators.map((creator: any, index: number) => (
-                      <div 
-                        key={creator.agentId} 
-                        className={`flex items-center justify-between p-4 rounded-lg border ${
-                          index === 0 ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/50' :
-                          index === 1 ? 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700/50' :
-                          'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold ${
-                            index === 0 ? 'bg-yellow-500 text-white' :
-                            index === 1 ? 'bg-gray-500 text-white' :
-                            'bg-orange-500 text-white'
-                          }`}>
-                            {creator.rank}
-                          </div>
-                          <div>
-                            <p className="font-medium text-black dark:text-gray-200 text-base">{creator.userName}</p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {creator.userTeam} • {creator.userRole}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xl font-bold text-black dark:text-gray-200">
-                            {creator.callbackCount}
-                          </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {creator.successRate}% success
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-[300px] text-slate-500 dark:text-slate-400">
-                <div className="text-center">
-                  <Phone className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No callback data available</p>
-                  <p className="text-sm mt-1">Callback analytics will appear here once data is available</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+  <CardContent>
+    {refreshing ? (
+      <div className="flex items-center justify-center h-[300px] text-slate-500 dark:text-slate-400">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-2"></div>
+          <p>Loading callback analytics...</p>
+        </div>
+      </div>
+    ) : isDataReady && analytics.topCallbackCreators && analytics.topCallbackCreators.length > 0 ? (
+      <div className="space-y-6">
+        {/* Daily Callback Timeline Chart */}
+        <div>
+          <h4 className="text-sm font-medium text-black dark:text-gray-200 mb-4 flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            Daily Callback Timeline (
+            {new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})
+          </h4>
+
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={analytics.dailyCallbackData} key="daily-callback-timeline-chart">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="day"
+                tick={{ fontSize: 12 }}
+                interval="preserveStartEnd"
+              />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip 
+                formatter={(value, name) => [
+                  `${value} ${String(name) === 'callbacks' ? 'total' : String(name)}`,
+                  String(name) === 'callbacks'
+                    ? 'Total Callbacks'
+                    : String(name).charAt(0).toUpperCase() + String(name).slice(1)
+                ]}
+                labelFormatter={(label) => `Day: ${label}`}
+              />
+              <Legend />
+              <Line type="monotone" dataKey="callbacks" stroke="#2563eb" strokeWidth={2} name="Total Callbacks" key="total-callbacks-line" />
+              <Line type="monotone" dataKey="pending" stroke="#d97706" strokeWidth={2} strokeDasharray="5 5" name="Pending" key="pending-callbacks-line" />
+              <Line type="monotone" dataKey="contacted" stroke="#7c3aed" strokeWidth={2} strokeDasharray="5 5" name="Contacted" key="contacted-callbacks-line" />
+              <Line type="monotone" dataKey="completed" stroke="#059669" strokeWidth={2} name="Completed" key="completed-callbacks-line" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    ) : (
+      <div className="flex items-center justify-center h-[300px] text-slate-500 dark:text-slate-400">
+        <div className="text-center">
+          <Phone className="h-12 w-12 mx-auto mb-2 opacity-50" />
+          <p>No callback data available</p>
+          <p className="text-sm mt-1">Callback analytics will appear here once data is available</p>
+        </div>
+      </div>
+    )}
+  </CardContent>
+</Card>
+
       </div>
 
       {/* Conversion Funnel and Agent Performance */}

@@ -102,6 +102,7 @@ export default function ManageCallbacksPage() {
   // Calculate effective limit based on user role
   const effectiveLimit = user?.role === 'team_leader' ? 1000 :  // Load up to 1000 callbacks for team leaders
                         user?.role === 'manager' ? 5000 :       // Load up to 5000 callbacks for managers
+                        user?.role === 'salesman' ? 1000 :       // Load up to 1000 callbacks for salesmen
                         (pagination?.limit || 25);             // Default for others
 
   // Derived analytics for manager view (read-only insights)

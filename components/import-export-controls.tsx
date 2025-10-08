@@ -362,66 +362,6 @@ export function ImportExportControls({ user }: ImportExportControlsProps) {
 
   return (
     <div className="space-y-6">
-      {/* Data Export Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Download className="h-5 w-5 mr-2" />
-            Data Export (Manager Only)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="exportType">Export Type</Label>
-              <Select value={exportType} onValueChange={setExportType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="deals">Deals</SelectItem>
-                  <SelectItem value="callbacks">Callbacks</SelectItem>
-                  <SelectItem value="targets">Targets</SelectItem>
-                  <SelectItem value="analytics">Analytics Report</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="exportFormat">Format</Label>
-              <Select value={exportFormat} onValueChange={setExportFormat}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="csv">CSV</SelectItem>
-                  <SelectItem value="json">JSON</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex space-x-2">
-            <Button
-              onClick={handleExportData}
-              disabled={isExporting}
-              className="flex-1"
-            >
-              {isExporting ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export All {exportType}
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Agent Performance Table */}
       <Card>
         <CardHeader>
