@@ -62,6 +62,7 @@ import NewCallbackPage from "@/components/new-callback"
 import { useUnifiedData } from '@/hooks/useUnifiedData'
 import { User } from '@/types/user'
 import apiService, { Deal } from "@/lib/api-service"
+import TeamPerformanceDashboard from "@/components/team-performance-dashboard"
 
 export default function FullPageDashboard() {
   const { user, logout } = useAuth()
@@ -213,6 +214,7 @@ export default function FullPageDashboard() {
       return [
         ...baseItems,
         { id: "callbacks-manage", icon: Phone, label: "Manage Callbacks" } as const,
+        { id: "team-performance", icon: Users, label: "Team Performance" } as const,
         { id: "user-management", icon: Users, label: "User Management" } as const,
         { id: "team-targets", icon: Target, label: "Team Targets" } as const,
         { id: "analytics", icon: BarChart3, label: "Advanced Analytics" } as const,
@@ -226,6 +228,7 @@ export default function FullPageDashboard() {
         ...baseItems,
         { id: "callbacks-manage", icon: Phone, label: "Team Callbacks" } as const,
         { id: "callbacks-new", icon: Plus, label: "New Callback" } as const,
+        { id: "team-performance", icon: Users, label: "Team Performance" } as const,
         { id: "my-deals", icon: FileText, label: "Team Deals" } as const,
         { id: "add-deal", icon: Plus, label: "Add Deal" } as const,
         { id: "my-targets", icon: Target, label: "Team Targets" } as const,
@@ -538,6 +541,8 @@ function getPageTitle(activeTab: string, userRole: string): string {
       return "All Deals Table"
     case "admin-callbacks-table":
       return "All Callbacks Table"
+    case "team-performance":
+      return userRole === 'manager' ? "Team Performance Overview" : "Team Performance"
     case "settings":
       return "Settings"
     default:
@@ -624,6 +629,8 @@ function PageContent({
       return <ManageCallbacksPage />
     case "callbacks-new":
       return <NewCallbackPage />
+    case "team-performance":
+      return <TeamPerformanceDashboard user={user} />
     case "admin-deals-table":
       return <AdminDealsTablePage user={user} setActiveTab={setActiveTab} />
     case "admin-callbacks-table":
