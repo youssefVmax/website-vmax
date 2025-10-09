@@ -32,9 +32,7 @@ export async function OPTIONS() {
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    console.log('🔍 Analytics API called:', request.url);
-    
+  try {    
     const { searchParams } = new URL(request.url);
     const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team_leader';
     const userId = searchParams.get('userId');
@@ -42,7 +40,6 @@ export async function GET(request: NextRequest) {
     const managedTeam = searchParams.get('managedTeam');
     const dateRange = searchParams.get('dateRange') || 'all';
 
-    console.log('📋 Analytics request params:', { userRole, userId, userName, managedTeam, dateRange });
 
     if (!userRole) {
       console.error('❌ Missing userRole parameter');
@@ -93,15 +90,6 @@ export async function GET(request: NextRequest) {
     const callbacksParams = getQueryParams(userRole, userId, managedTeam, 'callbacks');
     const targetsParams = getQueryParams(userRole, userId, managedTeam, 'targets');
     
-    console.log('📊 Executing queries:', { 
-      dealsQuery, 
-      callbacksQuery, 
-      targetsQuery,
-      dealsParams,
-      callbacksParams,
-      targetsParams
-    });
-    
     let deals: any[] = [];
     let callbacks: any[] = [];
     let targets: any[] = [];
@@ -111,56 +99,48 @@ export async function GET(request: NextRequest) {
     const queryTimeout = 20000; // 20 seconds timeout for complex queries
 
     try {
-      console.log('🔍 Fetching deals...');
       const dealsPromise = query(dealsQuery, dealsParams);
       const dealsResult: any = await Promise.race([
         dealsPromise,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Deals query timeout')), queryTimeout))
       ]);
       deals = Array.isArray(dealsResult) ? dealsResult : (Array.isArray(dealsResult[0]) ? dealsResult[0] : []);
-      console.log(`✅ Found ${deals.length} deals`);
     } catch (error) {
       console.error('❌ Error fetching deals:', error);
       deals = [];
     }
 
     try {
-      console.log('📞 Fetching callbacks...');
       const callbacksPromise = query(callbacksQuery, callbacksParams);
       const callbacksResult: any = await Promise.race([
         callbacksPromise,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Callbacks query timeout')), queryTimeout))
       ]);
       callbacks = Array.isArray(callbacksResult) ? callbacksResult : (Array.isArray(callbacksResult[0]) ? callbacksResult[0] : []);
-      console.log(`✅ Found ${callbacks.length} callbacks`);
     } catch (error) {
       console.error('❌ Error fetching callbacks:', error);
       callbacks = [];
     }
 
     try {
-      console.log('🎯 Fetching targets...');
       const targetsPromise = query(targetsQuery, targetsParams);
       const targetsResult: any = await Promise.race([
         targetsPromise,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Targets query timeout')), queryTimeout))
       ]);
       targets = Array.isArray(targetsResult) ? targetsResult : (Array.isArray(targetsResult[0]) ? targetsResult[0] : []);
-      console.log(`✅ Found ${targets.length} targets`);
     } catch (error) {
       console.error('❌ Error fetching targets:', error);
       targets = [];
     }
 
     try {
-      console.log('👥 Fetching users...');
       const usersPromise = query(usersQuery, []);
       const usersResult: any = await Promise.race([
         usersPromise,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Users query timeout')), queryTimeout))
       ]);
       users = Array.isArray(usersResult) ? usersResult : (Array.isArray(usersResult[0]) ? usersResult[0] : []);
-      console.log(`✅ Found ${users.length} users`);
     } catch (error) {
       console.error('❌ Error fetching users:', error);
       users = [];
@@ -289,7 +269,6 @@ function getDateCondition(dateRange: string): string | null {
 }
 
 function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], users: any[], userRole: string) {
-  console.log(`📊 ${deals.length} deals, ${callbacks.length} callbacks, ${targets.length} targets, ${users.length} users`);
   
   // Calculate basic metrics
   const totalDeals = deals.length;
@@ -321,25 +300,6 @@ function calculateAnalytics(deals: any[], callbacks: any[], targets: any[], user
     const agentName = callback.agent_name || callback.sales_agent || callback.salesAgentName || callback.created_by || 'Unknown Agent';
     const agentTeam = callback.agent_team || callback.sales_team || callback.team || 'Unknown Team';
     const agentRole = callback.agent_role || 'salesman';
-    
-    // Debug logging for first few callbacks
-    if (index < 3) {
-      console.log(`📞 Callback ${index + 1} field mapping:`, {
-        agentId,
-        agentName,
-        agentTeam,
-        agentRole,
-        status: callback.status,
-        rawFields: {
-          SalesAgentID: callback.SalesAgentID,
-          agent_name: callback.agent_name,
-          agent_team: callback.agent_team,
-          agent_role: callback.agent_role,
-          sales_agent: callback.sales_agent,
-          created_by: callback.created_by
-        }
-      });
-    }
     
     if (agentId || agentName) {
       const creatorKey = agentId || agentName;

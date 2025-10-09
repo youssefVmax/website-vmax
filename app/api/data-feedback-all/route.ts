@@ -130,9 +130,6 @@ export async function GET(request: NextRequest) {
       ${whereClause}
     `;
 
-    console.log('🔍 Executing feedback query:', feedbackQuery);
-    console.log('🔍 Final query params:', finalQueryParams);
-    console.log('🔍 Final count params:', finalCountParams);
 
     // Execute queries with proper error handling
     let feedbackRows: any[] = [];

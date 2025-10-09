@@ -121,7 +121,6 @@ export async function GET(request: NextRequest) {
         console.log('⚠️ Deals API - Invalid date range, skipping filtering');
       }
     } else {
-      console.log('ℹ️ Deals API - No date range specified or set to "all"');
     }
 
     const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";

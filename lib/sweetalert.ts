@@ -292,7 +292,7 @@ export const showCallbackAdded = async (customerName: string, callbackDate: stri
     const customSwal = await getCustomSwal();
     setTimeout(() => {
       customSwal.fire({
-        title: '📞 Callback Scheduled!',
+        title: 'Callback Scheduled!',
         html: `
           <div class="text-center space-y-3">
             <div class="text-lg text-green-400 font-semibold">${customerName}</div>

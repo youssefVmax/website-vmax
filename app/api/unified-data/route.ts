@@ -30,13 +30,8 @@ export async function GET(request: NextRequest) {
   const dataTypes = dataTypesParam.split(',');
   
   try {
-    // Test database connection first
-    console.log('🔄 Unified Data API: Testing database connection...');
-    console.log('🔍 Unified Data API: Request params:', { userRole, userId, userName, managedTeam, dataTypes, dateRange, limit, offset });
-    
     try {
       await query('SELECT 1 as test');
-      console.log('✅ Unified Data API: Database connection successful');
     } catch (dbError) {
       console.error('❌ Unified Data API: Database connection failed:', dbError);
       throw new Error(`Database connection failed: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`);
@@ -110,8 +105,6 @@ export async function GET(request: NextRequest) {
         dealsQuery += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
         dealsParams.push(limit, offset);
 
-        console.log('🔄 Unified Data API: Final query:', dealsQuery);
-        console.log('🔄 Unified Data API: Query params:', dealsParams);
 
         const [dealsResult] = await query(dealsQuery, dealsParams);
         result.data.deals = Array.isArray(dealsResult) ? dealsResult : [];

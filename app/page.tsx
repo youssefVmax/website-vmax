@@ -61,7 +61,6 @@ function AppContent() {
   }
 
   if (currentView === 'app' && isAuthenticated) {
-    console.log('Rendering app view for authenticated user:', user?.name)
     return (
       <>
         <NotificationsProvider>

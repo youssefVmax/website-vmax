@@ -167,8 +167,6 @@ export async function GET(request: NextRequest) {
 
     const fullCountQuery = `${countQuery} ${whereClause}`;
 
-    console.log('🔍 Executing query:', fullQuery);
-    console.log('🔍 Query params:', params);
 
     // Execute queries
     const [dataResult, countResult] = await Promise.all([

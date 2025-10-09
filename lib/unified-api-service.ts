@@ -88,8 +88,7 @@ export class UnifiedApiService {
       } else if (result.data && Array.isArray(result.data)) {
         deals = result.data;
       }
-      
-      // Ensure numeric conversion and field mapping
+
       return deals.map((deal: any) => ({
         ...deal,
         id: deal.id || deal.DealID,
@@ -125,7 +124,6 @@ export class UnifiedApiService {
       
       const result = await this.cachedRequest(`/api/callbacks?${params.toString()}`);
       
-      // Handle different response formats
       let callbacks = [];
       if (result.success && result.callbacks) {
         callbacks = result.callbacks;

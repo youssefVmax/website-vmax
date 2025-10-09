@@ -36,7 +36,6 @@ function formatDateForMySQL(dateValue: any): string | null {
 }
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 GET /api/callbacks - Starting request processing');
     
     const { searchParams } = new URL(request.url);
     const salesAgentId = searchParams.get('salesAgentId') || searchParams.get('SalesAgentID');
@@ -106,9 +105,6 @@ export async function GET(request: NextRequest) {
     
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    console.log('🔍 Executing callbacks query with WHERE:', whereSql);
-    console.log('📝 Query params:', [...params, limit, offset]);
-    
     // Check if callbacks table exists and create if needed
     try {
       const [tableCheck] = await query(`
