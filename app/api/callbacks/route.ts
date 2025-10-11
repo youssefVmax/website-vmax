@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId');
     const search = searchParams.get('search');
     const agentName = searchParams.get('agent'); // optional filter by sales agent name
+    const month = searchParams.get('month'); // optional filter by month (YYYY-MM format)
     const page = parseInt(searchParams.get('page') || '1', 10) || 1;
     const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 
       userRole === 'team_leader' ? 1000 :  // Allow team leaders to fetch up to 1000 callbacks
@@ -104,11 +105,15 @@ export async function GET(request: NextRequest) {
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
     
+    // Month filtering (YYYY-MM format)
+    if (month && month.trim()) {
+      // Filter by created_at month for callbacks
+      where.push('DATE_FORMAT(COALESCE(created_at, updated_at), "%Y-%m") = ?');
+      params.push(month.trim());
+    }
+    
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    console.log('🔍 Executing callbacks query with WHERE:', whereSql);
-    console.log('📝 Query params:', [...params, limit, offset]);
-    
     // Check if callbacks table exists and create if needed
     try {
       const [tableCheck] = await query(`
@@ -143,8 +148,6 @@ export async function GET(request: NextRequest) {
       // since MySQL has issues with prepared statements for LIMIT/OFFSET
       const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
       
-      console.log('📝 Executing paginated callbacks query:', paginatedSql);
-      console.log('📝 With params:', params);
       
       [rows] = await query<any>(paginatedSql, params);
       [totals] = await query<any>(countSql, params);
@@ -156,6 +159,22 @@ export async function GET(request: NextRequest) {
       totals = [{ c: 0 }];
     }
 
+    // Get available months for filtering (only for managers)
+    let availableMonths: string[] = [];
+    if (userRole === 'manager') {
+      try {
+        const [monthRows] = await query<any>(`
+          SELECT DISTINCT DATE_FORMAT(COALESCE(created_at, updated_at), "%Y-%m") as month
+          FROM callbacks 
+          WHERE COALESCE(created_at, updated_at) IS NOT NULL
+          ORDER BY month DESC
+        `);
+        availableMonths = monthRows.map((row: any) => row.month).filter(Boolean);
+      } catch (monthError) {
+        console.error('❌ Error fetching available months:', monthError);
+      }
+    }
+
     return addCorsHeaders(NextResponse.json({
       callbacks: rows,
       total: totals[0]?.c || 0,
@@ -163,7 +182,8 @@ export async function GET(request: NextRequest) {
       limit,
       success: true,
       userRole,
-      userId
+      userId,
+      availableMonths
     }));
   } catch (error) {
     console.error('❌ Error fetching callbacks:', error);

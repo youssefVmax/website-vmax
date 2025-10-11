@@ -663,7 +663,7 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={analytics.monthlyData}>
+              <AreaChart data={analytics.monthlyData || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -690,7 +690,7 @@ function SalesAnalysisDashboard({
             <ResponsiveContainer width="100%" height={300}>
               <RechartsPieChart>
                 <Pie
-                  data={analytics.serviceChartData}
+                  data={analytics.serviceChartData || []}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -699,8 +699,8 @@ function SalesAnalysisDashboard({
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {analytics.serviceChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  {(analytics.serviceChartData || []).map((entry, index) => (
+                    <Cell key={`service-cell-${index}-${entry?.name || 'unknown'}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -722,14 +722,14 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.callbackStatusData}>
+              <BarChart data={analytics.callbackStatusData || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="value" fill="#2563eb">
-                  {analytics.callbackStatusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {(analytics.callbackStatusData || []).map((entry, index) => (
+                    <Cell key={`callback-cell-${index}-${entry?.name || 'unknown'}`} fill={entry?.color || '#8884d8'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -795,7 +795,7 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={analytics.weeklyData}>
+              <ComposedChart data={analytics.weeklyData || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" />
                 <YAxis yAxisId="left" />
@@ -822,14 +822,14 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.dealSizeData} layout="horizontal">
+              <BarChart data={analytics.dealSizeData || []} layout="horizontal">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis dataKey="range" type="category" width={80} />
                 <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
                 <Bar dataKey="count" fill="#fbbf24">
-                  {analytics.dealSizeData.map((entry, index) => (
-                    <Cell key={`deal-size-${index}-${entry.range}`} fill="#fbbf24" />
+                  {(analytics.dealSizeData || []).map((entry, index) => (
+                    <Cell key={`deal-size-${index}-${entry?.range || 'unknown'}`} fill="#fbbf24" />
                   ))}
                 </Bar>
               </BarChart>
@@ -854,7 +854,7 @@ function SalesAnalysisDashboard({
                 <Tooltip formatter={(value, name) => [`${value}`, name]} />
                 <Funnel
                   dataKey="value"
-                  data={analytics.funnelData}
+                  data={analytics.funnelData || []}
                   isAnimationActive
                 >
                   <LabelList position="center" fill="#fff" stroke="none" />
@@ -865,7 +865,7 @@ function SalesAnalysisDashboard({
         </Card>
 
         {/* Agent Performance (Team Leaders Only) */}
-        {userRole === 'team_leader' && analytics.agentPerformanceData.length > 0 && (
+        {userRole === 'team_leader' && (analytics.agentPerformanceData || []).length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -875,7 +875,7 @@ function SalesAnalysisDashboard({
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={analytics.agentPerformanceData}>
+                <BarChart data={analytics.agentPerformanceData || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
                   <YAxis yAxisId="left" />
@@ -894,7 +894,7 @@ function SalesAnalysisDashboard({
         )}
 
         {/* Hourly Performance (if not team leader or no agent data) */}
-        {(userRole !== 'team_leader' || analytics.agentPerformanceData.length === 0) && (
+        {(userRole !== 'team_leader' || (analytics.agentPerformanceData || []).length === 0) && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -904,7 +904,7 @@ function SalesAnalysisDashboard({
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={analytics.hourlyPerformance.slice(0, 12)}>
+                <AreaChart data={(analytics.hourlyPerformance || []).slice(0, 12)}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="time" />
                   <YAxis />

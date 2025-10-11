@@ -32,7 +32,8 @@ import {
   Save,
   RefreshCw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download
 } from "lucide-react";
 import { callbacksService } from "@/lib/mysql-callbacks-service";
 import { ManagerApiService } from "@/lib/api-service";
@@ -87,6 +88,12 @@ export default function ManageCallbacksPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CallbackRow["status"]>("all");
   const [agentFilter, setAgentFilter] = useState<string>('all')
+  const [monthFilter, setMonthFilter] = useState<string>('all')
+  const [teamFilter, setTeamFilter] = useState<string>('all')
+  const [availableMonths, setAvailableMonths] = useState<{value: string; label: string}[]>([])
+  const [availableAgents, setAvailableAgents] = useState<{value: string; label: string}[]>([])
+  const [availableTeams, setAvailableTeams] = useState<{value: string; label: string}[]>([])
+  const [selectorLoading, setSelectorLoading] = useState(false)
   const [historyForPhone, setHistoryForPhone] = useState<string | null>(null)
 
   // Pagination state
@@ -133,6 +140,157 @@ export default function ManageCallbacksPage() {
     return map
   }, [callbacks])
 
+  // Load selector data from API
+  const loadSelectorData = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      setSelectorLoading(true);
+      
+      const baseUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : '';
+      
+      const params = new URLSearchParams({
+        userRole: user.role || '',
+        userId: user.id || '',
+      });
+      
+      const response = await fetch(`${baseUrl}/api/callbacks/selectors?${params.toString()}`);
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setAvailableMonths(result.data.months || []);
+        setAvailableAgents(result.data.agents || []);
+        setAvailableTeams(result.data.teams || []);
+        console.log('✅ Selector data loaded:', {
+          months: result.data.months?.length || 0,
+          agents: result.data.agents?.length || 0,
+          teams: result.data.teams?.length || 0
+        });
+      } else {
+        console.error('❌ Failed to load selector data:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error loading selector data:', error);
+    } finally {
+      setSelectorLoading(false);
+    }
+  }, [user]);
+
+  // Memoize unique agents for filter dropdown to prevent lag (fallback)
+  const uniqueAgents = useMemo(() => {
+    // Use API data if available, otherwise fall back to computed data
+    if (availableAgents.length > 0) {
+      return availableAgents.map(a => a.value);
+    }
+    const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
+    return Array.from(new Set(safeCallbacks.map(c => c.sales_agent).filter(Boolean))).sort();
+  }, [callbacks, availableAgents])
+
+  // Memoize timeline computation to prevent lag in dialogs
+  const getTimelineForPhone = useCallback((phoneNumber: string) => {
+    const phoneCallbacks = callbacks.filter(x => (x.phone_number || '') === phoneNumber);
+    
+    interface TimelineEvent {
+      id: string;
+      type: 'initial' | 'status_update' | 'followup' | 'final';
+      date: Date;
+      callback: any;
+      title: string;
+      description: string;
+      status: CallbackRow["status"];
+      isFirst?: boolean;
+      isScheduled?: boolean;
+    }
+    
+    const timelineEvents: TimelineEvent[] = [];
+    const addedEvents = new Set();
+    
+    phoneCallbacks.forEach((callback, callbackIdx) => {
+      // Initial call/creation event
+      const createdDate = callback.created_at ? new Date(callback.created_at as any) : (callback.first_call_date ? new Date(callback.first_call_date) : null);
+      if (createdDate) {
+        const eventKey = `${callback.id}-created-${createdDate.getTime()}`;
+        if (!addedEvents.has(eventKey)) {
+          timelineEvents.push({
+            id: eventKey,
+            type: 'initial',
+            date: createdDate,
+            callback,
+            title: callbackIdx === 0 ? 'First Call' : 'New Callback',
+            description: `Callback created by ${callback.sales_agent}`,
+            status: 'pending',
+            isFirst: callbackIdx === 0
+          });
+          addedEvents.add(eventKey);
+        }
+      }
+      
+      // Status update events
+      if (callback.status === 'contacted' && callback.updated_at) {
+        const contactedDate = new Date(callback.updated_at as any);
+        if (contactedDate && createdDate && contactedDate.getTime() !== createdDate.getTime()) {
+          const eventKey = `${callback.id}-contacted-${contactedDate.getTime()}`;
+          if (!addedEvents.has(eventKey)) {
+            timelineEvents.push({
+              id: eventKey,
+              type: 'status_update',
+              date: contactedDate,
+              callback,
+              title: 'Customer Contacted',
+              description: `Customer contacted by ${(callback as any).updated_by || callback.sales_agent}`,
+              status: 'contacted'
+            });
+            addedEvents.add(eventKey);
+          }
+        }
+      }
+      
+      // Follow-up scheduled events
+      if (callback.scheduled_date && callback.scheduled_time) {
+        const scheduledDateTime = new Date(`${callback.scheduled_date}T${callback.scheduled_time}`);
+        const eventKey = `followup-${callback.scheduled_date}-${callback.scheduled_time}-${callback.sales_agent}`;
+        if (!addedEvents.has(eventKey)) {
+          timelineEvents.push({
+            id: `${callback.id}-followup-${scheduledDateTime.getTime()}`,
+            type: 'followup',
+            date: scheduledDateTime,
+            callback,
+            title: 'Follow-up Scheduled',
+            description: `Follow-up appointment scheduled by ${callback.sales_agent}`,
+            status: 'pending',
+            isScheduled: true
+          });
+          addedEvents.add(eventKey);
+        }
+      }
+      
+      // Completion/cancellation events
+      if ((callback.status === 'completed' || callback.status === 'cancelled') && callback.updated_at) {
+        const finalDate = new Date(callback.updated_at as any);
+        if (createdDate && finalDate.getTime() !== createdDate.getTime()) {
+          const eventKey = `${callback.id}-final-${callback.status}-${finalDate.getTime()}`;
+          if (!addedEvents.has(eventKey)) {
+            timelineEvents.push({
+              id: eventKey,
+              type: 'final',
+              date: finalDate,
+              callback,
+              title: callback.status === 'completed' ? 'Callback Completed' : 'Callback Cancelled',
+              description: `Callback ${callback.status} by ${(callback as any).updated_by || callback.sales_agent}`,
+              status: callback.status
+            });
+            addedEvents.add(eventKey);
+          }
+        }
+      }
+    });
+    
+    // Sort chronologically
+    return timelineEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [callbacks])
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -142,7 +300,7 @@ export default function ManageCallbacksPage() {
   }, [search]);
 
   // Load callbacks with pagination (for team leaders, load all on first page)
-  const loadCallbacks = async (page: number) => {
+  const loadCallbacks = useCallback(async (page: number) => {
     
     try {
       setLoading(true);
@@ -167,6 +325,16 @@ export default function ManageCallbacksPage() {
       if (agentFilter !== 'all') {
         params.agent = agentFilter;
       }
+      
+      // Add team filter (only for managers)
+      if (user?.role === 'manager' && teamFilter !== 'all') {
+        params.team = teamFilter;
+      }
+      
+      // Add month filter (only for managers)
+      if (user?.role === 'manager' && monthFilter !== 'all') {
+        params.month = monthFilter;
+      }
 
       const response = await managerApiService.getCallbacksWithPagination(params);
       
@@ -190,6 +358,26 @@ export default function ManageCallbacksPage() {
         total: totalFromApi,
         totalPages: totalPagesFromApi,
       });
+      
+      // Update available months for managers (map to {value,label} shape)
+      if (user?.role === 'manager' && !Array.isArray(response) && response?.availableMonths) {
+        const mappedMonths = (response.availableMonths as any[])
+          .filter(Boolean)
+          .map((month: any) => {
+            const m = String(month);
+            const parts = m.split('-');
+            if (parts.length === 2) {
+              const [year, monthNum] = parts;
+              const label = new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+              });
+              return { value: m, label };
+            }
+            return { value: m, label: m };
+          });
+        setAvailableMonths(mappedMonths);
+      }
     } catch (error) {
       console.error('Error loading callbacks:', error);
       toast({
@@ -201,20 +389,21 @@ export default function ManageCallbacksPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, debouncedSearch, statusFilter, agentFilter, teamFilter, monthFilter, effectiveLimit, managerApiService, toast]);
 
   useEffect(() => {
     if (user) {
       loadCallbacks(1);
+      loadSelectorData(); // Load selector data when user is available
     }
-  }, [user]);
+  }, [user, loadSelectorData]);
 
   // Reload when filters or debounced search change
   useEffect(() => {
     if (user) {
       loadCallbacks(1);
     }
-  }, [debouncedSearch, statusFilter, agentFilter, user]);
+  }, [debouncedSearch, statusFilter, agentFilter, teamFilter, monthFilter, user]);
 
   // Reset to first page when filters change
   const resetToFirstPage = () => {
@@ -266,7 +455,7 @@ export default function ManageCallbacksPage() {
     );
   };
 
-  const updateStatus = async (row: CallbackRow, next: "pending" | "contacted" | "completed" | "cancelled") => {
+  const updateStatus = useCallback(async (row: CallbackRow, next: "pending" | "contacted" | "completed" | "cancelled") => {
     try {
       // Pass user context for role-based permissions
       const userContext = {
@@ -287,9 +476,9 @@ export default function ManageCallbacksPage() {
         variant: "destructive",
       });
     }
-  };
+  }, [user, callbacksService, toast, loadCallbacks]);
 
-  const handleEditCallback = (callback: CallbackRow) => {
+  const handleEditCallback = useCallback((callback: CallbackRow) => {
     setEditingCallback(callback);
     setEditForm({
       customer_name: callback.customer_name,
@@ -302,7 +491,7 @@ export default function ManageCallbacksPage() {
       callback_notes: callback.callback_notes,
       callback_reason: callback.callback_reason,
     });
-  };
+  }, []);
 
   const handleScheduleFollowUp = async (callback: CallbackRow) => {
     const tomorrow = new Date();
@@ -441,18 +630,141 @@ export default function ManageCallbacksPage() {
     }
   };
 
+  const exportToCSV = async () => {
+    try {
+      // Get all callbacks with current filters for export (no pagination limit)
+      const params: any = {
+        page: 1,
+        limit: 10000, // Large limit to get all data
+        search: debouncedSearch.trim(),
+        status: statusFilter === 'all' ? '' : statusFilter,
+        userRole: user?.role || '',
+        userId: user?.id || '',
+      };
+
+      // Add additional filters
+      if (agentFilter !== 'all') {
+        params.agent = agentFilter;
+      }
+      
+      // Add month filter (only for managers)
+      if (user?.role === 'manager' && monthFilter !== 'all') {
+        params.month = monthFilter;
+      }
+
+      const response = await managerApiService.getCallbacksWithPagination(params);
+      const exportData: CallbackRow[] = Array.isArray(response)
+        ? response
+        : (response?.callbacks ?? []);
+
+      if (exportData.length === 0) {
+        toast({
+          title: "No Data",
+          description: "No callbacks found to export",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create CSV content
+      const headers = [
+        'Customer Name',
+        'Phone Number',
+        'Email',
+        'Sales Agent',
+        'Sales Team',
+        'Status',
+        'Priority',
+        'Callback Reason',
+        'Scheduled Date',
+        'Scheduled Time',
+        'First Call Date',
+        'First Call Time',
+        'Callback Notes',
+        'Created At',
+        'Updated At'
+      ];
+
+      const csvContent = [
+        headers.join(','),
+        ...exportData.map(callback => [
+          `"${(callback.customer_name || '').replace(/"/g, '""')}"`,
+          `"${(callback.phone_number || '').replace(/"/g, '""')}"`,
+          `"${(callback.email || '').replace(/"/g, '""')}"`,
+          `"${(callback.sales_agent || '').replace(/"/g, '""')}"`,
+          `"${(callback.sales_team || '').replace(/"/g, '""')}"`,
+          `"${(callback.status || '').replace(/"/g, '""')}"`,
+          `"${(callback.priority || '').replace(/"/g, '""')}"`,
+          `"${(callback.callback_reason || '').replace(/"/g, '""')}"`,
+          `"${(callback.scheduled_date || '').replace(/"/g, '""')}"`,
+          `"${(callback.scheduled_time || '').replace(/"/g, '""')}"`,
+          `"${(callback.first_call_date || '').replace(/"/g, '""')}"`,
+          `"${(callback.first_call_time || '').replace(/"/g, '""')}"`,
+          `"${(callback.callback_notes || '').replace(/"/g, '""')}"`,
+          `"${(callback.created_at || '').replace(/"/g, '""')}"`,
+          `"${(callback.updated_at || '').replace(/"/g, '""')}"`
+        ].join(','))
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      
+      // Create filename with current filters
+      const filterSuffix = monthFilter !== 'all' ? `_${monthFilter}` : '';
+      const statusSuffix = statusFilter !== 'all' ? `_${statusFilter}` : '';
+      const agentSuffix = agentFilter !== 'all' ? `_${agentFilter.replace(/\s+/g, '_')}` : '';
+      const filename = `callbacks_export${filterSuffix}${statusSuffix}${agentSuffix}_${new Date().toISOString().split('T')[0]}.csv`;
+      
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export Successful",
+        description: `Exported ${exportData.length} callbacks to CSV`,
+      });
+    } catch (error) {
+      console.error('Error exporting callbacks:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export callbacks to CSV",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto p-4 md:p-6">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>
-            {user?.role === 'manager' ? 'Callbacks Overview' : 'Manage Callbacks'} - {pagination.total} Total
-            {pagination.total >= effectiveLimit && 
-              <span className="text-sm text-muted-foreground ml-2">
-                (fetched {pagination.total} callbacks)
-              </span>
-            }
-          </CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>
+              {user?.role === 'manager' ? 'Callbacks Overview' : 'Manage Callbacks'} - {pagination.total} Total
+              {pagination.total >= effectiveLimit && 
+                <span className="text-sm text-muted-foreground ml-2">
+                  (fetched {pagination.total} callbacks)
+                </span>
+              }
+            </CardTitle>
+            {user?.role === 'manager' && (
+              <Button 
+                onClick={exportToCSV}
+                variant="outline"
+                className="mt-2 sm:mt-0 bg-green-50 hover:bg-green-100 border-green-200 text-green-700 hover:text-green-800"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+                {monthFilter !== 'all' && (
+                  <span className="ml-1 text-xs">({monthFilter})</span>
+                )}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between mb-4">
@@ -483,16 +795,44 @@ export default function ManageCallbacksPage() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              {/* Quick filter: Agent - Only show for managers */}
-              {user?.role === 'manager' && (
-                <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v)}>
+              {/* Quick filter: Agent - Show for managers and team leaders */}
+              {(user?.role === 'manager' || user?.role === 'team_leader') && (
+                <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v)} disabled={selectorLoading}>
                   <SelectTrigger className="w-56">
-                    <SelectValue placeholder="Filter by agent" />
+                    <SelectValue placeholder={selectorLoading ? "Loading agents..." : "Filter by agent"} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All agents</SelectItem>
-                    {Array.from(new Set(callbacks.map(c => c.sales_agent).filter(Boolean))).sort().map(a => (
-                      <SelectItem key={a} value={a as string}>{a}</SelectItem>
+                    {availableAgents.map(agent => (
+                      <SelectItem key={agent.value} value={agent.value}>{agent.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {/* Month filter - Only show for managers */}
+              {user?.role === 'manager' && (
+                <Select value={monthFilter} onValueChange={(v) => setMonthFilter(v)} disabled={selectorLoading}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder={selectorLoading ? "Loading months..." : "Filter by month"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All months</SelectItem>
+                    {availableMonths.map(month => (
+                      <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {/* Team filter - Only show for managers */}
+              {user?.role === 'manager' && availableTeams.length > 0 && (
+                <Select value={teamFilter} onValueChange={(v) => setTeamFilter(v)} disabled={selectorLoading}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder={selectorLoading ? "Loading teams..." : "Filter by team"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All teams</SelectItem>
+                    {availableTeams.map(team => (
+                      <SelectItem key={team.value} value={team.value}>{team.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -803,201 +1143,97 @@ export default function ManageCallbacksPage() {
                             <div className="max-h-[70vh] overflow-auto">
                               <div className="space-y-6 p-4">
                                 {(() => {
-                                  // Define timeline event interface
-                                  interface TimelineEvent {
-                                    id: string;
-                                    type: 'initial' | 'status_update' | 'followup' | 'final';
-                                    date: Date;
-                                    callback: any;
-                                    title: string;
-                                    description: string;
-                                    status: CallbackRow["status"]; // Use same status type as CallbackRow
-                                    isFirst?: boolean;
-                                    isScheduled?: boolean;
-                                  }
-                                  
-                                  // Get all callbacks for this phone number
-                                  const phoneCallbacks = callbacks.filter(x => (x.phone_number || '') === (c.phone_number || ''));
-                                  
-                                  // Create timeline events for each callback
-                                  const timelineEvents: TimelineEvent[] = [];
-                                  
-                                  // Track unique events to avoid duplicates
-                                  const addedEvents = new Set();
-                                  
-                                  phoneCallbacks.forEach((callback, callbackIdx) => {
-                                    // Initial call/creation event
-                                    const createdDate = callback.created_at ? new Date(callback.created_at as any) : (callback.first_call_date ? new Date(callback.first_call_date) : null);
-                                    if (createdDate) {
-                                      const eventKey = `${callback.id}-created-${createdDate.getTime()}`;
-                                      if (!addedEvents.has(eventKey)) {
-                                        timelineEvents.push({
-                                          id: eventKey,
-                                          type: 'initial',
-                                          date: createdDate,
-                                          callback,
-                                          title: callbackIdx === 0 ? 'First Call' : 'New Callback',
-                                          description: `Callback created by ${callback.sales_agent}`,
-                                          status: 'pending',
-                                          isFirst: callbackIdx === 0
-                                        });
-                                        addedEvents.add(eventKey);
-                                      }
-                                    }
-                                    
-                                    // Status update events - only if different from creation
-                                    if (callback.status === 'contacted' && callback.updated_at) {
-                                      const contactedDate = new Date(callback.updated_at as any);
-                                      if (contactedDate && createdDate && contactedDate.getTime() !== createdDate.getTime()) {
-                                        const eventKey = `${callback.id}-contacted-${contactedDate.getTime()}`;
-                                        if (!addedEvents.has(eventKey)) {
-                                          timelineEvents.push({
-                                            id: eventKey,
-                                            type: 'status_update',
-                                            date: contactedDate,
-                                            callback,
-                                            title: 'Customer Contacted',
-                                            description: `Customer contacted by ${(callback as any).updated_by || callback.sales_agent}`,
-                                            status: 'contacted'
-                                          });
-                                          addedEvents.add(eventKey);
-                                        }
-                                      }
-                                    }
-                                    
-                                    // Follow-up scheduled events - only unique ones
-                                    if (callback.scheduled_date && callback.scheduled_time) {
-                                      const scheduledDateTime = new Date(`${callback.scheduled_date}T${callback.scheduled_time}`);
-                                      const eventKey = `followup-${callback.scheduled_date}-${callback.scheduled_time}-${callback.sales_agent}`;
-                                      if (!addedEvents.has(eventKey)) {
-                                        timelineEvents.push({
-                                          id: `${callback.id}-followup-${scheduledDateTime.getTime()}`,
-                                          type: 'followup',
-                                          date: scheduledDateTime,
-                                          callback,
-                                          title: 'Follow-up Scheduled',
-                                          description: `Follow-up appointment scheduled by ${callback.sales_agent}`,
-                                          status: 'pending',
-                                          isScheduled: true
-                                        });
-                                        addedEvents.add(eventKey);
-                                      }
-                                    }
-                                    
-                                    // Completion/cancellation events
-                                    if ((callback.status === 'completed' || callback.status === 'cancelled') && callback.updated_at) {
-                                      const finalDate = new Date(callback.updated_at as any);
-                                      if (createdDate && finalDate.getTime() !== createdDate.getTime()) {
-                                        const eventKey = `${callback.id}-final-${callback.status}-${finalDate.getTime()}`;
-                                        if (!addedEvents.has(eventKey)) {
-                                          timelineEvents.push({
-                                            id: eventKey,
-                                            type: 'final',
-                                            date: finalDate,
-                                            callback,
-                                            title: callback.status === 'completed' ? 'Callback Completed' : 'Callback Cancelled',
-                                            description: `Callback ${callback.status} by ${(callback as any).updated_by || callback.sales_agent}`,
-                                            status: callback.status
-                                          });
-                                          addedEvents.add(eventKey);
-                                        }
-                                      }
-                                    }
-                                  });
-                                  
-                                  // Sort all events chronologically
-                                  timelineEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
-                                  
+                                  const timelineEvents = getTimelineForPhone(c.phone_number || '');
                                   return timelineEvents.map((event, idx) => {
                                     const isLast = idx === timelineEvents.length - 1;
-                                    const statusColor = statusColors[event.status] || 'bg-gray-500';
-                                    const isFuture = event.date > new Date();
-                                    
-                                    return (
-                                      <div key={event.id} className="relative">
-                                        {/* Timeline line */}
-                                        {!isLast && (
-                                          <div className={`absolute left-6 top-16 w-0.5 h-20 ${isFuture ? 'bg-gradient-to-b from-gray-300 to-gray-200 border-dashed' : 'bg-gradient-to-b from-blue-300 to-blue-200'}`}></div>
-                                        )}
+                                  const statusColor = statusColors[event.status] || 'bg-gray-500';
+                                  const isFuture = event.date > new Date();
+                                  
+                                  return (
+                                    <div key={event.id} className="relative">
+                                      {/* Timeline line */}
+                                      {!isLast && (
+                                        <div className={`absolute left-6 top-16 w-0.5 h-20 ${isFuture ? 'bg-gradient-to-b from-gray-300 to-gray-200 border-dashed' : 'bg-gradient-to-b from-blue-300 to-blue-200'}`}></div>
+                                      )}
+                                      
+                                      {/* Timeline item */}
+                                      <div className="flex items-start gap-4">
+                                        {/* Timeline dot */}
+                                        <div className={`relative z-10 flex-shrink-0 w-12 h-12 rounded-full ${statusColor} flex items-center justify-center shadow-lg ${isFuture ? 'opacity-60 border-2 border-dashed border-gray-400' : ''}`}>
+                                          {event.type === 'initial' && <Phone className="h-6 w-6 text-white" />}
+                                          {event.type === 'status_update' && event.status === 'contacted' && <MessageSquare className="h-6 w-6 text-white" />}
+                                          {event.type === 'followup' && <Calendar className="h-6 w-6 text-white" />}
+                                          {event.type === 'final' && event.status === 'completed' && <CheckCircle className="h-6 w-6 text-white" />}
+                                          {event.type === 'final' && event.status === 'cancelled' && <XCircle className="h-6 w-6 text-white" />}
+                                        </div>
                                         
-                                        {/* Timeline item */}
-                                        <div className="flex items-start gap-4">
-                                          {/* Timeline dot */}
-                                          <div className={`relative z-10 flex-shrink-0 w-12 h-12 rounded-full ${statusColor} flex items-center justify-center shadow-lg ${isFuture ? 'opacity-60 border-2 border-dashed border-gray-400' : ''}`}>
-                                            {event.type === 'initial' && <Phone className="h-6 w-6 text-white" />}
-                                            {event.type === 'status_update' && event.status === 'contacted' && <MessageSquare className="h-6 w-6 text-white" />}
-                                            {event.type === 'followup' && <Calendar className="h-6 w-6 text-white" />}
-                                            {event.type === 'final' && event.status === 'completed' && <CheckCircle className="h-6 w-6 text-white" />}
-                                            {event.type === 'final' && event.status === 'cancelled' && <XCircle className="h-6 w-6 text-white" />}
+                                        {/* Content card */}
+                                        <div className={`flex-1 border rounded-lg shadow-sm p-4 hover:shadow-md transition-all duration-200 ${isFuture ? 'bg-gray-50 border-gray-300' : 'bg-white border-gray-200'}`}>
+                                          <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                              <h4 className="font-semibold text-gray-900">{event.title}</h4>
+                                              {event.isFirst && (
+                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                                  Initial Contact
+                                                </Badge>
+                                              )}
+                                              {event.isScheduled && (
+                                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                                  Scheduled
+                                                </Badge>
+                                              )}
+                                              {isFuture && (
+                                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                                                  Upcoming
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <div className="text-right">
+                                              <div className="text-sm font-medium text-gray-900">
+                                                {event.date.toLocaleDateString()}
+                                              </div>
+                                              <div className="text-xs text-gray-500">
+                                                {event.date.toLocaleTimeString()}
+                                              </div>
+                                            </div>
                                           </div>
                                           
-                                          {/* Content card */}
-                                          <div className={`flex-1 border rounded-lg shadow-sm p-4 hover:shadow-md transition-all duration-200 ${isFuture ? 'bg-gray-50 border-gray-300' : 'bg-white border-gray-200'}`}>
-                                            <div className="flex items-center justify-between mb-3">
-                                              <div className="flex items-center gap-2">
-                                                <h4 className="font-semibold text-gray-900">{event.title}</h4>
-                                                {event.isFirst && (
-                                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                                    Initial Contact
-                                                  </Badge>
-                                                )}
-                                                {event.isScheduled && (
-                                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                                    Scheduled
-                                                  </Badge>
-                                                )}
-                                                {isFuture && (
-                                                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                                                    Upcoming
-                                                  </Badge>
-                                                )}
-                                              </div>
-                                              <div className="text-right">
-                                                <div className="text-sm font-medium text-gray-900">
-                                                  {event.date.toLocaleDateString()}
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                  {event.date.toLocaleTimeString()}
-                                                </div>
-                                              </div>
+                                          <p className="text-sm text-gray-700 mb-3">{event.description}</p>
+                                          
+                                          <div className="grid grid-cols-3 gap-4 text-xs">
+                                            <div>
+                                              <div className="font-medium text-gray-600">Agent</div>
+                                              <div className="text-gray-900">{event.callback.sales_agent}</div>
                                             </div>
-                                            
-                                            <p className="text-sm text-gray-700 mb-3">{event.description}</p>
-                                            
-                                            <div className="grid grid-cols-3 gap-4 text-xs">
-                                              <div>
-                                                <div className="font-medium text-gray-600">Agent</div>
-                                                <div className="text-gray-900">{event.callback.sales_agent}</div>
-                                              </div>
-                                              <div>
-                                                <div className="font-medium text-gray-600">Team</div>
-                                                <div className="text-gray-900">{event.callback.sales_team || '—'}</div>
-                                              </div>
-                                              <div>
-                                                <div className="font-medium text-gray-600">Status</div>
-                                                <Badge className={`${statusColor} text-white text-xs`}>
-                                                  {event.status.toUpperCase()}
-                                                </Badge>
-                                              </div>
+                                            <div>
+                                              <div className="font-medium text-gray-600">Team</div>
+                                              <div className="text-gray-900">{event.callback.sales_team || '—'}</div>
                                             </div>
-                                            
-                                            {event.callback.callback_reason && (
-                                              <div className="mt-3 pt-3 border-t border-gray-100">
-                                                <div className="text-xs font-medium text-gray-600 mb-1">Reason</div>
-                                                <div className="text-xs text-gray-800">{event.callback.callback_reason}</div>
-                                              </div>
-                                            )}
-                                            
-                                            {event.callback.callback_notes && (
-                                              <div className="mt-3 pt-3 border-t border-gray-100">
-                                                <div className="text-xs font-medium text-gray-600 mb-1">Notes</div>
-                                                <div className="text-xs text-gray-800 bg-gray-50 p-2 rounded text-left">{event.callback.callback_notes}</div>
-                                              </div>
-                                            )}
+                                            <div>
+                                              <div className="font-medium text-gray-600">Status</div>
+                                              <Badge className={`${statusColor} text-white text-xs`}>
+                                                {event.status.toUpperCase()}
+                                              </Badge>
+                                            </div>
                                           </div>
+                                          
+                                          {event.callback.callback_reason && (
+                                            <div className="mt-3 pt-3 border-t border-gray-100">
+                                              <div className="text-xs font-medium text-gray-600 mb-1">Reason</div>
+                                              <div className="text-xs text-gray-800">{event.callback.callback_reason}</div>
+                                            </div>
+                                          )}
+                                          
+                                          {event.callback.callback_notes && (
+                                            <div className="mt-3 pt-3 border-t border-gray-100">
+                                              <div className="text-xs font-medium text-gray-600 mb-1">Notes</div>
+                                              <div className="text-xs text-gray-800 bg-gray-50 p-2 rounded text-left">{event.callback.callback_notes}</div>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
-                                    );
+                                    </div>
+                                  );
                                   });
                                 })()}
                                 

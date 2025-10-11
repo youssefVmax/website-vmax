@@ -7,10 +7,7 @@ export async function GET(request: NextRequest) {
     const userRole = searchParams.get('userRole') as 'manager' | 'salesman' | 'team_leader';
     const dataTypes = (searchParams.get('dataTypes') || 'deals').split(',');
     
-    console.log('🔄 Debug Unified API: Starting with params:', { userRole, dataTypes });
-
     // Step 1: Test basic database connection
-    console.log('🔄 Debug: Testing database connection...');
     await query('SELECT 1 as test');
     console.log('✅ Debug: Database connection successful');
 

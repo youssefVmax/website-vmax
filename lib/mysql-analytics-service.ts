@@ -62,7 +62,6 @@ import directMySQLService from './direct-mysql-service';
 export class MySQLAnalyticsService {
   private async fetchAnalytics(endpoint: string, params: Record<string, any> = {}): Promise<any> {
     try {
-      console.log(`🔍 Analytics request: ${endpoint} with params:`, params);
       
       // Use Next.js analytics API routes instead of PHP
       if (endpoint === 'dashboard-stats') {

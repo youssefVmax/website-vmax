@@ -315,7 +315,6 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error('❌ Database query failed:', error);
       console.error('❌ Query that failed:', dataQuery);
-      console.error('❌ Query params:', params);
       console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error');
       console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
@@ -487,7 +486,6 @@ export async function POST(request: NextRequest) {
       priority || 'medium'
     ];
 
-    console.log('🔍 About to insert data with params:', params);
     console.log('🔍 Insert query:', insertQuery);
 
     console.log('🔄 Executing insert:', insertQuery, params);

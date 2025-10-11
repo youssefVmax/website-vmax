@@ -92,14 +92,6 @@ export async function GET(request: NextRequest) {
     const callbacksParams = getQueryParams(userRole, userId, managedTeam, 'callbacks');
     const targetsParams = getQueryParams(userRole, userId, managedTeam, 'targets');
     
-    console.log('📊 Executing queries:', { 
-      dealsQuery, 
-      callbacksQuery, 
-      targetsQuery,
-      dealsParams,
-      callbacksParams,
-      targetsParams
-    });
     
     let deals: any[] = [];
     let callbacks: any[] = [];
