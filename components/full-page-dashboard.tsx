@@ -75,7 +75,6 @@ export default function FullPageDashboard() {
   const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'))
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear().toString())
   const [dateFilterKey, setDateFilterKey] = useState(0)
-  console.log('FullPageDashboard: User object:', user)
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([])
 
   // Listen for tab changes from dashboard buttons
@@ -200,8 +199,6 @@ export default function FullPageDashboard() {
     )
   }
 
-  console.log('FullPageDashboard: User loaded:', user.full_name || user.username, user.role)
-  console.log('FullPageDashboard: Current activeTab:', activeTab)
 
   const getNavItems = () => {
     const baseItems = [
@@ -255,7 +252,6 @@ export default function FullPageDashboard() {
 
   const navItems = getNavItems()
 
-  console.log('FullPageDashboard: Rendering with activeTab:', activeTab)
 
   try {
     return (
@@ -817,7 +813,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Team Sales" : "My Sales"}
                 </p>
                 <p className="text-2xl font-bold">
@@ -833,7 +829,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Total Deals" : "My Deals"}
                 </p>
                 <p className="text-2xl font-bold">
@@ -849,7 +845,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Total Users" : "Performance Score"}
                 </p>
                 <p className="text-2xl font-bold">
@@ -868,7 +864,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-black dark:text-gray-200">
                   {user.role === 'manager' ? "Avg Deal Size" : "Weekly Target"}
                 </p>
                 <p className="text-2xl font-bold">
@@ -1296,7 +1292,6 @@ function AdminDealsTablePage({ user, setActiveTab }: { user: any, setActiveTab: 
         const result = await response.json();
         const allDeals = result.success ? result.deals || [] : [];
         
-        console.log('✅ AdminDealsTablePage: Deals fetched:', Array.isArray(allDeals) ? allDeals.length : 0);
         setDeals(Array.isArray(allDeals) ? allDeals : []);
       } catch (error) {
         console.error('❌ AdminDealsTablePage: Error fetching deals:', error)

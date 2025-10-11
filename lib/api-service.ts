@@ -20,6 +20,10 @@ export interface User {
   createdAt?: string;
   updatedAt?: string;
   isActive?: boolean;
+  // Additional backward compatibility fields
+  full_name?: string;
+  team_name?: string;
+  team_id?: number;
 }
 
 export interface Deal {
@@ -97,15 +101,15 @@ export interface Callback {
   priority: 'low' | 'medium' | 'high';
   callbackReason: string;
   callbackNotes?: string;
-  followUpRequired: boolean;
-  createdBy: string;
-  createdById: string;
+  followUpRequired?: boolean;
+  createdBy?: string;
+  createdById?: string;
+  // Date fields for compatibility
   createdAt?: string;
+  created_at?: string; // For compatibility
   updatedAt?: string;
-  convertedToDeal?: boolean; // CamelCase version for compatibility
-  converted_to_deal?: boolean; // Snake_case version from database
-  created_by_id?: string;
-  SalesAgentID?: string;
+  updated_at?: string; // For compatibility
+  converted_to_deal?: boolean;
 }
 
 export interface SalesTarget {

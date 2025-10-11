@@ -3,7 +3,7 @@
  * Provides manual refresh instead of auto-polling
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { unifiedApiService } from '@/lib/unified-api-service';
 
 interface UseUnifiedDataOptions {
@@ -33,6 +33,9 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
     autoLoad = true
   } = options;
 
+  // Stabilize dataTypes array to prevent unnecessary re-renders
+  const stableDataTypes = useMemo(() => dataTypes, [JSON.stringify(dataTypes)]);
+
   const [data, setData] = useState<UnifiedData>({
     deals: [],
     callbacks: [],
@@ -44,14 +47,16 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const loadingRef = useRef(false);
 
   /**
    * Load all data from APIs
    */
   const loadData = useCallback(async (forceRefresh: boolean = false) => {
-    if (loading) return; // Prevent multiple simultaneous calls
+    if (loadingRef.current) return; // Prevent multiple simultaneous calls
 
     try {
+      loadingRef.current = true;
       setLoading(true);
       setError(null);
 
@@ -82,19 +87,19 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
 
       // Load all data in parallel
       const [deals, callbacks, targets, notifications, analytics] = await Promise.all([
-        dataTypes.includes('deals') ? unifiedApiService.getDeals(filters).catch(err => {
+        stableDataTypes.includes('deals') ? unifiedApiService.getDeals(filters).catch(err => {
           console.error('Error loading deals:', err);
           return [];
         }) : Promise.resolve([]),
-        dataTypes.includes('callbacks') ? unifiedApiService.getCallbacks(filters).catch(err => {
+        stableDataTypes.includes('callbacks') ? unifiedApiService.getCallbacks(filters).catch(err => {
           console.error('Error loading callbacks:', err);
           return [];
         }) : Promise.resolve([]),
-        dataTypes.includes('targets') ? unifiedApiService.getTargets(filters).catch(err => {
+        stableDataTypes.includes('targets') ? unifiedApiService.getTargets(filters).catch(err => {
           console.error('Error loading targets:', err);
           return [];
         }) : Promise.resolve([]),
-        dataTypes.includes('notifications') ? unifiedApiService.getNotifications({ ...filters, userId: userId || '' }).catch(err => {
+        stableDataTypes.includes('notifications') ? unifiedApiService.getNotifications({ ...filters, userId: userId || '' }).catch(err => {
           console.error('Error loading notifications:', err);
           return [];
         }) : Promise.resolve([]),
@@ -125,9 +130,10 @@ export function useUnifiedData(options: UseUnifiedDataOptions = {}) {
       console.error('❌ useUnifiedData: Error loading data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  }, [userRole, userId, managedTeam, dataTypes]);
+  }, [userRole, userId, managedTeam, stableDataTypes]);
 
   /**
    * Manual refresh function

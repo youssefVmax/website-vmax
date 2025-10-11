@@ -102,7 +102,6 @@ async function validateDatabaseIntegrity() {
         details: Array.isArray(indexes) ? indexes : []
       };
       
-      console.log(`✅ Found ${Array.isArray(indexes) ? indexes.length : 0} indexes`);
     } catch (error) {
       results.checks.indexes = {
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -129,7 +128,6 @@ async function validateDatabaseIntegrity() {
         details: Array.isArray(foreignKeys) ? foreignKeys : []
       };
       
-      console.log(`✅ Found ${Array.isArray(foreignKeys) ? foreignKeys.length : 0} foreign key relationships`);
     } catch (error) {
       results.checks.foreignKeys = {
         error: error instanceof Error ? error.message : 'Unknown error'

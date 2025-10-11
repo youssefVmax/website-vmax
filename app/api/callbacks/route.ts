@@ -36,7 +36,6 @@ function formatDateForMySQL(dateValue: any): string | null {
 }
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 GET /api/callbacks - Starting request processing');
     
     const { searchParams } = new URL(request.url);
     const salesAgentId = searchParams.get('salesAgentId') || searchParams.get('SalesAgentID');
@@ -148,11 +147,12 @@ export async function GET(request: NextRequest) {
       // since MySQL has issues with prepared statements for LIMIT/OFFSET
       const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
       
+      console.log('📝 Executing paginated callbacks query:', paginatedSql);
+      console.log('📝 With params:', params);
       
       [rows] = await query<any>(paginatedSql, params);
       [totals] = await query<any>(countSql, params);
       
-      console.log('✅ Query successful. Found', rows.length, 'callbacks out of', totals[0]?.c || 0, 'total');
     } catch (queryError) {
       console.error('❌ Callbacks query error:', queryError);
       rows = [];
@@ -581,6 +581,4 @@ CREATE TABLE `callbacks` (
   `priority` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `callback_reason` text COLLATE utf8mb4_unicode_ci
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-
 */

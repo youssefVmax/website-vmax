@@ -296,21 +296,15 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    console.log('🔍 PUT /api/users - Request received');
     const { searchParams } = new URL(request.url);
     const body = await request.json();
-    console.log('🔍 Request body:', JSON.stringify(body, null, 2));
-    console.log('🔍 Query params:', Object.fromEntries(searchParams.entries()));
     
     // Try to get ID from body first, then from query params as fallback
     let { id, ...updates } = body;
     if (!id) {
       id = searchParams.get('id');
-      console.log('🔍 ID from query params:', id);
     }
     
-    console.log('🔍 Final ID:', id);
-    console.log('🔍 Updates:', JSON.stringify(updates, null, 2));
     
     if (!id) {
       console.error('❌ No ID found in request body or query params');

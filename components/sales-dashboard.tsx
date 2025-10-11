@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DateFilter } from '@/components/ui/date-filter';
@@ -133,12 +133,19 @@ function SalesAnalysisDashboard({
   const [callbacks, setCallbacks] = useState<any[]>([]);
   const [targets, setTargets] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
 
-  const handleRefresh = () => {
-    setLoading(true)
-    setDateFilterKey(prev => prev + 1)
-    fetchData()
-    setTimeout(() => setLoading(false), 1000)
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      setDateFilterKey(prev => prev + 1);
+      await fetchData();
+    } catch (error) {
+      console.error('❌ Error during refresh:', error);
+    } finally {
+      setTimeout(() => setLoading(false), 1000);
+    }
   }
 
   const handleDateChange = (month: string, year: string) => {
@@ -163,7 +170,10 @@ function SalesAnalysisDashboard({
     }
   }
 
-  // Fetch role-based data from APIs
+  // Add debouncing to prevent rapid API calls
+  const [fetchTimeout, setFetchTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Fetch role-based data from APIs with staggered requests to avoid debouncing
   const fetchData = async () => {
     try {
       setRefreshing(true);
@@ -174,12 +184,14 @@ function SalesAnalysisDashboard({
       const callbacksUrl = new URL('/api/callbacks', window.location.origin);
       const targetsUrl = new URL('/api/targets', window.location.origin);
       const notificationsUrl = new URL('/api/notifications', window.location.origin);
+      const usersUrl = new URL('/api/users', window.location.origin);
 
       // Add role-based parameters
       dealsUrl.searchParams.set('limit', '1000');
       callbacksUrl.searchParams.set('limit', '1000');
       targetsUrl.searchParams.set('limit', '100');
       notificationsUrl.searchParams.set('limit', '50');
+      usersUrl.searchParams.set('limit', '1000'); // Get all users for callback creator analysis
 
       // Add user context for role-based filtering
       if (userRole === 'salesman') {
@@ -240,61 +252,94 @@ function SalesAnalysisDashboard({
         });
       }
 
-      console.log(`🔍 Fetching ${userRole} data:`, {
-        deals: dealsUrl.toString(),
-        callbacks: callbacksUrl.toString(),
-        targets: targetsUrl.toString(),
-        notifications: notificationsUrl.toString()
-      });
+      console.log(`🔍 Fetching ${userRole} data with staggered requests to avoid debouncing...`);
 
-      // Fetch all data in parallel with error handling
-      const [dealsRes, callbacksRes, targetsRes, notificationsRes] = await Promise.all([
-        fetch(dealsUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Deals API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Deals API error:', err);
-          return { success: false, deals: [] };
-        }),
-        fetch(callbacksUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Callbacks API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Callbacks API error:', err);
-          return { success: false, callbacks: [] };
-        }),
-        fetch(targetsUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Targets API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Targets API error:', err);
-          return { success: false, targets: [] };
-        }),
-        fetch(notificationsUrl.toString()).then(res => {
-          if (!res.ok) throw new Error(`Notifications API error: ${res.status}`);
-          return res.json();
-        }).catch(err => {
-          console.error('❌ Notifications API error:', err);
-          return { success: false, notifications: [] };
-        })
-      ]);
+      // Helper function to fetch with retry logic
+      const fetchWithRetry = async (url: string, name: string, maxRetries = 2) => {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(`📊 Fetching ${name} data... (attempt ${attempt + 1}/${maxRetries + 1})`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (!res.ok) throw new Error(`${name} API error: ${res.status}`);
+            const data = await res.json();
+            console.log(`✅ ${name} data fetched successfully`);
+            return data;
+          } catch (err) {
+            console.error(`❌ ${name} API error (attempt ${attempt + 1}):`, err);
+            if (attempt === maxRetries) {
+              console.error(`❌ ${name} API failed after ${maxRetries + 1} attempts`);
+              return { success: false, [name.toLowerCase()]: [] };
+            }
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          }
+        }
+      };
+
+      // Fetch data sequentially with small delays to avoid debouncing
+      // Start with deals (most important for salesman dashboard)
+      const dealsRes = await fetchWithRetry(dealsUrl.toString(), 'deals');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const callbacksRes = await fetchWithRetry(callbacksUrl.toString(), 'callbacks');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const targetsRes = await fetchWithRetry(targetsUrl.toString(), 'targets');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const notificationsRes = await fetchWithRetry(notificationsUrl.toString(), 'notifications');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const usersRes = await fetchWithRetry(usersUrl.toString(), 'users');
+
+      // Smaller delay to prevent debouncing but improve speed
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Fetch callback creators data from dedicated endpoint
+      const callbackCreatorsUrl = new URL('/api/callback-creators', window.location.origin);
+      callbackCreatorsUrl.searchParams.set('userRole', userRole);
+      callbackCreatorsUrl.searchParams.set('userId', user.id);
+      if (user.managedTeam) {
+        callbackCreatorsUrl.searchParams.set('managedTeam', user.managedTeam);
+      }
+      callbackCreatorsUrl.searchParams.set('limit', '3'); // Top 3 creators
+
+      const callbackCreatorsRes = await fetchWithRetry(callbackCreatorsUrl.toString(), 'callback-creators');
 
       // Process responses with better error handling
       const dealsData = Array.isArray(dealsRes) ? dealsRes : (dealsRes?.deals || dealsRes?.data || []);
       const callbacksData = Array.isArray(callbacksRes) ? callbacksRes : (callbacksRes?.callbacks || callbacksRes?.data || []);
       const targetsData = Array.isArray(targetsRes) ? targetsRes : (targetsRes?.targets || targetsRes?.data || []);
       const notificationsData = Array.isArray(notificationsRes) ? notificationsRes : (notificationsRes?.notifications || notificationsRes?.data || []);
+      const usersData = Array.isArray(usersRes) ? usersRes : (usersRes?.users || usersRes?.data || []);
+      const callbackCreatorsApiData = callbackCreatorsRes?.success ? callbackCreatorsRes.data : null;
 
       setDeals(dealsData);
       setCallbacks(callbacksData);
       setTargets(targetsData);
       setNotifications(notificationsData);
+      setUsers(usersData);
+      setAnalyticsData(callbackCreatorsApiData);
 
-      console.log(`✅ ${userRole} data loaded:`, {
+      console.log(`✅ ${userRole} data loaded successfully:`, {
         deals: dealsData.length,
         callbacks: callbacksData.length,
         targets: targetsData.length,
-        notifications: notificationsData.length
+        notifications: notificationsData.length,
+        users: usersData.length
       });
 
       // Debug: Show sample data structure
@@ -311,6 +356,27 @@ function SalesAnalysisDashboard({
       
       if (callbacksData.length > 0) {
         console.log('📞 Sample callback data:', callbacksData[0]);
+        console.log('📞 Available callback fields:', {
+          SalesAgentID: callbacksData[0].SalesAgentID,
+          salesAgentId: callbacksData[0].salesAgentId,
+          created_by_id: callbacksData[0].created_by_id,
+          sales_agent: callbacksData[0].sales_agent,
+          salesAgentName: callbacksData[0].salesAgentName,
+          agent_name: callbacksData[0].agent_name
+        });
+      }
+
+      if (usersData.length > 0) {
+        console.log('👤 Sample user data:', usersData[0]);
+        console.log('👤 Available user fields:', {
+          id: usersData[0].id,
+          name: usersData[0].name,
+          username: usersData[0].username,
+          full_name: usersData[0].full_name,
+          team: usersData[0].team,
+          team_name: usersData[0].team_name,
+          role: usersData[0].role
+        });
       }
 
     } catch (error) {
@@ -320,16 +386,33 @@ function SalesAnalysisDashboard({
     }
   };
 
-  // Load data on component mount and when filters change
+  // Load data on component mount and when filters change with debouncing
   useEffect(() => {
     if (user?.id) {
-      fetchData();
+      // Clear any existing timeout
+      if (fetchTimeout) {
+        clearTimeout(fetchTimeout);
+      }
+      
+      // Set a new timeout to debounce rapid filter changes
+      const timeout = setTimeout(() => {
+        console.log('🔄 Debounced data fetch triggered');
+        fetchData();
+      }, 300); // 300ms debounce for faster response
+      
+      setFetchTimeout(timeout);
+      
+      // Cleanup timeout on unmount
+      return () => {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+      };
     }
   }, [user?.id, selectedMonth, selectedYear, dateFilterKey]);
 
   // Calculate KPIs and analytics
   const analytics = useMemo(() => {
-    console.log('📊 Calculating analytics from deals:', deals.length, 'callbacks:', callbacks.length);
     
     // Handle multiple field name variations for amount
     const totalRevenue = deals.reduce((sum, deal) => {
@@ -412,6 +495,31 @@ function SalesAnalysisDashboard({
       });
     }
 
+    // Daily callback timeline for selected month
+    const dailyCallbackData = [];
+    const selectedDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
+    const daysInMonth = new Date(parseInt(selectedYear), parseInt(selectedMonth), 0).getDate();
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, day);
+      const dayCallbacks = callbacks.filter(cb => {
+        const cbDate = new Date(cb.created_at || cb.createdAt);
+        return cbDate.getFullYear() === date.getFullYear() && 
+               cbDate.getMonth() === date.getMonth() &&
+               cbDate.getDate() === date.getDate();
+      });
+      
+      dailyCallbackData.push({
+        day: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: date.toISOString().split('T')[0],
+        callbacks: dayCallbacks.length,
+        pending: dayCallbacks.filter(cb => cb.status === 'pending').length,
+        contacted: dayCallbacks.filter(cb => cb.status === 'contacted').length,
+        completed: dayCallbacks.filter(cb => cb.status === 'completed').length,
+        cancelled: dayCallbacks.filter(cb => cb.status === 'cancelled').length
+      });
+    }
+
     // Service distribution
     const serviceDistribution = deals.reduce((acc, deal) => {
       const service = deal.serviceTier || deal.service_tier || 'Unknown';
@@ -476,13 +584,14 @@ function SalesAnalysisDashboard({
       { range: '$25K+', min: 25000, max: Infinity }
     ];
 
-    const dealSizeData = dealSizeRanges.map(({ range, min, max }) => ({
-      range,
+    const dealSizeData = dealSizeRanges.map(({ range, min, max }, index) => ({
+      range: range || `Range ${index + 1}`, // Ensure range is never null/undefined and unique
       count: deals.filter(deal => {
         const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
-        return amount >= min && amount < max;
-      }).length
-    }));
+        return amount >= min && (max === Infinity ? true : amount < max);
+      }).length,
+      id: `deal-size-${index}` // Add unique identifier
+    })).filter(item => item.range && typeof item.count === 'number' && !isNaN(item.count)); // Filter out any invalid entries
 
     // Conversion Funnel Data
     const funnelData = [
@@ -507,6 +616,76 @@ function SalesAnalysisDashboard({
 
     const agentPerformanceData = Object.values(agentPerformance);
 
+    // Top Callback Creators - Join callbacks with users data
+    const callbackCreatorMap = new Map();
+    
+    // First, create a user lookup map for faster access
+    const userLookup = new Map();
+    users.forEach(user => {
+      userLookup.set(user.id, user);
+      // Also map by username for additional matching
+      if (user.username) {
+        userLookup.set(user.username, user);
+      }
+    });
+
+    console.log('👥 User lookup created with', userLookup.size, 'users');
+    console.log('📞 Processing', callbacks.length, 'callbacks for creator analysis');
+    
+    callbacks.forEach(callback => {
+      // Try multiple field variations for agent ID
+      const agentId = callback.SalesAgentID || callback.salesAgentId || callback.created_by_id || callback.sales_agent_id;
+      const agentName = callback.sales_agent || callback.salesAgentName || callback.agent_name;
+      
+      if (agentId || agentName) {
+        // Try to find user by ID first, then by name
+        let user = null;
+        if (agentId) {
+          user = userLookup.get(agentId) || userLookup.get(agentId.toString());
+        }
+        if (!user && agentName) {
+          // Try to find user by name matching
+          user = Array.from(userLookup.values()).find(u => 
+            u.name === agentName || u.username === agentName || u.full_name === agentName
+          );
+        }
+
+        const creatorKey = agentId || agentName || 'unknown';
+        
+        if (!callbackCreatorMap.has(creatorKey)) {
+          callbackCreatorMap.set(creatorKey, {
+            agentId: creatorKey,
+            callbackCount: 0,
+            completedCallbacks: 0,
+            pendingCallbacks: 0,
+            userName: user ? (user.name || user.full_name || user.username || 'Unknown User') : (agentName || 'Unknown User'),
+            userTeam: user ? (user.team || user.team_name || 'Unknown Team') : 'Unknown Team',
+            userRole: user ? (user.role || 'Unknown Role') : 'Unknown Role'
+          });
+        }
+        
+        const creator = callbackCreatorMap.get(creatorKey);
+        creator.callbackCount += 1;
+        
+        if (callback.status === 'completed') {
+          creator.completedCallbacks += 1;
+        } else if (callback.status === 'pending') {
+          creator.pendingCallbacks += 1;
+        }
+      }
+    });
+
+    // Get top 3 callback creators sorted by total callback count
+    const topCallbackCreators = Array.from(callbackCreatorMap.values())
+      .sort((a, b) => b.callbackCount - a.callbackCount)
+      .slice(0, 3)
+      .map((creator, index) => ({
+        ...creator,
+        rank: index + 1,
+        successRate: creator.callbackCount > 0 ? ((creator.completedCallbacks / creator.callbackCount) * 100).toFixed(1) : '0.0'
+      }));
+
+
     return {
       totalRevenue,
       totalDeals,
@@ -529,9 +708,16 @@ function SalesAnalysisDashboard({
       hourlyPerformance,
       dealSizeData,
       funnelData,
-      agentPerformanceData
+      agentPerformanceData,
+      // Daily callback timeline data
+      dailyCallbackData,
+      // Top callback creators data - use API data if available, otherwise calculate locally
+      topCallbackCreators: analyticsData?.topCallbackCreators || topCallbackCreators
     };
-  }, [deals, callbacks, targets, selectedMonth, selectedYear]);
+  }, [deals, callbacks, targets, users, selectedMonth, selectedYear, refreshing, analyticsData]);
+
+  // Check if data is ready and stable for chart rendering
+  const isDataReady = !refreshing && deals.length >= 0 && callbacks.length >= 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -589,67 +775,69 @@ function SalesAnalysisDashboard({
         />
       </div>
 
-      {/* Target Progress */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5" />
-            {userRole === 'team_leader' ? 'Personal & Team Targets' : 'Target Progress'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Personal Target (always shown) */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {userRole === 'team_leader' ? 'My Personal Target' : 'Monthly Target'}
-                </span>
-                <span className="text-sm text-gray-600">${analytics.targetRevenue.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
-                  style={{ width: `${Math.min(analytics.targetProgress, 100)}%` }}
-                ></div>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Progress: {analytics.targetProgress.toFixed(1)}%</span>
-                <span className="font-medium">${analytics.totalRevenue.toLocaleString()} / ${analytics.targetRevenue.toLocaleString()}</span>
-              </div>
-            </div>
-
-            {/* Team Target (only for team leaders if exists) */}
-            {analytics.hasTeamTarget && (
-              <>
-                <hr className="border-gray-200" />
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-purple-700">
-                      Team Target ({user.managedTeam})
-                    </span>
-                    <span className="text-sm text-purple-600">
-                      ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="w-full bg-purple-100 rounded-full h-3">
-                    <div 
-                      className="bg-purple-600 h-3 rounded-full transition-all duration-300" 
-                      style={{ width: `${Math.min(50, 100)}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-purple-600">Team Progress: 50.0%</span>
-                    <span className="font-medium text-purple-700">
-                      $0 / ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
-                    </span>
-                  </div>
+      {/* Target Progress - Hidden for managers */}
+      {userRole !== 'manager' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" />
+              {userRole === 'team_leader' ? 'Personal & Team Targets' : 'Target Progress'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Personal Target (always shown) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    {userRole === 'team_leader' ? 'My Personal Target' : 'Monthly Target'}
+                  </span>
+                  <span className="text-sm text-gray-600">${analytics.targetRevenue.toLocaleString()}</span>
                 </div>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div 
+                    className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                    style={{ width: `${Math.min(analytics.targetProgress, 100)}%` }}
+                  ></div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Progress: {analytics.targetProgress.toFixed(1)}%</span>
+                  <span className="font-medium">${analytics.totalRevenue.toLocaleString()} / ${analytics.targetRevenue.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Team Target (only for team leaders if exists) */}
+              {analytics.hasTeamTarget && (
+                <>
+                  <hr className="border-gray-200" />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-purple-700">
+                        Team Target ({user.managedTeam})
+                      </span>
+                      <span className="text-sm text-purple-600">
+                        ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="w-full bg-purple-100 rounded-full h-3">
+                      <div 
+                        className="bg-purple-600 h-3 rounded-full transition-all duration-300" 
+                        style={{ width: `${Math.min(50, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-purple-600">Team Progress: 50.0%</span>
+                      <span className="font-medium text-purple-700">
+                        $0 / ${parseFloat((analytics.teamTarget as any)?.targetRevenue || (analytics.teamTarget as any)?.target_revenue || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -722,14 +910,14 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.callbackStatusData || []}>
+              <BarChart data={analytics.callbackStatusData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="value" fill="#2563eb">
-                  {(analytics.callbackStatusData || []).map((entry, index) => (
-                    <Cell key={`callback-cell-${index}-${entry?.name || 'unknown'}`} fill={entry?.color || '#8884d8'} />
+                  {analytics.callbackStatusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Bar>
               </BarChart>
@@ -738,46 +926,90 @@ function SalesAnalysisDashboard({
         </Card>
 
         {/* Performance Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+        <Card className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               Performance Summary
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <DollarSign className="h-5 w-5 text-blue-600" />
-                  <span className="font-medium">Revenue This Month</span>
-                </div>
-                <span className="text-lg font-bold text-blue-600">${analytics.totalRevenue.toLocaleString()}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Target className="h-5 w-5 text-green-600" />
-                  <span className="font-medium">Deals Closed</span>
-                </div>
-                <span className="text-lg font-bold text-green-600">{analytics.totalDeals}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Phone className="h-5 w-5 text-orange-600" />
-                  <span className="font-medium">Active Callbacks</span>
-                </div>
-                <span className="text-lg font-bold text-orange-600">{analytics.pendingCallbacks}</span>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-purple-600" />
-                  <span className="font-medium">Conversion Rate</span>
-                </div>
-                <span className="text-lg font-bold text-purple-600">{analytics.conversionRate.toFixed(1)}%</span>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Revenue This Month */}
+              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-800/50 rounded-lg">
+                        <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Revenue This Month</p>
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          ${analytics.totalRevenue.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Deals Closed */}
+              <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 dark:bg-green-800/50 rounded-lg">
+                        <Target className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Deals Closed</p>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          {analytics.totalDeals}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Active Callbacks */}
+              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-orange-100 dark:bg-orange-800/50 rounded-lg">
+                        <Phone className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Active Callbacks</p>
+                        <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                          {analytics.pendingCallbacks}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Conversion Rate */}
+              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-700/50 hover:shadow-md transition-all duration-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-purple-100 dark:bg-purple-800/50 rounded-lg">
+                        <CheckCircle className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-black dark:text-gray-200">Conversion Rate</p>
+                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                          {analytics.conversionRate.toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </CardContent>
         </Card>
@@ -795,7 +1027,7 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={analytics.weeklyData || []}>
+              <ComposedChart data={analytics.weeklyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" />
                 <YAxis yAxisId="left" />
@@ -805,8 +1037,8 @@ function SalesAnalysisDashboard({
                   name === 'deals' ? 'Deals' : 'Revenue'
                 ]} />
                 <Legend />
-                <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" />
-                <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#82ca9d" strokeWidth={3} name="Revenue" />
+                <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" key="weekly-deals-bar" />
+                <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#82ca9d" strokeWidth={3} name="Revenue" key="weekly-revenue-line" />
               </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
@@ -822,14 +1054,14 @@ function SalesAnalysisDashboard({
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.dealSizeData || []} layout="horizontal">
+              <BarChart data={analytics.dealSizeData} layout="horizontal">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis dataKey="range" type="category" width={80} />
                 <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
                 <Bar dataKey="count" fill="#fbbf24">
-                  {(analytics.dealSizeData || []).map((entry, index) => (
-                    <Cell key={`deal-size-${index}-${entry?.range || 'unknown'}`} fill="#fbbf24" />
+                  {analytics.dealSizeData.map((entry, index) => (
+                    <Cell key={`deal-size-${index}-${entry.range}`} fill="#fbbf24" />
                   ))}
                 </Bar>
               </BarChart>
@@ -875,7 +1107,7 @@ function SalesAnalysisDashboard({
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={analytics.agentPerformanceData || []}>
+                <BarChart data={analytics.agentPerformanceData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
                   <YAxis yAxisId="left" />
@@ -885,8 +1117,8 @@ function SalesAnalysisDashboard({
                     name === 'deals' ? 'Deals' : 'Revenue'
                   ]} />
                   <Legend />
-                  <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" />
-                  <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" />
+                  <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" key="agent-deals-bar" />
+                  <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" key="agent-revenue-bar" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

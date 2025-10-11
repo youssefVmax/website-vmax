@@ -36,6 +36,5 @@ export default function CompleteApp() {
     return <UnifiedLogin onLogin={handleLogin} />
   }
 
-  console.log('CompleteApp: Authenticated user found, rendering dashboard for:', user.name)
   return <FullPageDashboard />
 }
