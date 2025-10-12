@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "../../../lib/server/db";
 
-// Force dynamic rendering - NO CACHING
+// ✅ PHASE 3: Optimized caching strategy
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 60; // Revalidate every 60 seconds
 
 function addCorsHeaders(res: NextResponse) {
   res.headers.set("Access-Control-Allow-Origin", "*");
   res.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
   res.headers.set("Access-Control-Allow-Credentials", "true");
-  res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-  res.headers.set("Pragma", "no-cache");
-  res.headers.set("Expires", "0");
-  res.headers.set("X-Accel-Expires", "0");
+  // ✅ OPTIMIZATION: SWR-compatible cache headers
+  res.headers.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   return res;
 }
 

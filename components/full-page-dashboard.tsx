@@ -36,7 +36,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
-import { useDashboardStats, useDeals, useCallbacks, useNotifications } from "@/hooks/useApiData"
+import { useSWRDashboardData, useSWRDashboardStats } from '@/hooks/useSWRData'
 import { apiMethods } from "@/config/api"
 import { UserRole } from "@/types/user"
 import { DateFilter } from "@/components/ui/date-filter"
@@ -59,7 +59,7 @@ import AccessDenied from "@/components/access-denied"
 import { CallbacksManagement } from "@/components/callbacks-management"
 import ManageCallbacksPage from "@/components/manage-callback"
 import NewCallbackPage from "@/components/new-callback"
-import { useUnifiedData } from '@/hooks/useUnifiedData'
+// ✅ SWR: Removed old useUnifiedData hook - using SWR hooks instead
 import { User } from '@/types/user'
 import apiService, { Deal } from "@/lib/api-service"
 
@@ -646,29 +646,36 @@ function PageContent({
 }
 
 function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (tab: string) => void }) {
-  // Use the new API data hooks
-  const { data: dashboardStats, loading: statsLoading, error: statsError, refresh: refreshStats } = useDashboardStats({
-    userRole: user.role as UserRole,
-    userId: user.id.toString(),
+  // ✅ SWR: Use SWR hooks for data fetching
+  const { 
+    deals = [], 
+    callbacks = [], 
+    targets = [], 
+    notifications = [], 
+    isLoading, 
+    error,
+    refresh 
+  } = useSWRDashboardData({
+    userRole: user.role,
+    userId: user.id,
     managedTeam: user.managedTeam || user.team_name,
-    autoLoad: true
+    limit: 1000  // ✅ FIX: Get all deals for accurate metrics
   });
 
-  // Use unified data service for better performance and data consistency
-  const {
-    data,
-    kpis,
-    loading: unifiedLoading,
-    error: unifiedError,
-    lastUpdated,
-    refresh: refreshUnified
-  } = useUnifiedData({
+  // ✅ SWR: Use SWR stats hook for dashboard stats
+  const { 
+    stats: dashboardStats, 
+    isLoading: statsLoading, 
+    error: statsError, 
+    refresh: refreshStats 
+  } = useSWRDashboardStats({
     userRole: user.role,
-    userId: user.id.toString(),
-    userName: user.full_name,
-    managedTeam: user.team_name,
-    autoLoad: true
+    userId: user.id,
+    managedTeam: user.managedTeam || user.team_name
   });
+
+  // Create data object for compatibility
+  const data = { deals, callbacks, targets, notifications };
 
   // Enhanced analytics state
   const [analytics, setAnalytics] = useState<any>(null);
@@ -682,12 +689,20 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     const targets = data.targets || [];
     
     // Safe numeric conversion to prevent binary string issues
-    const totalRevenue = deals.reduce((sum, deal) => {
-      const amount = typeof deal.amountPaid === 'string' 
-        ? parseFloat(deal.amountPaid) || 0 
-        : Number(deal.amountPaid) || 0;
+    // ✅ FIX: Check both camelCase and snake_case field names
+    const totalRevenue = deals.reduce((sum: number, deal: any) => {
+      const amountField = deal.amount_paid || deal.amountPaid || 0;
+      const amount = typeof amountField === 'string' 
+        ? parseFloat(amountField) || 0 
+        : Number(amountField) || 0;
       return sum + amount;
     }, 0);
+    
+    console.log('💰 Dashboard Metrics:', { 
+      dealsCount: deals.length, 
+      totalRevenue,
+      sampleDeal: deals[0] 
+    });
     
     return {
       totalRevenue,
@@ -731,7 +746,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     loadAgentCount()
   }, [user.role])
 
-  if ((statsLoading || unifiedLoading) && (!data || data.deals.length === 0)) {
+  if ((statsLoading || isLoading) && (!data || data.deals.length === 0)) {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -747,15 +762,15 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     )
   }
 
-  if (statsError || unifiedError) {
-    console.log('❌ Dashboard: Error state', { statsError, unifiedError });
+  if (statsError || error) {
+    console.log('❌ Dashboard: Error state', { statsError, error });
     return (
       <div className="space-y-6">
         <Card className="border-red-200">
           <CardContent className="p-6">
             <div className="text-center text-red-600">
               <p className="text-lg font-semibold">Error Loading Dashboard</p>
-              <p className="text-sm mt-2">{statsError || unifiedError}</p>
+              <p className="text-sm mt-2">{statsError || error?.message || 'Unknown error'}</p>
               <Button onClick={refreshStats} className="mt-4">
                 Retry
               </Button>

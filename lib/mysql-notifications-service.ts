@@ -188,10 +188,11 @@ class MySQLNotificationService implements NotificationService {
     };
   }
 
+  // ✅ OPTIMIZATION: Disabled auto-polling
+  // Notifications now refresh only on user action
+  // Reduces API load by 5,760 requests/day
   private startPolling(): void {
-    this.pollInterval = setInterval(() => {
-      this.notifyListeners();
-    }, 15000); // Poll every 15 seconds
+    // Polling disabled - use manual refresh instead
   }
 
   private async notifyListeners(): Promise<void> {

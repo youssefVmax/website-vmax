@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '../../../lib/server/db';
-// Force dynamic rendering - NO CACHING
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// ✅ PHASE 3: Optimized caching strategy
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 60; // Revalidate every 60 seconds
 
 function addCorsHeaders(res: NextResponse) {
   res.headers.set('Access-Control-Allow-Origin', '*');
@@ -11,10 +11,8 @@ function addCorsHeaders(res: NextResponse) {
   res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   res.headers.set('Access-Control-Allow-Credentials', 'true');
   // CRITICAL: No caching headers
-  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.headers.set('Pragma', 'no-cache');
-  res.headers.set('Expires', '0');
-  res.headers.set('X-Accel-Expires', '0');
+  // ✅ OPTIMIZATION: SWR-compatible cache headers
+  res.headers.set("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   return res;
 }
 
@@ -49,9 +47,10 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month'); // optional filter by month (YYYY-MM format)
     const page = parseInt(searchParams.get('page') || '1', 10) || 1;
     const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 
-      userRole === 'team_leader' ? 1000 :  // Allow team leaders to fetch up to 1000 callbacks
-      userRole === 'manager' ? 5000 :     // Allow managers to fetch up to 5000 callbacks
-      200                                   // Default max for others
+      userRole === 'team_leader' ? 10000 :  // Allow team leaders to fetch all callbacks
+      userRole === 'manager' ? 10000 :      // Allow managers to fetch all callbacks
+      userRole === 'salesman' ? 10000 :     // Allow salesmen to fetch all callbacks
+      10000                                  // High default max
     );
     const offset = (page - 1) * limit;
 
@@ -137,18 +136,14 @@ export async function GET(request: NextRequest) {
     
     let rows: any[] = [];
     let totals: any[] = [];
-    
     try {
       // Build the complete SQL query with proper parameter handling
       const baseSql = `SELECT * FROM callbacks ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC`;
       const countSql = `SELECT COUNT(*) as c FROM callbacks ${whereSql}`;
       
-      // For pagination, we need to append LIMIT and OFFSET to the query string
-      // since MySQL has issues with prepared statements for LIMIT/OFFSET
+      // For pagination, append LIMIT and OFFSET directly to avoid prepared statement issues
+      // limit and offset are already validated integers, so this is safe
       const paginatedSql = `${baseSql} LIMIT ${limit} OFFSET ${offset}`;
-      
-      console.log('📝 Executing paginated callbacks query:', paginatedSql);
-      console.log('📝 With params:', params);
       
       [rows] = await query<any>(paginatedSql, params);
       [totals] = await query<any>(countSql, params);

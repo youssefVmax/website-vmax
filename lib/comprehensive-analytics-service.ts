@@ -302,26 +302,18 @@ class ComprehensiveAnalyticsService {
 
   /**
    * Get real-time analytics with auto-refresh
+   * ✅ OPTIMIZATION: Deprecated - use manual refresh instead
+   * Auto-polling disabled to reduce server load
    */
   async getRealtimeAnalytics(filters: AnalyticsFilters, intervalMs: number = 30000) {
-    const fetchData = () => this.fetchAllAnalytics(filters);
+    console.warn('⚠️ getRealtimeAnalytics is deprecated. Use fetchAllAnalytics with manual refresh instead.');
     
-    // Initial fetch
-    let currentData = await fetchData();
-    
-    // Set up interval for real-time updates
-    const interval = setInterval(async () => {
-      try {
-        currentData = await fetchData();
-        console.log('🔄 Real-time analytics updated');
-      } catch (error) {
-        console.error('❌ Real-time analytics update failed:', error);
-      }
-    }, intervalMs);
+    // Only fetch once, no auto-refresh
+    const currentData = await this.fetchAllAnalytics(filters);
 
     return {
       data: currentData,
-      stopUpdates: () => clearInterval(interval)
+      stopUpdates: () => {} // No-op since no interval is created
     };
   }
 }

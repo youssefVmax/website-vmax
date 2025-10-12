@@ -1365,11 +1365,11 @@ export function AdvancedAnalytics({ userRole, user }: AdvancedAnalyticsProps) {
     }
   }
   // Load data on mount and refresh every 2 minutes
-  // Only refetch when user changes, not on every filter change
+  // ✅ OPTIMIZATION: Removed auto-refresh polling
+  // Data now refreshes only when user changes or manual refresh
+  // Reduces unnecessary API calls by 720 requests/day
   useEffect(() => {
     fetchAnalyticsData()
-    const interval = setInterval(fetchAnalyticsData, 120000) // 2 minutes
-    return () => clearInterval(interval)
   }, [user?.id, userRole]) // Removed frequent changing dependencies
   
   // Separate effect for filter changes with debouncing

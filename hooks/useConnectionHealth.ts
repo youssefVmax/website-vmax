@@ -138,15 +138,9 @@ export function useConnectionHealth(): UseConnectionHealthReturn {
     };
   }, [refreshHealth]);
 
-  // Periodic refresh (every 2 minutes)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('⏰ useConnectionHealth: Periodic health refresh...');
-      refreshHealth();
-    }, 120000); // 2 minutes
-    
-    return () => clearInterval(interval);
-  }, [refreshHealth]);
+  // ✅ OPTIMIZATION: Removed auto-refresh polling
+  // Health now refreshes only on mount or manual refresh
+  // Reduces unnecessary API calls by 720 requests/day
 
   return {
     health,

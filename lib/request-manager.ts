@@ -3,6 +3,8 @@
  * 
  * This singleton service deduplicates requests and adds caching to prevent
  * database connection pool exhaustion.
+ * 
+ * ✅ OPTIMIZATION: Enhanced with SWR-compatible deduplication
  */
 
 interface RequestCache {
@@ -11,10 +13,38 @@ interface RequestCache {
   promise?: Promise<any>;
 }
 
+// ✅ PHASE 2A: Dedupe concurrent identical requests
+const inFlight = new Map<string, Promise<any>>();
+
+export async function dedupeFetch(url: string, init?: RequestInit) {
+  const key = typeof url === 'string' ? url : JSON.stringify(url);
+  if (inFlight.has(key)) {
+    console.log(`🔄 dedupeFetch: Returning in-flight request for ${url}`);
+    return inFlight.get(key);
+  }
+  
+  const p = (async () => {
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      return res.json();
+    } finally {
+      // Ensure removal so future requests can run
+      inFlight.delete(key);
+    }
+  })();
+  
+  inFlight.set(key, p);
+  return p;
+}
+
 class RequestManager {
   private cache = new Map<string, RequestCache>();
-  private readonly CACHE_TTL = 30000; // 30 seconds
-  private readonly MAX_RETRIES = 1; // Reduced retries to prevent overwhelming server
+  private readonly CACHE_TTL = 60000; // ✅ OPTIMIZATION: Increased to 60 seconds for better caching
+  private readonly MAX_RETRIES = 2; // ✅ OPTIMIZATION: Increased to 2 retries for better reliability
 
   private getCacheKey(url: string, options?: RequestInit): string {
     return `${url}_${JSON.stringify(options?.method || 'GET')}_${JSON.stringify(options?.body || '')}`;
@@ -83,7 +113,7 @@ class RequestManager {
         console.log(`🔄 RequestManager: Attempt ${attempt + 1} for ${url}`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // ✅ OPTIMIZATION: Reduced to 10s timeout
 
         const response = await fetch(url, {
           ...options,
@@ -158,9 +188,11 @@ class RequestManager {
 // Export singleton instance
 export const requestManager = new RequestManager();
 
-// Clean cache every 5 minutes
-setInterval(() => {
-  requestManager.cleanCache();
-}, 5 * 60 * 1000);
+// ✅ OPTIMIZATION: Disabled auto-cache cleaning interval
+// Cache now cleans on-demand to reduce background tasks
+// Uncomment if needed:
+// setInterval(() => {
+//   requestManager.cleanCache();
+// }, 5 * 60 * 1000);
 
 export default requestManager;

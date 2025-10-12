@@ -59,23 +59,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         }))
         if (mounted) setNotifications(mapped)
       } catch (e) {
-        console.error('❌ NotificationsProvider: Failed to load notifications:', e)
-        // Don't show error to user, just log it and set empty array
-        if (mounted) setNotifications([])
+        console.error('Load notifications failed', e)
       }
     }
 
-    // Add a small delay to prevent interference with initial page load
+    // ✅ OPTIMIZATION: Removed auto-refresh polling
+    // Notifications now load only on mount
+    // Reduces API calls by 5,760 requests/day
     const initialTimeout = setTimeout(load, 1000)
-    const id = setInterval(load, 15000)
     return () => { 
       mounted = false; 
       clearTimeout(initialTimeout);
-      clearInterval(id) 
     }
   }, [user?.id, user?.role])
 
-  // Show toasts for new notifications (only show recent notifications, not old ones on login)
+  // Show toast notifications for new unread notifications
   useEffect(() => {
     const prevIds = knownIdsRef.current
     const now = new Date()

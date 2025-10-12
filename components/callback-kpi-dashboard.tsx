@@ -14,7 +14,7 @@ import {
   RefreshCw, Filter, User
 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast"
-import { useMySQLSalesData } from '@/hooks/useMySQLSalesData'
+import { useSWRDashboardData } from '@/hooks/useSWRData'
 
 // Types for callback KPIs
 interface CallbackKPIs {
@@ -68,11 +68,10 @@ export function CallbackKPIDashboard({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [teamAnalysis, setTeamAnalysis] = useState<{ perTeam: any[] } | null>(null);
 
-  // Use MySQL data hook for callback analytics
-  const { deals, callbacks, loading, error, refreshData: refreshMySQLData } = useMySQLSalesData({
+  // ✅ SWR: Use SWR hook for callback analytics
+  const { deals = [], callbacks = [], isLoading, error, refresh } = useSWRDashboardData({
     userRole,
     userId: user.id,
-    userName: user.name,
     managedTeam: user.managedTeam
   });
 
@@ -173,7 +172,8 @@ export function CallbackKPIDashboard({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await refreshMySQLData();
+      // ✅ SWR: Use SWR's refresh function
+      await refresh();
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
@@ -193,29 +193,18 @@ export function CallbackKPIDashboard({
 
   // Data is automatically loaded by the useMySQLSalesData hook
 
-  // Auto-refresh every 30 seconds for live data
-  useEffect(() => {
-    const interval = setInterval(handleRefresh, 30000);
-    return () => clearInterval(interval);
-  }, [handleRefresh]);
-
-  // Data is automatically managed by the useMySQLSalesData hook
-
-  // Load manager analysis: revenue by user count and team performance
   useEffect(() => {
     if (userRole !== 'manager') return
 
     // Use deals data from the hook instead of calling services
     const load = async () => {
       try {
-        // For now, just use the deals data from the hook
-        // Targets functionality can be added later if needed
         const dealsData = deals || [];
 
         // Basic team analysis using available data
         const teamMap = new Map<string, { team: string; deals: number; revenue: number }>()
 
-        dealsData.forEach(d => {
+        dealsData.forEach((d: any) => {
           const team = d.salesTeam  || 'Unknown'
           if (!teamMap.has(team)) teamMap.set(team, { team, deals: 0, revenue: 0 })
           const rec = teamMap.get(team)!
@@ -225,7 +214,7 @@ export function CallbackKPIDashboard({
 
         const perTeam = Array.from(teamMap.values()).map(row => ({
           team: row.team,
-          members: 1, // Placeholder - would need user count from API
+          members: 1,
           deals: row.deals,
           revenue: Math.round(row.revenue),
           revenuePerUser: Math.round(row.revenue),
@@ -264,7 +253,7 @@ export function CallbackKPIDashboard({
     return `${Math.round(hours / 24)}d`;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

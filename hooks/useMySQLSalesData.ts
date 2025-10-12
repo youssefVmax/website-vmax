@@ -229,41 +229,9 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     loadData();
   }, [loadData]);
 
-  // Set up real-time listeners for data changes
-  useEffect(() => {
-    const unsubscribeDeals = dealsService.onDealsChange(
-      (newDeals) => {
-        setData(prev => {
-          const newAnalytics = calculateAnalytics(newDeals, prev.callbacks, prev.targets, prev.users);
-          setAnalytics(newAnalytics);
-          return { ...prev, deals: newDeals };
-        });
-      },
-      filters?.userRole,
-      filters?.userId,
-      filters?.managedTeam
-    );
-
-    const unsubscribeCallbacks = callbacksService.onCallbacksChange(
-      (newCallbacks) => {
-        setData(prev => {
-          const newAnalytics = calculateAnalytics(prev.deals, newCallbacks, prev.targets, prev.users);
-          setAnalytics(newAnalytics);
-          return { ...prev, callbacks: newCallbacks };
-        });
-      },
-      filters?.userRole,
-      filters?.userId,
-      filters?.userName,
-      filters?.managedTeam
-    );
-
-    // Cleanup listeners on unmount
-    return () => {
-      unsubscribeDeals();
-      unsubscribeCallbacks();
-    };
-  }, [filters?.userRole, filters?.userId, filters?.userName, filters?.managedTeam, calculateAnalytics]);
+  // ✅ OPTIMIZATION: Removed auto-refresh polling listeners
+  // Data now refreshes only on mount or manual refresh
+  // This eliminates unnecessary re-renders and API calls
 
   return {
     deals: data.deals,

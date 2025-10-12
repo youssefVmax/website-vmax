@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { useSWRUsers } from '@/hooks/useSWRData'
 import { Plus, Edit, Trash2, Eye, EyeOff, Users, UserPlus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,8 +48,8 @@ interface UserManagementProps {
 }
 
 export default function UserManagement({ userRole, user }: UserManagementProps) {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  // ✅ SWR: Use SWR hook for users data
+  const { users = [], isLoading, error: swrError, refresh } = useSWRUsers();
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -82,77 +83,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
     phone: ''
   })
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
-
-  const loadUsers = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      console.log('🔄 Loading users from MySQL API...')
-
-      // Direct fetch to MySQL users API with cache busting
-      const timestamp = Date.now();
-      const response = await fetch(`/api/users?limit=1000&_t=${timestamp}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      })
-
-      if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-
-        try {
-          const errorData = await response.json()
-          errorMessage = errorData.error || errorMessage
-        } catch (parseError) {
-          console.warn('Failed to parse error response as JSON:', parseError)
-          // Keep the default error message
-        }
-
-        throw new Error(errorMessage)
-      }
-
-      const data = await response.json()
-      console.log('✅ MySQL Users API response:', data)
-
-      if (data.success && Array.isArray(data.users)) {
-        // Transform users to match expected format
-        const transformedUsers = data.users.map((user: any) => ({
-          id: user.id.toString(),
-          username: user.username,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          team: user.team,
-          phone: user.phone,
-          managedTeam: user.managedTeam,
-          password: user.password || '',
-          created_at: user.created_at,
-          updated_at: user.updated_at,
-          is_active: user.is_active
-        }))
-
-        console.log('✅ Transformed users:', transformedUsers.length, 'users from MySQL')
-        setUsers(transformedUsers)
-      } else {
-        console.warn('⚠️ MySQL Users API returned invalid data:', data)
-        setUsers([])
-      }
-    } catch (err) {
-      console.error('❌ Error loading users from MySQL:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load users'
-      setError(errorMessage)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // ✅ SWR: Data fetching handled by SWR hook above
 
   const checkUsernameExists = async (username: string): Promise<boolean> => {
     try {
@@ -242,7 +173,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       const result = await response.json()
       console.log('✅ User created successfully in MySQL:', result)
 
-      await loadUsers()
+      await refresh()
       setIsAddDialogOpen(false)
       resetForm()
       
@@ -303,7 +234,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
       const result = await response.json()
       console.log('✅ User updated successfully in MySQL:', result)
 
-      await loadUsers()
+      await refresh()
       setIsEditDialogOpen(false)
       setEditingUser(null)
       resetForm()
@@ -352,7 +283,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
 
       // Reload users from database
       console.log('🔄 Reloading users from database...');
-      await loadUsers()
+      await refresh()
       
       // Count users after reload
       const afterCount = users.length;
@@ -401,7 +332,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
     }))
   }
 
-  const filteredUsers = users.filter(user =>
+  const filteredUsers = users.filter((user: User) =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.team?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -583,10 +514,10 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
             Total: {users.length}
           </Badge>
           <Badge variant="outline" className="px-3 py-1">
-            Salesmen: {users.filter(u => u.role === 'salesman').length}
+            Salesmen: {users.filter((u: User) => u.role === 'salesman').length}
           </Badge>
           <Badge variant="outline" className="px-3 py-1">
-            Team Leaders: {users.filter(u => u.role === 'team_leader').length}
+            Team Leaders: {users.filter((u: User) => u.role === 'team_leader').length}
           </Badge>
         </div>
       </div>
@@ -600,7 +531,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {isLoading ? (
             <div className="text-center py-4">Loading users.....</div>
           ) : (
             <Table>
@@ -616,7 +547,7 @@ export default function UserManagement({ userRole, user }: UserManagementProps) 
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {filteredUsers.map((user: User) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.username}</TableCell>

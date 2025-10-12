@@ -125,19 +125,19 @@ class DirectMySQLService {
     try {
       console.log('🔄 DirectMySQLService: Fetching callbacks via callbacks API');
       
-      // Use direct callbacks API for better role-based filtering
+      // Use requestManager with proper caching
       const params = new URLSearchParams({
-        limit: '1000',
+        limit: filters.limit || '10000', // High default to fetch all callbacks
         ...filters
       });
       
-      // Use direct fetch instead of requestManager to avoid caching issues
-      const response = await fetch(`${this.baseUrl}/callbacks?${params.toString()}`, {
+      // Use requestManager for better performance and caching
+      const response = await requestManager.fetch(`${this.baseUrl}/callbacks?${params.toString()}`, {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        cache: 'no-store'
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
       });
       
       if (!response.ok) {
@@ -145,10 +145,11 @@ class DirectMySQLService {
       }
       
       const result = await response.json();
-      return result.success ? (result.callbacks || []) : [];
+      console.log('✅ DirectMySQLService: Callbacks fetched:', result.total || result.callbacks?.length || 0);
+      return result;
     } catch (error) {
       console.error('❌ DirectMySQLService: Error fetching callbacks:', error);
-      return [];
+      return { callbacks: [], total: 0, success: false };
     }
   }
 

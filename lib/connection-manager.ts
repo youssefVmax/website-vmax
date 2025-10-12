@@ -63,21 +63,16 @@ class ConnectionManager {
     endpoints.forEach(endpoint => {
       this.endpoints.set(endpoint.name, endpoint);
     });
-
-    console.log('🔄 ConnectionManager: Initialized with', endpoints.length, 'endpoints');
   }
 
   /**
    * Start automatic health monitoring
+   * ✅ OPTIMIZATION: Disabled auto-health monitoring
+   * Health checks now happen only on demand
+   * Reduces unnecessary system overhead
    */
   private startHealthMonitoring() {
-    // Check health every 30 seconds
-    this.healthCheckInterval = setInterval(() => {
-      this.checkSystemHealth();
-    }, 30000);
-
-    // Initial health check
-    this.checkSystemHealth();
+    // Auto-monitoring disabled - use manual health checks
   }
 
   /**

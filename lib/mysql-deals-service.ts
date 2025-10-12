@@ -283,10 +283,11 @@ class MySQLDealsService implements DealsService {
     };
   }
 
+  // ✅ OPTIMIZATION: Disabled auto-polling
+  // Listeners now trigger only on explicit data changes
+  // Reduces unnecessary re-renders and API load
   private startPolling(): void {
-    this.pollInterval = setInterval(() => {
-      this.notifyListeners();
-    }, 30000); // Poll every 30 seconds
+    // Polling disabled - use manual refresh instead
   }
 
   private async notifyListeners(): Promise<void> {

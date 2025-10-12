@@ -12,7 +12,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend
 } from 'recharts';
-import { useMySQLSalesData } from '@/hooks/useMySQLSalesData'
+import { useSWRDashboardData } from '@/hooks/useSWRData'
 
 // Professional color palette (only professional style)
 const COLORS = {
@@ -90,121 +90,26 @@ const KPICard: React.FC<KPICardProps> = ({ title, value, change, icon, color, su
 function ProfessionalAnalyticsDashboard({ userRole, user }: ProfessionalDashboardProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshing, setRefreshing] = useState(false);
-  const [deals, setDeals] = useState<any[]>([]);
-  const [callbacks, setCallbacks] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [targets, setTargets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ✅ SWR: Use SWR hook for data fetching
+  const { 
+    deals = [], 
+    callbacks = [], 
+    targets = [], 
+    notifications = [], 
+    isLoading, 
+    error: swrError,
+    refresh 
+  } = useSWRDashboardData({
+    userRole,
+    userId: user?.id,
+    managedTeam: user?.managedTeam
+  });
+
   const [error, setError] = useState<string | null>(null);
   const [colorScheme, setColorScheme] = useState<'professional'>('professional');
 
-  // Fetch data from APIs
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Build API URLs with role-based filtering
-      const dealsUrl = new URL('/api/deals', window.location.origin);
-      const callbacksUrl = new URL('/api/callbacks', window.location.origin);
-      const notificationsUrl = new URL('/api/notifications', window.location.origin);
-      const targetsUrl = new URL('/api/targets', window.location.origin);
-
-      // Add role-based parameters
-      dealsUrl.searchParams.set('limit', '1000');
-      callbacksUrl.searchParams.set('limit', '1000');
-      notificationsUrl.searchParams.set('limit', '100');
-      targetsUrl.searchParams.set('limit', '1000');
-
-      // Role-based filtering
-      if (userRole === 'manager') {
-        // Managers see all data - no filters needed
-        if (user?.id) {
-          notificationsUrl.searchParams.set('userId', user.id);
-          notificationsUrl.searchParams.set('userRole', userRole);
-        }
-      } else if (userRole === 'team_leader') {
-        // Team leaders see their team data + personal data
-        if (user?.managedTeam) {
-          dealsUrl.searchParams.set('salesTeam', user.managedTeam);
-          callbacksUrl.searchParams.set('salesTeam', user.managedTeam);
-          targetsUrl.searchParams.set('salesTeam', user.managedTeam);
-        }
-        if (user?.id) {
-          notificationsUrl.searchParams.set('userId', user.id);
-          notificationsUrl.searchParams.set('userRole', userRole);
-        }
-      } else if (userRole === 'salesman') {
-        // Salesmen see only their own data
-        if (user?.id) {
-          dealsUrl.searchParams.set('salesAgentId', user.id);
-          callbacksUrl.searchParams.set('salesAgentId', user.id);
-          targetsUrl.searchParams.set('agentId', user.id);
-          notificationsUrl.searchParams.set('salesAgentId', user.id);
-          notificationsUrl.searchParams.set('userId', user.id);
-          notificationsUrl.searchParams.set('userRole', userRole);
-        }
-      }
-
-      console.log('🔍 Fetching dashboard data:', {
-        userRole,
-        userId: user?.id,
-        managedTeam: user?.managedTeam,
-        dealsUrl: dealsUrl.toString(),
-        callbacksUrl: callbacksUrl.toString()
-      });
-
-      // Fetch all data in parallel
-      const [dealsResponse, callbacksResponse, notificationsResponse, targetsResponse] = await Promise.all([
-        fetch(dealsUrl.toString()).then(res => res.json()),
-        fetch(callbacksUrl.toString()).then(res => res.json()),
-        fetch(notificationsUrl.toString()).then(res => res.json()),
-        fetch(targetsUrl.toString()).then(res => res.json())
-      ]);
-
-      console.log('📊 API Responses:', {
-        deals: dealsResponse,
-        callbacks: callbacksResponse,
-        notifications: notificationsResponse,
-        targets: targetsResponse
-      });
-
-      // Set data from responses
-      setDeals(dealsResponse?.deals || []);
-      setCallbacks(callbacksResponse?.callbacks || []);
-      setNotifications(notificationsResponse?.notifications || []);
-      setTargets(targetsResponse?.targets || []);
-
-    } catch (err) {
-      console.error('❌ Dashboard data fetch error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
-      // Set empty arrays on error
-      setDeals([]);
-      setCallbacks([]);
-      setNotifications([]);
-      setTargets([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Initial data fetch
-  useEffect(() => {
-    if (user?.id) {
-      fetchData();
-    }
-  }, [user?.id, userRole, user?.managedTeam]);
-
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const interval = setInterval(() => {
-      fetchData();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [user?.id, userRole, user?.managedTeam]);
+  // ✅ SWR: Data fetching handled by SWR hook above
+  // All data automatically fetched and cached by SWR
 
   // Calculate comprehensive KPIs based on role
   const dashboardKPIs = useMemo(() => {
@@ -405,7 +310,8 @@ function ProfessionalAnalyticsDashboard({ userRole, user }: ProfessionalDashboar
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetchData();
+      // ✅ SWR: Use SWR's refresh function
+      await refresh();
     } catch (err) {
       console.error('Refresh failed:', err);
     } finally {
@@ -446,7 +352,7 @@ function ProfessionalAnalyticsDashboard({ userRole, user }: ProfessionalDashboar
   const roleInfo = getRoleInfo();
 
   // Show loading state
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">

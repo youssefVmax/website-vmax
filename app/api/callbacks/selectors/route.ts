@@ -29,15 +29,15 @@ export async function GET(request: NextRequest) {
     
     console.log('👤 User context:', { userRole, userId });
 
-    // Get available months for filtering
+    // Get available months for filtering (optimized with index)
     let availableMonths: { value: string; label: string }[] = [];
     try {
       const [monthRows] = await query<any>(`
-        SELECT DISTINCT DATE_FORMAT(COALESCE(created_at, updated_at), "%Y-%m") as month
+        SELECT DISTINCT DATE_FORMAT(created_at, "%Y-%m") as month
         FROM callbacks 
-        WHERE COALESCE(created_at, updated_at) IS NOT NULL
+        WHERE created_at IS NOT NULL
         ORDER BY month DESC
-        LIMIT 24
+        LIMIT 12
       `);
       
       availableMonths = monthRows
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
           const [year, monthNum] = month.split('-');
           const monthName = new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleDateString('en-US', { 
             year: 'numeric', 
-            month: 'long' 
+            month: 'short'
           });
           return {
             value: month,
@@ -65,12 +65,13 @@ export async function GET(request: NextRequest) {
       let agentParams: any[] = [];
       
       if (userRole === 'manager') {
-        // Managers can see all agents
+        // Managers can see all agents (optimized with LIMIT)
         agentQuery = `
           SELECT DISTINCT sales_agent
           FROM callbacks 
           WHERE sales_agent IS NOT NULL AND sales_agent != ''
           ORDER BY sales_agent ASC
+          LIMIT 100
         `;
       } else if (userRole === 'team_leader' && userId) {
         // Team leaders can see agents from their team + themselves
@@ -83,6 +84,7 @@ export async function GET(request: NextRequest) {
             WHERE sales_agent IS NOT NULL AND sales_agent != ''
             AND (SalesAgentID = ? OR sales_team = ?)
             ORDER BY sales_agent ASC
+            LIMIT 50
           `;
           agentParams = [userId, managedTeam];
         } else {
@@ -92,6 +94,7 @@ export async function GET(request: NextRequest) {
             WHERE sales_agent IS NOT NULL AND sales_agent != ''
             AND SalesAgentID = ?
             ORDER BY sales_agent ASC
+            LIMIT 50
           `;
           agentParams = [userId];
         }
@@ -103,6 +106,7 @@ export async function GET(request: NextRequest) {
           WHERE sales_agent IS NOT NULL AND sales_agent != ''
           AND SalesAgentID = ?
           ORDER BY sales_agent ASC
+          LIMIT 10
         `;
         agentParams = [userId];
       }
@@ -130,6 +134,7 @@ export async function GET(request: NextRequest) {
           FROM callbacks 
           WHERE sales_team IS NOT NULL AND sales_team != ''
           ORDER BY sales_team ASC
+          LIMIT 20
         `);
         
         availableTeams = teamRows

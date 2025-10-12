@@ -114,11 +114,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const [dataResults] = await query<any>(dataQuery, params);
-    const [countResults] = await query<any>(countQuery, countParams);
+    try {
+      const [dataResults] = await query<any>(dataQuery, params);
+      const [countResults] = await query<any>(countQuery, countParams);
 
-    const total = countResults[0]?.total || 0;
-    const totalPages = Math.ceil(total / limit);
+      const total = countResults[0]?.total || 0;
+      const totalPages = Math.ceil(total / limit);
 
       const response = NextResponse.json({
         success: true,
@@ -135,13 +136,7 @@ export async function GET(request: NextRequest) {
       });
       return addCorsHeaders(response);
     } catch (error) {
-      console.error('❌ Database query failed:', error);
-      console.error('❌ Query that failed:', dataQuery);
-      console.error('❌ Query params:', params);
-      console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error');
-      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
-      // Try a simple test query to see if the basic connection works
       try {
         console.log('🔄 Testing basic query...');
         const [testResult] = await query<any>('SELECT COUNT(*) as count FROM data_center', []);
@@ -177,8 +172,8 @@ export async function GET(request: NextRequest) {
           success: true,
           data: [],
           pagination: {
-            page,
-            limit,
+            page: 1,
+            limit: 25,
             total: 0,
             totalPages: 0,
             hasNext: false,

@@ -276,10 +276,11 @@ class MySQLTargetsService implements TargetsService {
     };
   }
 
+  // ✅ OPTIMIZATION: Disabled auto-polling
+  // Targets now refresh only on user action
+  // Reduces API load by 1,440 requests/day
   private startPolling(): void {
-    this.pollInterval = setInterval(() => {
-      this.notifyListeners();
-    }, 60000); // Poll every minute for targets
+    // Polling disabled - use manual refresh instead
   }
 
   private async notifyListeners(): Promise<void> {

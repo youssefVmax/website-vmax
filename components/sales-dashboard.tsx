@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSWRDashboardData } from '@/hooks/useSWRData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,7 +42,8 @@ interface KPICardProps {
 
 const COLORS = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2'];
 
-const KPICard: React.FC<KPICardProps> = ({ title, value, change, icon, color, subtitle }) => (
+// ✅ OPTIMIZATION: Memoized KPI card to prevent unnecessary re-renders
+const KPICard: React.FC<KPICardProps> = React.memo(({ title, value, change, icon, color, subtitle }) => (
   <Card className="relative overflow-hidden hover:shadow-lg transition-shadow">
     <CardContent className="p-6">
       <div className="flex items-center justify-between">
@@ -71,7 +73,9 @@ const KPICard: React.FC<KPICardProps> = ({ title, value, change, icon, color, su
       )}
     </CardContent>
   </Card>
-);
+));
+
+KPICard.displayName = 'KPICard';
 
 function SalesAnalysisDashboard({ 
   userRole, 
@@ -125,26 +129,35 @@ function SalesAnalysisDashboard({
       console.error('Error updating date from props:', error);
     }
   }, [propSelectedMonth, propSelectedYear, selectedMonth, selectedYear]);
-  const [loading, setLoading] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
+  // ✅ SWR: Replace manual state with SWR hooks
+  const { 
+    deals = [], 
+    callbacks = [], 
+    targets = [], 
+    notifications = [], 
+    isLoading, 
+    error,
+    refresh 
+  } = useSWRDashboardData({
+    userRole,
+    userId: user?.id,
+    managedTeam: user?.managedTeam
+  });
 
-  // Data state
-  const [deals, setDeals] = useState<any[]>([]);
-  const [callbacks, setCallbacks] = useState<any[]>([]);
-  const [targets, setTargets] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       setDateFilterKey(prev => prev + 1);
-      await fetchData();
+      // ✅ SWR: Use SWR's refresh function
+      await refresh();
     } catch (error) {
       console.error('❌ Error during refresh:', error);
     } finally {
-      setTimeout(() => setLoading(false), 1000);
+      setTimeout(() => setRefreshing(false), 1000);
     }
   }
 
@@ -170,252 +183,25 @@ function SalesAnalysisDashboard({
     }
   }
 
-  // Add debouncing to prevent rapid API calls
-  const [fetchTimeout, setFetchTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  // Fetch role-based data from APIs with staggered requests to avoid debouncing
-  const fetchData = async () => {
-    try {
-      setRefreshing(true);
-      console.log('🔄 SalesAnalysisDashboard: Fetching data for user:', user.username, 'role:', userRole);
-
-      // Build API URLs with role-based filtering
-      const dealsUrl = new URL('/api/deals', window.location.origin);
-      const callbacksUrl = new URL('/api/callbacks', window.location.origin);
-      const targetsUrl = new URL('/api/targets', window.location.origin);
-      const notificationsUrl = new URL('/api/notifications', window.location.origin);
-      const usersUrl = new URL('/api/users', window.location.origin);
-
-      // Add role-based parameters
-      dealsUrl.searchParams.set('limit', '1000');
-      callbacksUrl.searchParams.set('limit', '1000');
-      targetsUrl.searchParams.set('limit', '100');
-      notificationsUrl.searchParams.set('limit', '50');
-      usersUrl.searchParams.set('limit', '1000'); // Get all users for callback creator analysis
-
-      // Add user context for role-based filtering
-      if (userRole === 'salesman') {
-        // Salesman: only own data
-        dealsUrl.searchParams.set('userRole', 'salesman');
-        dealsUrl.searchParams.set('userId', user.id);
-        callbacksUrl.searchParams.set('userRole', 'salesman');
-        callbacksUrl.searchParams.set('userId', user.id);
-        targetsUrl.searchParams.set('agentId', user.id);
-        notificationsUrl.searchParams.set('salesAgentId', user.id);
-      } else if (userRole === 'team_leader') {
-        // Team leader: own data + managed team data
-        dealsUrl.searchParams.set('userRole', 'team_leader');
-        dealsUrl.searchParams.set('userId', user.id);
-        if (user.managedTeam) {
-          dealsUrl.searchParams.set('managedTeam', user.managedTeam);
-        }
-        callbacksUrl.searchParams.set('userRole', 'team_leader');
-        callbacksUrl.searchParams.set('userId', user.id);
-        if (user.managedTeam) {
-          callbacksUrl.searchParams.set('managedTeam', user.managedTeam);
-        }
-        targetsUrl.searchParams.set('agentId', user.id);
-        notificationsUrl.searchParams.set('salesAgentId', user.id);
-        notificationsUrl.searchParams.set('userRole', 'team_leader');
-      }
-
-      // Add date filtering
-      if (selectedMonth && selectedYear) {
-        const monthNum = parseInt(selectedMonth);
-        const yearNum = parseInt(selectedYear);
-        
-        // Create proper date range for the selected month
-        const startDate = `${selectedYear}-${selectedMonth.padStart(2, '0')}-01`;
-        const endDate = new Date(yearNum, monthNum, 0).toISOString().split('T')[0]; // Last day of month
-        
-        // Add date filters to all API calls
-        dealsUrl.searchParams.set('startDate', startDate);
-        dealsUrl.searchParams.set('endDate', endDate);
-        dealsUrl.searchParams.set('month', selectedMonth);
-        dealsUrl.searchParams.set('year', selectedYear);
-        
-        callbacksUrl.searchParams.set('startDate', startDate);
-        callbacksUrl.searchParams.set('endDate', endDate);
-        callbacksUrl.searchParams.set('month', selectedMonth);
-        callbacksUrl.searchParams.set('year', selectedYear);
-        
-        targetsUrl.searchParams.set('month', selectedMonth);
-        targetsUrl.searchParams.set('year', selectedYear);
-        targetsUrl.searchParams.set('period', `${selectedYear}-${selectedMonth}`);
-        
-        console.log('📅 Date filtering applied:', { 
-          startDate, 
-          endDate, 
-          selectedMonth, 
-          selectedYear,
-          period: `${selectedYear}-${selectedMonth}`
-        });
-      }
-
-      console.log(`🔍 Fetching ${userRole} data with staggered requests to avoid debouncing...`);
-
-      // Helper function to fetch with retry logic
-      const fetchWithRetry = async (url: string, name: string, maxRetries = 2) => {
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          try {
-            console.log(`📊 Fetching ${name} data... (attempt ${attempt + 1}/${maxRetries + 1})`);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-            
-            const res = await fetch(url, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            
-            if (!res.ok) throw new Error(`${name} API error: ${res.status}`);
-            const data = await res.json();
-            console.log(`✅ ${name} data fetched successfully`);
-            return data;
-          } catch (err) {
-            console.error(`❌ ${name} API error (attempt ${attempt + 1}):`, err);
-            if (attempt === maxRetries) {
-              console.error(`❌ ${name} API failed after ${maxRetries + 1} attempts`);
-              return { success: false, [name.toLowerCase()]: [] };
-            }
-            // Wait before retry (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-          }
-        }
-      };
-
-      // Fetch data sequentially with small delays to avoid debouncing
-      // Start with deals (most important for salesman dashboard)
-      const dealsRes = await fetchWithRetry(dealsUrl.toString(), 'deals');
-
-      // Smaller delay to prevent debouncing but improve speed
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const callbacksRes = await fetchWithRetry(callbacksUrl.toString(), 'callbacks');
-
-      // Smaller delay to prevent debouncing but improve speed
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const targetsRes = await fetchWithRetry(targetsUrl.toString(), 'targets');
-
-      // Smaller delay to prevent debouncing but improve speed
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const notificationsRes = await fetchWithRetry(notificationsUrl.toString(), 'notifications');
-
-      // Smaller delay to prevent debouncing but improve speed
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      const usersRes = await fetchWithRetry(usersUrl.toString(), 'users');
-
-      // Smaller delay to prevent debouncing but improve speed
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Fetch callback creators data from dedicated endpoint
-      const callbackCreatorsUrl = new URL('/api/callback-creators', window.location.origin);
-      callbackCreatorsUrl.searchParams.set('userRole', userRole);
-      callbackCreatorsUrl.searchParams.set('userId', user.id);
-      if (user.managedTeam) {
-        callbackCreatorsUrl.searchParams.set('managedTeam', user.managedTeam);
-      }
-      callbackCreatorsUrl.searchParams.set('limit', '3'); // Top 3 creators
-
-      const callbackCreatorsRes = await fetchWithRetry(callbackCreatorsUrl.toString(), 'callback-creators');
-
-      // Process responses with better error handling
-      const dealsData = Array.isArray(dealsRes) ? dealsRes : (dealsRes?.deals || dealsRes?.data || []);
-      const callbacksData = Array.isArray(callbacksRes) ? callbacksRes : (callbacksRes?.callbacks || callbacksRes?.data || []);
-      const targetsData = Array.isArray(targetsRes) ? targetsRes : (targetsRes?.targets || targetsRes?.data || []);
-      const notificationsData = Array.isArray(notificationsRes) ? notificationsRes : (notificationsRes?.notifications || notificationsRes?.data || []);
-      const usersData = Array.isArray(usersRes) ? usersRes : (usersRes?.users || usersRes?.data || []);
-      const callbackCreatorsApiData = callbackCreatorsRes?.success ? callbackCreatorsRes.data : null;
-
-      setDeals(dealsData);
-      setCallbacks(callbacksData);
-      setTargets(targetsData);
-      setNotifications(notificationsData);
-      setUsers(usersData);
-      setAnalyticsData(callbackCreatorsApiData);
-
-      console.log(`✅ ${userRole} data loaded successfully:`, {
-        deals: dealsData.length,
-        callbacks: callbacksData.length,
-        targets: targetsData.length,
-        notifications: notificationsData.length,
-        users: usersData.length
-      });
-
-      // Debug: Show sample data structure
-      if (dealsData.length > 0) {
-        console.log('📋 Sample deal data:', dealsData[0]);
-        console.log('💰 Available amount fields:', {
-          amountPaid: dealsData[0].amountPaid,
-          amount_paid: dealsData[0].amount_paid,
-          totalAmount: dealsData[0].totalAmount,
-          total_amount: dealsData[0].total_amount,
-          revenue: dealsData[0].revenue
-        });
-      }
-      
-      if (callbacksData.length > 0) {
-        console.log('📞 Sample callback data:', callbacksData[0]);
-        console.log('📞 Available callback fields:', {
-          SalesAgentID: callbacksData[0].SalesAgentID,
-          salesAgentId: callbacksData[0].salesAgentId,
-          created_by_id: callbacksData[0].created_by_id,
-          sales_agent: callbacksData[0].sales_agent,
-          salesAgentName: callbacksData[0].salesAgentName,
-          agent_name: callbacksData[0].agent_name
-        });
-      }
-
-      if (usersData.length > 0) {
-        console.log('👤 Sample user data:', usersData[0]);
-        console.log('👤 Available user fields:', {
-          id: usersData[0].id,
-          name: usersData[0].name,
-          username: usersData[0].username,
-          full_name: usersData[0].full_name,
-          team: usersData[0].team,
-          team_name: usersData[0].team_name,
-          role: usersData[0].role
-        });
-      }
-
-    } catch (error) {
-      console.error(`❌ Error fetching ${userRole} data:`, error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  // Load data on component mount and when filters change with debouncing
+  // ✅ SWR: Fetch users separately (not included in SWR dashboard hook)
   useEffect(() => {
-    if (user?.id) {
-      // Clear any existing timeout
-      if (fetchTimeout) {
-        clearTimeout(fetchTimeout);
+    async function fetchUsers() {
+      try {
+        const res = await fetch('/api/users?limit=1000');
+        const data = await res.json();
+        setUsers(data?.users || []);
+      } catch (error) {
+        console.error('❌ Error loading users:', error);
       }
-      
-      // Set a new timeout to debounce rapid filter changes
-      const timeout = setTimeout(() => {
-        console.log('🔄 Debounced data fetch triggered');
-        fetchData();
-      }, 300); // 300ms debounce for faster response
-      
-      setFetchTimeout(timeout);
-      
-      // Cleanup timeout on unmount
-      return () => {
-        if (timeout) {
-          clearTimeout(timeout);
-        }
-      };
     }
-  }, [user?.id, selectedMonth, selectedYear, dateFilterKey]);
+    fetchUsers();
+  }, []);
 
   // Calculate KPIs and analytics
   const analytics = useMemo(() => {
     
     // Handle multiple field name variations for amount
-    const totalRevenue = deals.reduce((sum, deal) => {
+    const totalRevenue = deals.reduce((sum: number, deal: any) => {
       const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
       return sum + amount;
     }, 0);
@@ -426,8 +212,8 @@ function SalesAnalysisDashboard({
     console.log('💰 Revenue calculation:', { totalRevenue, totalDeals, avgDealSize });
     
     const totalCallbacks = callbacks.length;
-    const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length;
-    const pendingCallbacks = callbacks.filter(cb => cb.status === 'pending').length;
+    const completedCallbacks = callbacks.filter((cb: any) => cb.status === 'completed').length;
+    const pendingCallbacks = callbacks.filter((cb: any) => cb.status === 'pending').length;
     const conversionRate = totalCallbacks > 0 ? (completedCallbacks / totalCallbacks) * 100 : 0;
     
     // Separate personal and team targets for team leaders
@@ -438,13 +224,13 @@ function SalesAnalysisDashboard({
     
     if (userRole === 'team_leader') {
       // Personal target
-      personalTarget = targets.find(t => 
+      personalTarget = targets.find((t: any) => 
         t.period === `${selectedYear}-${selectedMonth}` && 
         (t.agentId === user.id || t.salesAgentId === user.id)
       ) || {};
       
       // Team target (if exists)
-      teamTarget = targets.find(t => 
+      teamTarget = targets.find((t: any) => 
         t.period === `${selectedYear}-${selectedMonth}` && 
         t.salesTeam === user.managedTeam &&
         t.agentId !== user.id
@@ -458,7 +244,7 @@ function SalesAnalysisDashboard({
       targetProgress = targetRevenue > 0 ? (totalRevenue / targetRevenue) * 100 : 0;
     } else {
       // For managers and salesmen, use regular target logic
-      const currentTarget = targets.find(t => t.period === `${selectedYear}-${selectedMonth}`) || {};
+      const currentTarget = targets.find((t: any) => t.period === `${selectedYear}-${selectedMonth}`) || {};
       targetRevenue = parseFloat((currentTarget as any)?.targetRevenue || (currentTarget as any)?.target_revenue || 0);
       targetProgress = targetRevenue > 0 ? (totalRevenue / targetRevenue) * 100 : 0;
     }
@@ -470,19 +256,19 @@ function SalesAnalysisDashboard({
       date.setMonth(date.getMonth() - i);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       
-      const monthDeals = deals.filter(deal => {
+      const monthDeals = deals.filter((deal: any) => {
         const dealDate = new Date(deal.created_at || deal.createdAt);
         return dealDate.getFullYear() === date.getFullYear() && 
                dealDate.getMonth() === date.getMonth();
       });
       
-      const monthCallbacks = callbacks.filter(cb => {
+      const monthCallbacks = callbacks.filter((cb: any) => {
         const cbDate = new Date(cb.created_at || cb.createdAt);
         return cbDate.getFullYear() === date.getFullYear() && 
                cbDate.getMonth() === date.getMonth();
       });
 
-      const monthRevenue = monthDeals.reduce((sum, deal) => {
+      const monthRevenue = monthDeals.reduce((sum: number, deal: any) => {
         const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
         return sum + amount;
       }, 0);
@@ -502,7 +288,7 @@ function SalesAnalysisDashboard({
     
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, day);
-      const dayCallbacks = callbacks.filter(cb => {
+      const dayCallbacks = callbacks.filter((cb: any) => {
         const cbDate = new Date(cb.created_at || cb.createdAt);
         return cbDate.getFullYear() === date.getFullYear() && 
                cbDate.getMonth() === date.getMonth() &&
@@ -513,15 +299,15 @@ function SalesAnalysisDashboard({
         day: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         fullDate: date.toISOString().split('T')[0],
         callbacks: dayCallbacks.length,
-        pending: dayCallbacks.filter(cb => cb.status === 'pending').length,
-        contacted: dayCallbacks.filter(cb => cb.status === 'contacted').length,
-        completed: dayCallbacks.filter(cb => cb.status === 'completed').length,
-        cancelled: dayCallbacks.filter(cb => cb.status === 'cancelled').length
+        pending: dayCallbacks.filter((cb: any) => cb.status === 'pending').length,
+        contacted: dayCallbacks.filter((cb: any) => cb.status === 'contacted').length,
+        completed: dayCallbacks.filter((cb: any) => cb.status === 'completed').length,
+        cancelled: dayCallbacks.filter((cb: any) => cb.status === 'cancelled').length
       });
     }
 
     // Service distribution
-    const serviceDistribution = deals.reduce((acc, deal) => {
+    const serviceDistribution = deals.reduce((acc: any, deal: any) => {
       const service = deal.serviceTier || deal.service_tier || 'Unknown';
       acc[service] = (acc[service] || 0) + 1;
       return acc;
@@ -536,13 +322,13 @@ function SalesAnalysisDashboard({
     // Status distribution for callbacks
     const callbackStatusData = [
       { name: 'Pending', value: pendingCallbacks, color: '#d97706' },
-      { name: 'Contacted', value: callbacks.filter(cb => cb.status === 'contacted').length, color: '#2563eb' },
+      { name: 'Contacted', value: callbacks.filter((cb: any) => cb.status === 'contacted').length, color: '#2563eb' },
       { name: 'Completed', value: completedCallbacks, color: '#059669' },
-      { name: 'Cancelled', value: callbacks.filter(cb => cb.status === 'cancelled').length, color: '#dc2626' }
-    ].filter(item => item.value > 0);
+      { name: 'Cancelled', value: callbacks.filter((cb: any) => cb.status === 'cancelled').length, color: '#dc2626' }
+    ].filter((item: any) => item.value > 0);
 
     // Advanced Analytics Data
-    const dealsByDay = deals.reduce((acc, deal) => {
+    const dealsByDay = deals.reduce((acc: any, deal: any) => {
       const date = new Date(deal.created_at || deal.createdAt);
       const day = date.toLocaleDateString('en-US', { weekday: 'short' });
       acc[day] = (acc[day] || 0) + 1;
@@ -552,17 +338,17 @@ function SalesAnalysisDashboard({
     const weeklyData = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => ({
       day,
       deals: dealsByDay[day] || 0,
-      revenue: deals.filter(deal => {
+      revenue: deals.filter((deal: any) => {
         const dealDate = new Date(deal.created_at || deal.createdAt);
         return dealDate.toLocaleDateString('en-US', { weekday: 'short' }) === day;
-      }).reduce((sum, deal) => {
+      }).reduce((sum: number, deal: any) => {
         const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
         return sum + amount;
       }, 0)
     }));
 
     // Performance by Hour
-    const hourlyData = deals.reduce((acc, deal) => {
+    const hourlyData = deals.reduce((acc: any, deal: any) => {
       const hour = new Date(deal.created_at || deal.createdAt).getHours();
       const timeSlot = `${hour}:00`;
       acc[timeSlot] = (acc[timeSlot] || 0) + 1;
@@ -586,25 +372,25 @@ function SalesAnalysisDashboard({
 
     const dealSizeData = dealSizeRanges.map(({ range, min, max }, index) => ({
       range: range || `Range ${index + 1}`, // Ensure range is never null/undefined and unique
-      count: deals.filter(deal => {
+      count: deals.filter((deal: any) => {
         const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
         return amount >= min && (max === Infinity ? true : amount < max);
       }).length,
       id: `deal-size-${index}` // Add unique identifier
-    })).filter(item => item.range && typeof item.count === 'number' && !isNaN(item.count)); // Filter out any invalid entries
+    })).filter((item: any) => item.range && typeof item.count === 'number' && !isNaN(item.count)); // Filter out any invalid entries
 
     // Conversion Funnel Data
     const funnelData = [
       { name: 'Leads', value: callbacks.length, fill: '#8884d8' },
-      { name: 'Contacted', value: callbacks.filter(cb => cb.status === 'contacted').length, fill: '#83a6ed' },
-      { name: 'Qualified', value: callbacks.filter(cb => cb.status === 'qualified' || cb.status === 'interested').length || Math.floor(callbacks.length * 0.6), fill: '#8dd1e1' },
+      { name: 'Contacted', value: callbacks.filter((cb: any) => cb.status === 'contacted').length, fill: '#83a6ed' },
+      { name: 'Qualified', value: callbacks.filter((cb: any) => cb.status === 'qualified' || cb.status === 'interested').length || Math.floor(callbacks.length * 0.6), fill: '#8dd1e1' },
       { name: 'Deals', value: deals.length, fill: '#82ca9d' },
-      { name: 'Closed', value: deals.filter(deal => deal.status === 'completed' || deal.status === 'closed').length, fill: '#a4de6c' }
+      { name: 'Closed', value: deals.filter((deal: any) => deal.status === 'completed' || deal.status === 'closed').length, fill: '#a4de6c' }
     ];
 
     // Agent Performance (for team leaders)
     const agentPerformance = userRole === 'team_leader' ? 
-      deals.reduce((acc, deal) => {
+      deals.reduce((acc: any, deal: any) => {
         const agent = deal.salesAgentName || deal.sales_agent_name || 'Unknown';
         if (!acc[agent]) {
           acc[agent] = { name: agent, deals: 0, revenue: 0 };
@@ -621,7 +407,7 @@ function SalesAnalysisDashboard({
     
     // First, create a user lookup map for faster access
     const userLookup = new Map();
-    users.forEach(user => {
+    users.forEach((user: any) => {
       userLookup.set(user.id, user);
       // Also map by username for additional matching
       if (user.username) {
@@ -629,10 +415,8 @@ function SalesAnalysisDashboard({
       }
     });
 
-    console.log('👥 User lookup created with', userLookup.size, 'users');
-    console.log('📞 Processing', callbacks.length, 'callbacks for creator analysis');
     
-    callbacks.forEach(callback => {
+    callbacks.forEach((callback: any) => {
       // Try multiple field variations for agent ID
       const agentId = callback.SalesAgentID || callback.salesAgentId || callback.created_by_id || callback.sales_agent_id;
       const agentName = callback.sales_agent || callback.salesAgentName || callback.agent_name;
@@ -645,7 +429,7 @@ function SalesAnalysisDashboard({
         }
         if (!user && agentName) {
           // Try to find user by name matching
-          user = Array.from(userLookup.values()).find(u => 
+          user = Array.from(userLookup.values()).find((u: any) => 
             u.name === agentName || u.username === agentName || u.full_name === agentName
           );
         }
@@ -727,8 +511,8 @@ function SalesAnalysisDashboard({
           <h1 className="text-3xl font-bold text-gray-900">Sales Analytics</h1>
           <p className="text-gray-600">Personal performance dashboard for {user?.name}</p>
         </div>
-        <Button onClick={handleRefresh} disabled={loading || refreshing} className="flex items-center gap-2">
-          <RefreshCw className={`h-4 w-4 ${(loading || refreshing) ? 'animate-spin' : ''}`} />
+        <Button onClick={handleRefresh} disabled={isLoading || refreshing} className="flex items-center gap-2">
+          <RefreshCw className={`h-4 w-4 ${(isLoading || refreshing) ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
@@ -740,7 +524,7 @@ function SalesAnalysisDashboard({
         onMonthChange={(month) => handleDateChange(month, selectedYear)}
         onYearChange={(year) => handleDateChange(selectedMonth, year)}
         onRefresh={handleRefresh}
-        loading={loading}
+        loading={isLoading}
       />
 
       {/* KPI Cards */}
@@ -915,9 +699,9 @@ function SalesAnalysisDashboard({
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="value" fill="#2563eb">
+                <Bar dataKey="value">
                   {analytics.callbackStatusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell key={`callback-status-${index}-${entry.name}`} fill={entry.color} />
                   ))}
                 </Bar>
               </BarChart>
@@ -1037,8 +821,8 @@ function SalesAnalysisDashboard({
                   name === 'deals' ? 'Deals' : 'Revenue'
                 ]} />
                 <Legend />
-                <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" key="weekly-deals-bar" />
-                <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#82ca9d" strokeWidth={3} name="Revenue" key="weekly-revenue-line" />
+                <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" />
+                <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#82ca9d" strokeWidth={3} name="Revenue" />
               </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
@@ -1059,11 +843,7 @@ function SalesAnalysisDashboard({
                 <XAxis type="number" />
                 <YAxis dataKey="range" type="category" width={80} />
                 <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
-                <Bar dataKey="count" fill="#fbbf24">
-                  {analytics.dealSizeData.map((entry, index) => (
-                    <Cell key={`deal-size-${index}-${entry.range}`} fill="#fbbf24" />
-                  ))}
-                </Bar>
+                <Bar dataKey="count" fill="#fbbf24" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -1117,8 +897,8 @@ function SalesAnalysisDashboard({
                     name === 'deals' ? 'Deals' : 'Revenue'
                   ]} />
                   <Legend />
-                  <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" key="agent-deals-bar" />
-                  <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" key="agent-revenue-bar" />
+                  <Bar yAxisId="left" dataKey="deals" fill="#8884d8" name="Deals" />
+                  <Bar yAxisId="right" dataKey="revenue" fill="#82ca9d" name="Revenue" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1172,7 +952,7 @@ function SalesAnalysisDashboard({
               </div>
             ) : (
               <>
-                {deals.slice(0, 5).map((deal, index) => {
+                {deals.slice(0, 5).map((deal: any, index: number) => {
               const customerName = deal.customerName || deal.customer_name || deal.clientName || deal.client_name || 'Unknown Customer';
               const amount = parseFloat(deal.amountPaid || deal.amount_paid || deal.totalAmount || deal.total_amount || deal.revenue || 0);
               const status = deal.status || deal.dealStatus || deal.deal_status || 'completed';
@@ -1196,7 +976,7 @@ function SalesAnalysisDashboard({
               );
             })}
             
-            {callbacks.slice(0, 3).map((callback, index) => (
+            {callbacks.slice(0, 3).map((callback: any, index: number) => (
               <div key={callback.id || index} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${
