@@ -179,7 +179,7 @@ export default function CallbacksTablePage() {
       callback.status || '',
       callback.createdBy || '',
       callback.createdAt ? format(new Date(callback.createdAt), 'yyyy-MM-dd HH:mm:ss') : '',
-      callback.convertedToDeal ? 'Yes' : 'No'
+      callback.converted_to_deal ? 'Yes' : 'No'
     ])
 
     const csvContent = [headers, ...csvData]
@@ -220,7 +220,7 @@ export default function CallbacksTablePage() {
   // Calculate summary statistics from current page data
   const pendingCallbacks = callbacks.filter(cb => cb.status === 'pending').length
   const completedCallbacks = callbacks.filter(cb => cb.status === 'completed').length
-  const convertedCallbacks = callbacks.filter(cb => cb.convertedToDeal).length
+  const convertedCallbacks = callbacks.filter(cb => cb.converted_to_deal).length
   const uniqueAgents = new Set(callbacks.map(cb => cb.salesAgentName)).size
   const conversionRate = callbacks.length > 0 ? (convertedCallbacks / callbacks.length) * 100 : 0
 
@@ -479,7 +479,7 @@ export default function CallbacksTablePage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {cb.convertedToDeal ? (
+                      {cb.converted_to_deal ? (
                         <Badge variant="default" className="gap-1">
                           ✅ Yes
                         </Badge>

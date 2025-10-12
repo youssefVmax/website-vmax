@@ -18,10 +18,6 @@ export async function OPTIONS() {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 GET /api/targets - Starting request processing');
-
-  
-
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const agentId = searchParams.get('agentId');
@@ -50,8 +46,6 @@ export async function GET(request: NextRequest) {
 
     const [rows] = await query<any>(baseSql, params);
     const [totals] = await query<any>(countSql, params);
-
-    console.log('✅ Query executed successfully, found', rows.length, 'targets');
 
     return addCorsHeaders(NextResponse.json({
       targets: rows,

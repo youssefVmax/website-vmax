@@ -81,8 +81,6 @@ export async function GET(request: NextRequest) {
 
     // Get total count
     const [totals] = await query<any>(countSql, params);
-    
-    console.log('✅ Users query executed successfully, returned', rows.length, 'rows');
 
     // Transform data for frontend compatibility
     const users = rows.map((user: any) => ({

@@ -108,12 +108,6 @@ export async function GET(request: NextRequest) {
 
         const [dealsResult] = await query(dealsQuery, dealsParams);
         result.data.deals = Array.isArray(dealsResult) ? dealsResult : [];
-        console.log('✅ Unified Data API: Fetched', result.data.deals.length, 'deals');
-        
-        // Log sample data for debugging
-        if (result.data.deals.length > 0) {
-          console.log('🔍 Unified Data API: Sample deal:', result.data.deals[0]);
-        }
         
       } catch (error) {
         console.error('❌ Error fetching deals:', error);
@@ -164,7 +158,6 @@ export async function GET(request: NextRequest) {
 
         const [callbacksResult] = await query(callbacksQuery, callbacksParams);
         result.data.callbacks = Array.isArray(callbacksResult) ? callbacksResult : [];
-        console.log('✅ Unified Data API: Fetched', result.data.callbacks.length, 'callbacks');
       } catch (error) {
         console.error('❌ Error fetching callbacks:', error);
         console.error('❌ Callback error details:', {
@@ -199,7 +192,6 @@ export async function GET(request: NextRequest) {
 
         const [targetsResult] = await query(targetsQuery, targetsParams);
         result.data.targets = Array.isArray(targetsResult) ? targetsResult : [];
-        console.log('✅ Unified Data API: Fetched', result.data.targets.length, 'targets');
       } catch (error) {
         console.error('❌ Error fetching targets:', error);
         result.data.targets = [];
@@ -245,7 +237,6 @@ export async function GET(request: NextRequest) {
 
           const [notificationsResult] = await query(notificationsQuery, notificationsParams);
           result.data.notifications = Array.isArray(notificationsResult) ? notificationsResult : [];
-          console.log('✅ Unified Data API: Fetched', result.data.notifications.length, 'notifications');
         }
       } catch (error) {
         console.error('❌ Error fetching notifications:', error);
@@ -265,7 +256,6 @@ export async function GET(request: NextRequest) {
         const usersQuery = `SELECT id, username, name, email, role, team, phone, managedTeam, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
         const [usersResult] = await query(usersQuery, []);
         result.data.users = Array.isArray(usersResult) ? usersResult : [];
-        console.log('✅ Unified Data API: Fetched', result.data.users.length, 'users');
       } catch (error) {
         console.error('❌ Error fetching users:', error);
         result.data.users = [];

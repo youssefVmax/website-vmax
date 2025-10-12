@@ -24,8 +24,6 @@ export async function GET(request: NextRequest) {
     const managedTeam = searchParams.get('managedTeam');
     const dateRange = searchParams.get('dateRange'); // Number of days to look back
 
-    console.log('🔄 Fetching dashboard stats:', { userRole, userId, managedTeam, dateRange });
-
     // First, let's check if the tables exist
     try {
       const [tablesResult] = await query<any>('SHOW TABLES');
