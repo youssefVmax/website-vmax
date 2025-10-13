@@ -182,7 +182,11 @@ export default function NotificationsPage({ userRole = 'salesman', user }: Notif
         </div>
       </div>
 
-      <Tabs defaultValue="all" onValueChange={setActiveTab}>
+      <Tabs defaultValue="all" onValueChange={(value) => {
+        if (value !== activeTab) {
+          setActiveTab(value)
+        }
+      }}>
         <TabsList className="grid w-full grid-cols-4 mb-6">
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="unread">Unread</TabsTrigger>

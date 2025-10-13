@@ -142,7 +142,9 @@ export default function ManageCallbacksPage() {
   }, [swrRefresh]);
   
   const loading = swrLoading;
-  const [callbacks, setCallbacks] = useState<CallbackRow[]>([]);
+  const callbacks = useMemo<CallbackRow[]>(() => Array.isArray(swrCallbacks) ? (swrCallbacks as CallbackRow[]) : [], [swrCallbacks]);
+  const totalCallbacks = callbacks.length;
+
   const [editingCallback, setEditingCallback] = useState<CallbackRow | null>(null);
   const [editForm, setEditForm] = useState<Partial<CallbackRow>>({});
   const [availableMonths, setAvailableMonths] = useState<{value: string; label: string}[]>([]);
@@ -361,28 +363,18 @@ export default function ManageCallbacksPage() {
 
   // Sync SWR data with conditional updates
   useEffect(() => {
-    if (swrCallbacks && swrCallbacks.length >= 0) {
-      setCallbacks(prev => {
-        // Only update if data actually changed (by length or reference)
-        if (prev.length !== swrCallbacks.length || prev !== swrCallbacks) {
-          return swrCallbacks;
-        }
+    setPagination(prev => {
+      const nextTotalPages = prev.limit > 0 ? Math.ceil(totalCallbacks / prev.limit) : 0;
+      if (prev.total === totalCallbacks && prev.totalPages === nextTotalPages) {
         return prev;
-      });
-      setPagination(prev => {
-        // Only update if total actually changed
-        const newTotal = swrCallbacks.length;
-        if (prev.total !== newTotal) {
-          return {
-            ...prev,
-            total: newTotal,
-            totalPages: Math.ceil(newTotal / prev.limit)
-          };
-        }
-        return prev;
-      });
-    }
-  }, [swrCallbacks]);
+      }
+      return {
+        ...prev,
+        total: totalCallbacks,
+        totalPages: nextTotalPages,
+      };
+    });
+  }, [totalCallbacks]);
 
   // Load selector data on mount
   useEffect(() => {
