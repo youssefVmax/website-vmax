@@ -198,8 +198,12 @@ function SalesAnalysisDashboard({
 
         const data = await response.json();
         if (!cancelled) {
-          const apiTotal = typeof data?.total === 'number' ? data.total : Array.isArray(data?.callbacks) ? data.callbacks.length : null;
+          // Use systemTotal for KPI display (actual system-wide count), fallback to total (filtered count)
+          const apiTotal = typeof data?.systemTotal === 'number' ? data.systemTotal : 
+                          typeof data?.total === 'number' ? data.total : 
+                          Array.isArray(data?.callbacks) ? data.callbacks.length : null;
           setTotalCallbacksCount(apiTotal);
+          console.log('📞 Sales Dashboard: Loaded callback total from API:', { systemTotal: data?.systemTotal, filteredTotal: data?.total, displayTotal: apiTotal });
         }
       } catch (error) {
         if ((error as any)?.name !== 'AbortError') {

@@ -136,10 +136,12 @@ export async function GET(request: NextRequest) {
     
     let rows: any[] = [];
     let totals: any[] = [];
+    let systemTotal: any[] = [];
     try {
       // Build the complete SQL query with proper parameter handling
       const baseSql = `SELECT * FROM callbacks ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC`;
       const countSql = `SELECT COUNT(*) as c FROM callbacks ${whereSql}`;
+      const systemCountSql = `SELECT COUNT(*) as total FROM callbacks`; // System-wide total for KPIs
       
       // For pagination, append LIMIT and OFFSET directly to avoid prepared statement issues
       // limit and offset are already validated integers, so this is safe
@@ -147,11 +149,13 @@ export async function GET(request: NextRequest) {
       
       [rows] = await query<any>(paginatedSql, params);
       [totals] = await query<any>(countSql, params);
+      [systemTotal] = await query<any>(systemCountSql); // Get system-wide total
       
     } catch (queryError) {
       console.error('❌ Callbacks query error:', queryError);
       rows = [];
       totals = [{ c: 0 }];
+      systemTotal = [{ total: 0 }];
     }
 
     // Get available months for filtering (only for managers)
@@ -172,7 +176,8 @@ export async function GET(request: NextRequest) {
 
     return addCorsHeaders(NextResponse.json({
       callbacks: rows,
-      total: totals[0]?.c || 0,
+      total: totals[0]?.c || 0, // Filtered total for pagination
+      systemTotal: systemTotal[0]?.total || 0, // System-wide total for KPIs
       page,
       limit,
       success: true,

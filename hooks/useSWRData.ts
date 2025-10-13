@@ -76,6 +76,7 @@ export function useSWRCallbacks(options: UseDealsOptions = {}) {
   return {
     callbacks: data?.callbacks || [],
     total: data?.total || 0,
+    systemTotal: data?.systemTotal || 0, // System-wide total for KPIs
     page: data?.page || 1,
     totalPages: data?.totalPages || 1,
     isLoading,

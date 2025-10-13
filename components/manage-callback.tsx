@@ -118,17 +118,19 @@ export default function ManageCallbacksPage() {
   const [monthFilter, setMonthFilter] = useState<string>('all');
   const [teamFilter, setTeamFilter] = useState<string>('all');
 
-  // SWR: Use SWR hook for callbacks data
+  // SWR: Use SWR hook for callbacks data with pagination
   const { 
     callbacks: swrCallbacks = [], 
+    total: filteredTotal = 0,
+    systemTotal: totalCallbacksFromAPI = 0, // Use systemTotal for KPI display
     isLoading: swrLoading, 
     error: swrError,
     refresh: swrRefresh 
   } = useSWRCallbacks({
     userId,
     userRole,
-    limit: 10000,
-    page: 1,
+    limit: pagination.limit,
+    page: pagination.page,
     search: debouncedSearch,
     status: statusFilter !== 'all' ? statusFilter : undefined,
     agent: agentFilter !== 'all' ? agentFilter : undefined,
@@ -143,7 +145,7 @@ export default function ManageCallbacksPage() {
   
   const loading = swrLoading;
   const callbacks = useMemo<CallbackRow[]>(() => Array.isArray(swrCallbacks) ? (swrCallbacks as CallbackRow[]) : [], [swrCallbacks]);
-  const totalCallbacks = callbacks.length;
+  const totalCallbacks = totalCallbacksFromAPI; // Use API total instead of local array length
 
   const [editingCallback, setEditingCallback] = useState<CallbackRow | null>(null);
   const [editForm, setEditForm] = useState<Partial<CallbackRow>>({});
@@ -364,17 +366,17 @@ export default function ManageCallbacksPage() {
   // Sync SWR data with conditional updates
   useEffect(() => {
     setPagination(prev => {
-      const nextTotalPages = prev.limit > 0 ? Math.ceil(totalCallbacks / prev.limit) : 0;
-      if (prev.total === totalCallbacks && prev.totalPages === nextTotalPages) {
+      const nextTotalPages = prev.limit > 0 ? Math.ceil(filteredTotal / prev.limit) : 0;
+      if (prev.total === filteredTotal && prev.totalPages === nextTotalPages) {
         return prev;
       }
       return {
         ...prev,
-        total: totalCallbacks,
+        total: filteredTotal, // Use filtered total for pagination
         totalPages: nextTotalPages,
       };
     });
-  }, [totalCallbacks]);
+  }, [filteredTotal]);
 
   // Load selector data on mount
   useEffect(() => {
@@ -674,14 +676,59 @@ export default function ManageCallbacksPage() {
 
   return (
     <div className="w-full h-full p-4 md:p-6 space-y-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Callbacks</p>
+                <p className="text-2xl font-bold">{totalCallbacksFromAPI.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">All recorded callbacks</p>
+              </div>
+              <Phone className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {userObj?.role === 'manager' ? 'Filtered Results' : 
+                   userObj?.role === 'team_leader' ? 'Team Callbacks' : 'My Callbacks'}
+                </p>
+                <p className="text-2xl font-bold">{filteredTotal.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Current view</p>
+              </div>
+              <Search className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Page Results</p>
+                <p className="text-2xl font-bold">{callbacks.length}</p>
+                <p className="text-xs text-muted-foreground">This page</p>
+              </div>
+              <RefreshCw className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="w-full shadow-lg">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>
-              {userObj?.role === 'manager' ? 'Callbacks Overview' : 'Manage Callbacks'} - {pagination.total} Total
-              {pagination.total >= effectiveLimit && 
+              {userObj?.role === 'manager' ? 'Callbacks Overview' : 'Manage Callbacks'} - {filteredTotal} Filtered
+              {filteredTotal >= effectiveLimit && 
                 <span className="text-sm text-muted-foreground ml-2">
-                  (fetched {pagination.total} callbacks)
+                  (showing {callbacks.length} on this page)
                 </span>
               }
             </CardTitle>

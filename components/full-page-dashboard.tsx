@@ -680,6 +680,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
   const [analytics, setAnalytics] = useState<any>(null);
   const [chartData, setChartData] = useState<any>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [totalCallbacksFromAPI, setTotalCallbacksFromAPI] = useState<number | null>(null);
 
   // Calculate metrics with safe number conversion
   const metrics = useMemo(() => {
@@ -708,13 +709,13 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
       totalSales: totalRevenue, // Alias for compatibility
       totalDeals: deals.length,
       averageDealSize: deals.length > 0 ? totalRevenue / deals.length : 0,
-      totalCallbacks: callbacks.length,
+      totalCallbacks: totalCallbacksFromAPI ?? callbacks.length, // Use API total if available
       totalTargets: targets.length,
       deals,
       callbacks,
       targets
     };
-  }, [data]);
+  }, [data, totalCallbacksFromAPI]);
 
   const [totalAgents, setTotalAgents] = useState(0)
 
@@ -744,6 +745,63 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     }
     loadAgentCount()
   }, [user.role])
+
+  // Load actual callback total from API
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadCallbackTotal = async () => {
+      try {
+        if (!user?.role || !user?.id) return;
+
+        const params = new URLSearchParams({
+          userRole: user.role,
+          userId: user.id,
+          limit: '1',
+          page: '1'
+        });
+
+        if (user?.managedTeam) {
+          params.set('managedTeam', user.managedTeam);
+        }
+
+        const response = await fetch(`/api/callbacks?${params.toString()}`, {
+          signal: controller.signal,
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load callbacks total: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!cancelled) {
+          // Use systemTotal for KPI display (actual system-wide count), fallback to total (filtered count)
+          const apiTotal = typeof data?.systemTotal === 'number' ? data.systemTotal : 
+                          typeof data?.total === 'number' ? data.total : null;
+          setTotalCallbacksFromAPI(apiTotal);
+          console.log('📞 DashboardOverview: Loaded callback total from API:', { systemTotal: data?.systemTotal, filteredTotal: data?.total, displayTotal: apiTotal });
+        }
+      } catch (error) {
+        if ((error as any)?.name !== 'AbortError') {
+          console.error('❌ DashboardOverview: Error fetching callback total:', error);
+        }
+        if (!cancelled) {
+          setTotalCallbacksFromAPI(null);
+        }
+      }
+    };
+
+    loadCallbackTotal();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [user?.role, user?.id, user?.managedTeam])
 
   if ((statsLoading || isLoading) && (!data || data.deals.length === 0)) {
     return (
@@ -860,16 +918,20 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-black dark:text-gray-200">
-                  {user.role === 'manager' ? "Total Users" : "Performance Score"}
+                  {user.role === 'manager' ? "Total Callbacks" : "Performance Score"}
                 </p>
                 <p className="text-2xl font-bold">
                   {user.role === 'manager' 
-                    ? totalAgents 
+                    ? (metrics?.totalCallbacks || 0).toLocaleString()
                     : `${Math.min(100, ((metrics?.deals?.length || 0) * 10))}%`
                   }
                 </p>
               </div>
-              <Users className="h-8 w-8 text-purple-600" />
+              {user.role === 'manager' ? (
+                <Phone className="h-8 w-8 text-purple-600" />
+              ) : (
+                <Users className="h-8 w-8 text-purple-600" />
+              )}
             </div>
           </CardContent>
         </Card>
@@ -879,16 +941,25 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-black dark:text-gray-200">
-                  {user.role === 'manager' ? "Avg Deal Size" : "Weekly Target"}
+                  {user.role === 'manager' 
+                    ? "Avg Deal Size" 
+                    : user.role === 'team_leader' 
+                      ? "Team Callbacks"
+                      : "My Callbacks"
+                  }
                 </p>
                 <p className="text-2xl font-bold">
                   {user.role === 'manager' 
                     ? `$${(metrics?.averageDealSize || 0).toLocaleString()}`
-                    : `${Math.min(100, (((metrics?.deals?.length || 0) / 7) * 100))}%`
+                    : (metrics?.totalCallbacks || 0).toLocaleString()
                   }
                 </p>
               </div>
-              <Target className="h-8 w-8 text-orange-600" />
+              {user.role === 'manager' ? (
+                <Target className="h-8 w-8 text-orange-600" />
+              ) : (
+                <Phone className="h-8 w-8 text-orange-600" />
+              )}
             </div>
           </CardContent>
         </Card>
