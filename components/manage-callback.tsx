@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSWRCallbacks } from '@/hooks/useSWRData';
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,24 +11,18 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ServerPagination } from "@/components/ui/server-pagination";
-import { useServerPagination } from "@/hooks/useServerPagination";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { 
   Phone, 
-  Plus, 
   Search, 
-  Filter, 
   Edit, 
   Calendar, 
   Clock, 
-  User, 
   Mail, 
   MessageSquare,
   CheckCircle,
   XCircle,
-  AlertCircle,
   Trash2,
   Save,
   RefreshCw,
@@ -59,8 +53,20 @@ interface CallbackRow {
   created_by: string;
   created_by_id: string;
   SalesAgentID: string;
-  created_at?: any;
-  updated_at?: any;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+}
+
+interface TimelineEvent {
+  id: string;
+  type: 'initial' | 'status_update' | 'followup' | 'final';
+  date: Date;
+  callback: CallbackRow;
+  title: string;
+  description: string;
+  status: CallbackRow["status"];
+  isFirst?: boolean;
+  isScheduled?: boolean;
 }
 
 const statusColors: Record<CallbackRow["status"], string> = {
@@ -81,32 +87,47 @@ export default function ManageCallbacksPage() {
   const { user } = useAuth();
   const router = useRouter();
   
-  // Pagination state (must be before SWR hook)
+  // Memoize user values to prevent unnecessary re-renders
+  const userId = useMemo(() => user?.id || '', [user?.id]);
+  const userRole = useMemo(() => user?.role || '', [user?.role]);
+  const userObj = useMemo(() => {
+    if (!user) return null;
+    return {
+      id: user.id,
+      role: user.role,
+      managedTeam: (user as any)?.managedTeam
+    };
+  }, [user?.id, user?.role, (user as any)?.managedTeam]);
+  
+  // Use ref for swrRefresh to avoid dependency issues
+  const swrRefreshRef = useRef<(() => void) | null>(null);
+  
+  // Pagination state
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 25,
     total: 0,
     totalPages: 0
-  })
+  });
 
-  // Filter states (MUST be before SWR hook)
+  // Filter states
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CallbackRow["status"]>("all");
-  const [agentFilter, setAgentFilter] = useState<string>('all')
-  const [monthFilter, setMonthFilter] = useState<string>('all')
-  const [teamFilter, setTeamFilter] = useState<string>('all')
+  const [agentFilter, setAgentFilter] = useState<string>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [teamFilter, setTeamFilter] = useState<string>('all');
 
-  // ✅ SWR: Use SWR hook for callbacks data (uses filters above)
+  // SWR: Use SWR hook for callbacks data
   const { 
     callbacks: swrCallbacks = [], 
     isLoading: swrLoading, 
     error: swrError,
     refresh: swrRefresh 
   } = useSWRCallbacks({
-    userId: user?.id,
-    userRole: user?.role,
-    limit: 10000,  // ✅ FIX: Get all callbacks (high limit)
+    userId,
+    userRole,
+    limit: 10000,
     page: 1,
     search: debouncedSearch,
     status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -115,59 +136,66 @@ export default function ManageCallbacksPage() {
     month: monthFilter !== 'all' ? monthFilter : undefined
   });
   
-  // ✅ Use SWR loading state (no local loading state needed)
+  // Store swrRefresh in ref
+  useEffect(() => {
+    swrRefreshRef.current = swrRefresh;
+  }, [swrRefresh]);
+  
   const loading = swrLoading;
   const [callbacks, setCallbacks] = useState<CallbackRow[]>([]);
   const [editingCallback, setEditingCallback] = useState<CallbackRow | null>(null);
   const [editForm, setEditForm] = useState<Partial<CallbackRow>>({});
-  const [availableMonths, setAvailableMonths] = useState<{value: string; label: string}[]>([])
-  const [availableAgents, setAvailableAgents] = useState<{value: string; label: string}[]>([])
-  const [availableTeams, setAvailableTeams] = useState<{value: string; label: string}[]>([])
-  const [selectorLoading, setSelectorLoading] = useState(false)
-  const [historyForPhone, setHistoryForPhone] = useState<string | null>(null)
+  const [availableMonths, setAvailableMonths] = useState<{value: string; label: string}[]>([]);
+  const [availableAgents, setAvailableAgents] = useState<{value: string; label: string}[]>([]);
+  const [availableTeams, setAvailableTeams] = useState<{value: string; label: string}[]>([]);
+  const [selectorLoading, setSelectorLoading] = useState(false);
+  const [historyForPhone, setHistoryForPhone] = useState<string | null>(null);
 
-  const managerApiService = useMemo(() => new ManagerApiService(), [])
+  const managerApiService = useMemo(() => new ManagerApiService(), []);
 
   // Calculate effective limit based on user role
-  const effectiveLimit = user?.role === 'team_leader' ? 10000 :  // High limit for team leaders to get all data
-                        user?.role === 'manager' ? 10000 :       // High limit for managers to get all data
-                        user?.role === 'salesman' ? 10000 :      // High limit for salesmen to get all data
-                        (pagination?.limit || 25);               // Default for others
+  const effectiveLimit = useMemo(() => {
+    if (!userObj) return 25;
+    return userObj.role === 'team_leader' ? 10000 :
+           userObj.role === 'manager' ? 10000 :
+           userObj.role === 'salesman' ? 10000 :
+           (pagination?.limit || 25);
+  }, [userObj?.role, pagination?.limit]);
 
-  // Derived analytics for manager view (read-only insights) - Only compute when needed
+  // Derived analytics for manager view
   const phoneStats = useMemo(() => {
-    if (user?.role !== 'manager') return new Map(); // Skip computation for non-managers
-    const map = new Map<string, { count: number; lastUpdatedAt?: Date; agents: Set<string>; dates: Date[] }>()
+    if (userObj?.role !== 'manager') return new Map();
+    const map = new Map<string, { count: number; lastUpdatedAt?: Date; agents: Set<string>; dates: Date[] }>();
     const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
     safeCallbacks.forEach((c) => {
-      const key = c.phone_number || 'unknown'
-      if (!map.has(key)) map.set(key, { count: 0, agents: new Set<string>(), dates: [] })
-      const rec = map.get(key)!
-      rec.count += 1
+      const key = c.phone_number || 'unknown';
+      if (!map.has(key)) map.set(key, { count: 0, agents: new Set<string>(), dates: [] });
+      const rec = map.get(key)!;
+      rec.count += 1;
       if (c.updated_at) {
-        const dt = new Date(c.updated_at as any)
-        rec.lastUpdatedAt = !rec.lastUpdatedAt || dt > rec.lastUpdatedAt ? dt : rec.lastUpdatedAt
-        rec.dates.push(dt)
+        const dt = new Date(c.updated_at);
+        rec.lastUpdatedAt = !rec.lastUpdatedAt || dt > rec.lastUpdatedAt ? dt : rec.lastUpdatedAt;
+        rec.dates.push(dt);
       }
-      if (c.sales_agent) rec.agents.add(c.sales_agent)
-    })
-    return map
-  }, [callbacks, user?.role])
+      if (c.sales_agent) rec.agents.add(c.sales_agent);
+    });
+    return map;
+  }, [callbacks, userObj?.role]);
 
   const updatesByAgent = useMemo(() => {
-    if (user?.role !== 'manager') return new Map(); // Skip computation for non-managers
-    const map = new Map<string, number>()
+    if (userObj?.role !== 'manager') return new Map();
+    const map = new Map<string, number>();
     const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
     safeCallbacks.forEach((c) => {
-      const updater = (c as any).updated_by || c.sales_agent || 'Unknown'
-      map.set(updater, (map.get(updater) || 0) + 1)
-    })
-    return map
-  }, [callbacks, user?.role])
+      const updater = (c as any).updated_by || c.sales_agent || 'Unknown';
+      map.set(updater, (map.get(updater) || 0) + 1);
+    });
+    return map;
+  }, [callbacks, userObj?.role]);
 
-  // Load selector data from API (optimized with abort controller)
+  // Load selector data from API
   const loadSelectorData = useCallback(async () => {
-    if (!user) return;
+    if (!userId || !userRole) return;
     
     const controller = new AbortController();
     
@@ -179,8 +207,8 @@ export default function ManageCallbacksPage() {
         : '';
       
       const params = new URLSearchParams({
-        userRole: user.role || '',
-        userId: user.id || '',
+        userRole: userRole,
+        userId: userId,
       });
       
       const response = await fetch(`${baseUrl}/api/callbacks/selectors?${params.toString()}`, {
@@ -198,54 +226,50 @@ export default function ManageCallbacksPage() {
       const result = await response.json();
       
       if (result.success && result.data) {
-        setAvailableMonths(result.data.months || []);
-        setAvailableAgents(result.data.agents || []);
-        setAvailableTeams(result.data.teams || []);
+        // ✅ CONDITIONAL UPDATES: Only update state when data actually changes
+        setAvailableMonths(prev => {
+          const newMonths = result.data.months || [];
+          return JSON.stringify(prev) !== JSON.stringify(newMonths) ? newMonths : prev;
+        });
+        setAvailableAgents(prev => {
+          const newAgents = result.data.agents || [];
+          return JSON.stringify(prev) !== JSON.stringify(newAgents) ? newAgents : prev;
+        });
+        setAvailableTeams(prev => {
+          const newTeams = result.data.teams || [];
+          return JSON.stringify(prev) !== JSON.stringify(newTeams) ? newTeams : prev;
+        });
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-        console.error('❌ Error loading selector data:', error);
+        console.error('Error loading selector data:', error);
       }
     } finally {
       setSelectorLoading(false);
     }
     
     return () => controller.abort();
-  }, [user]);
+  }, [userId, userRole]);
 
-  // Memoize unique agents for filter dropdown to prevent lag (fallback)
+  // Memoize unique agents for filter dropdown
   const uniqueAgents = useMemo(() => {
-    // Use API data if available, otherwise fall back to computed data
     if (availableAgents.length > 0) {
       return availableAgents.map(a => a.value);
     }
     const safeCallbacks = Array.isArray(callbacks) ? callbacks : [];
     return Array.from(new Set(safeCallbacks.map(c => c.sales_agent).filter(Boolean))).sort();
-  }, [callbacks, availableAgents])
+  }, [callbacks, availableAgents]);
 
-  // Memoize timeline computation to prevent lag in dialogs
+  // Memoize timeline computation
   const getTimelineForPhone = useCallback((phoneNumber: string) => {
     const phoneCallbacks = callbacks.filter(x => (x.phone_number || '') === phoneNumber);
-    
-    interface TimelineEvent {
-      id: string;
-      type: 'initial' | 'status_update' | 'followup' | 'final';
-      date: Date;
-      callback: any;
-      title: string;
-      description: string;
-      status: CallbackRow["status"];
-      isFirst?: boolean;
-      isScheduled?: boolean;
-    }
-    
     const timelineEvents: TimelineEvent[] = [];
-    const addedEvents = new Set();
+    const addedEvents = new Set<string>();
     
     phoneCallbacks.forEach((callback, callbackIdx) => {
       // Initial call/creation event
-      const createdDate = callback.created_at ? new Date(callback.created_at as any) : (callback.first_call_date ? new Date(callback.first_call_date) : null);
-      if (createdDate) {
+      const createdDate = callback.created_at ? new Date(callback.created_at) : (callback.first_call_date ? new Date(callback.first_call_date) : null);
+      if (createdDate && !isNaN(createdDate.getTime())) {
         const eventKey = `${callback.id}-created-${createdDate.getTime()}`;
         if (!addedEvents.has(eventKey)) {
           timelineEvents.push({
@@ -264,8 +288,8 @@ export default function ManageCallbacksPage() {
       
       // Status update events
       if (callback.status === 'contacted' && callback.updated_at) {
-        const contactedDate = new Date(callback.updated_at as any);
-        if (contactedDate && createdDate && contactedDate.getTime() !== createdDate.getTime()) {
+        const contactedDate = new Date(callback.updated_at);
+        if (!isNaN(contactedDate.getTime()) && createdDate && contactedDate.getTime() !== createdDate.getTime()) {
           const eventKey = `${callback.id}-contacted-${contactedDate.getTime()}`;
           if (!addedEvents.has(eventKey)) {
             timelineEvents.push({
@@ -285,26 +309,28 @@ export default function ManageCallbacksPage() {
       // Follow-up scheduled events
       if (callback.scheduled_date && callback.scheduled_time) {
         const scheduledDateTime = new Date(`${callback.scheduled_date}T${callback.scheduled_time}`);
-        const eventKey = `followup-${callback.scheduled_date}-${callback.scheduled_time}-${callback.sales_agent}`;
-        if (!addedEvents.has(eventKey)) {
-          timelineEvents.push({
-            id: `${callback.id}-followup-${scheduledDateTime.getTime()}`,
-            type: 'followup',
-            date: scheduledDateTime,
-            callback,
-            title: 'Follow-up Scheduled',
-            description: `Follow-up appointment scheduled by ${callback.sales_agent}`,
-            status: 'pending',
-            isScheduled: true
-          });
-          addedEvents.add(eventKey);
+        if (!isNaN(scheduledDateTime.getTime())) {
+          const eventKey = `followup-${callback.scheduled_date}-${callback.scheduled_time}-${callback.sales_agent}`;
+          if (!addedEvents.has(eventKey)) {
+            timelineEvents.push({
+              id: `${callback.id}-followup-${scheduledDateTime.getTime()}`,
+              type: 'followup',
+              date: scheduledDateTime,
+              callback,
+              title: 'Follow-up Scheduled',
+              description: `Follow-up appointment scheduled by ${callback.sales_agent}`,
+              status: 'pending',
+              isScheduled: true
+            });
+            addedEvents.add(eventKey);
+          }
         }
       }
       
       // Completion/cancellation events
       if ((callback.status === 'completed' || callback.status === 'cancelled') && callback.updated_at) {
-        const finalDate = new Date(callback.updated_at as any);
-        if (createdDate && finalDate.getTime() !== createdDate.getTime()) {
+        const finalDate = new Date(callback.updated_at);
+        if (!isNaN(finalDate.getTime()) && createdDate && finalDate.getTime() !== createdDate.getTime()) {
           const eventKey = `${callback.id}-final-${callback.status}-${finalDate.getTime()}`;
           if (!addedEvents.has(eventKey)) {
             timelineEvents.push({
@@ -322,49 +348,54 @@ export default function ManageCallbacksPage() {
       }
     });
     
-    // Sort chronologically
     return timelineEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [callbacks])
+  }, [callbacks]);
 
-  // Debounce search input
+  // Debounce search input with conditional update
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
+      setDebouncedSearch(prev => prev !== search ? search : prev);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // ⚠️ REMOVED: loadCallbacks function - SWR handles all data fetching now
-  // All data fetching is done by the useSWRCallbacks hook above
-
-  // ✅ SWR: Sync SWR data to local state
-  React.useEffect(() => {
+  // Sync SWR data with conditional updates
+  useEffect(() => {
     if (swrCallbacks && swrCallbacks.length >= 0) {
-      setCallbacks(swrCallbacks);
-      setPagination(prev => ({ ...prev, total: swrCallbacks.length }));
+      setCallbacks(prev => {
+        // Only update if data actually changed (by length or reference)
+        if (prev.length !== swrCallbacks.length || prev !== swrCallbacks) {
+          return swrCallbacks;
+        }
+        return prev;
+      });
+      setPagination(prev => {
+        // Only update if total actually changed
+        const newTotal = swrCallbacks.length;
+        if (prev.total !== newTotal) {
+          return {
+            ...prev,
+            total: newTotal,
+            totalPages: Math.ceil(newTotal / prev.limit)
+          };
+        }
+        return prev;
+      });
     }
   }, [swrCallbacks]);
 
-  // Load selector data on mount (debounced)
+  // Load selector data on mount
   useEffect(() => {
-    if (!user) return;
+    if (!userId || !userRole) return;
     const timer = setTimeout(() => {
       loadSelectorData();
     }, 100);
     return () => clearTimeout(timer);
-  }, [user?.id, loadSelectorData]);
+  }, [userId, userRole, loadSelectorData]);
 
-  // ⚠️ REMOVED: SWR handles data fetching automatically
-  // The useSWRCallbacks hook will refetch when filters change
-
-  const resetToFirstPage = () => {
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  // Pagination Controls Component (only show for non-team leaders)
+  // Pagination Controls Component
   const PaginationControls = () => {
-    // Don't show pagination for team leaders since they load all callbacks on one page
-    if (user?.role === 'team_leader') {
+    if (userObj?.role === 'team_leader') {
       return (
         <div className="flex items-center justify-center px-2 py-4">
           <div className="text-sm text-muted-foreground">
@@ -408,17 +439,15 @@ export default function ManageCallbacksPage() {
 
   const updateStatus = useCallback(async (row: CallbackRow, next: "pending" | "contacted" | "completed" | "cancelled") => {
     try {
-      // Pass user context for role-based permissions
       const userContext = {
-        userRole: user?.role,
-        userId: user?.id,
-        managedTeam: user?.managedTeam
+        userRole: userObj?.role,
+        userId: userObj?.id,
+        managedTeam: userObj?.managedTeam
       };
 
-      await callbacksService.updateCallback(row.id, { status: next as any }, user, userContext);
+      await callbacksService.updateCallback(row.id, { status: next }, userObj, userContext);
       toast({ title: "Updated", description: `Callback marked as ${next}` });
-      // ✅ SWR: Refresh data
-      swrRefresh();
+      swrRefreshRef.current?.();
     } catch (error) {
       console.error("Error updating status:", error);
       toast({
@@ -427,7 +456,7 @@ export default function ManageCallbacksPage() {
         variant: "destructive",
       });
     }
-  }, [user, callbacksService, toast, swrRefresh]);
+  }, [userObj, toast]);
 
   const handleEditCallback = useCallback((callback: CallbackRow) => {
     setEditingCallback(callback);
@@ -450,23 +479,21 @@ export default function ManageCallbacksPage() {
     const followUpDate = tomorrow.toISOString().split('T')[0];
     
     try {
-      // Pass user context for role-based permissions
       const userContext = {
-        userRole: user?.role,
-        userId: user?.id,
-        managedTeam: user?.managedTeam
+        userRole: userObj?.role,
+        userId: userObj?.id,
+        managedTeam: userObj?.managedTeam
       };
 
       await callbacksService.updateCallback(callback.id, {
-        status: "pending" as const,
+        status: "pending",
         callbackNotes: `${callback.callback_notes || ''}\n\nFollow-up scheduled for ${followUpDate}`.trim()
-      }, user, userContext);
+      }, userObj, userContext);
       toast({
         title: "Follow-up Scheduled",
         description: `Follow-up scheduled for ${followUpDate}`,
       });
-      // ✅ SWR: Refresh data
-      swrRefresh();
+      swrRefreshRef.current?.();
     } catch (error) {
       console.error("Error scheduling follow-up:", error);
       toast({
@@ -481,8 +508,6 @@ export default function ManageCallbacksPage() {
     if (!editingCallback || !editForm) return;
 
     try {
-      
-      // Keep snake_case properties to match database table structure
       const apiUpdates: any = {};
       
       if (editForm.customer_name !== undefined) apiUpdates.customer_name = editForm.customer_name;
@@ -495,23 +520,21 @@ export default function ManageCallbacksPage() {
       if (editForm.callback_notes !== undefined) apiUpdates.callback_notes = editForm.callback_notes;
       if (editForm.callback_reason !== undefined) apiUpdates.callback_reason = editForm.callback_reason;
 
-      // Pass user context for role-based permissions
       const userContext = {
-        userRole: user?.role,
-        userId: user?.id,
-        managedTeam: user?.managedTeam
+        userRole: userObj?.role,
+        userId: userObj?.id,
+        managedTeam: userObj?.managedTeam
       };
-      await callbacksService.updateCallback(editingCallback.id, apiUpdates, user, userContext);
+      await callbacksService.updateCallback(editingCallback.id, apiUpdates, userObj, userContext);
       setEditingCallback(null);
       setEditForm({});
       toast({
         title: "Success",
         description: "Callback updated successfully",
       });
-      // ✅ SWR: Refresh data
-      swrRefresh();
+      swrRefreshRef.current?.();
     } catch (error) {
-      console.error('❌ Error updating callback:', error);
+      console.error('Error updating callback:', error);
       toast({
         title: "Error",
         description: "Failed to update callback",
@@ -520,39 +543,12 @@ export default function ManageCallbacksPage() {
     }
   };
 
-  const handleStatusUpdate = async (id: string, newStatus: "pending" | "contacted" | "completed" | "cancelled") => {
-    try {
-      // Pass user context for role-based permissions
-      const userContext = {
-        userRole: user?.role,
-        userId: user?.id,
-        managedTeam: user?.managedTeam
-      };
-
-      await callbacksService.updateCallback(id, { status: newStatus as any }, user, userContext);
-      toast({
-        title: "Success",
-        description: `Callback status updated to ${newStatus}`,
-      });
-      // ✅ SWR: Refresh data
-      swrRefresh();
-    } catch (error) {
-      console.error("Error updating status:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update callback status",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleDeleteCallback = async (callback: CallbackRow) => {
     try {
-      // Pass user context for role-based permissions
       const userContext = {
-        userRole: user?.role,
-        userId: user?.id,
-        managedTeam: user?.managedTeam
+        userRole: userObj?.role,
+        userId: userObj?.id,
+        managedTeam: userObj?.managedTeam
       };
       
       await callbacksService.deleteCallback(callback.id, userContext);
@@ -560,8 +556,7 @@ export default function ManageCallbacksPage() {
         title: "Success",
         description: "Callback deleted successfully",
       });
-      // ✅ SWR: Refresh data
-      swrRefresh();
+      swrRefreshRef.current?.();
     } catch (error) {
       console.error("Error deleting callback:", error);
       toast({
@@ -574,34 +569,29 @@ export default function ManageCallbacksPage() {
 
   const exportToCSV = async () => {
     try {
-      // Get all callbacks with current filters for export (no pagination limit)
       const params: any = {
         page: 1,
-        limit: 10000, // Large limit to get all data
+        limit: 10000,
         search: debouncedSearch.trim(),
         status: statusFilter === 'all' ? '' : statusFilter,
-        userRole: user?.role || '',
-        userId: user?.id || '',
+        userRole: userObj?.role || '',
+        userId: userObj?.id || '',
       };
 
-      // Optional hints for some views (backend primarily uses userRole/userId)
-      if (user?.role === 'team_leader' && (user as any)?.managedTeam) {
-        params.team = (user as any).managedTeam;
-        params.managedTeam = (user as any).managedTeam;
+      if (userObj?.role === 'team_leader' && userObj?.managedTeam) {
+        params.team = userObj.managedTeam;
+        params.managedTeam = userObj.managedTeam;
       }
 
-      // Add additional filters
       if (agentFilter !== 'all') {
         params.agent = agentFilter;
       }
       
-      // Add team filter (only for managers)
-      if (user?.role === 'manager' && teamFilter !== 'all') {
+      if (userObj?.role === 'manager' && teamFilter !== 'all') {
         params.team = teamFilter;
       }
       
-      // Add month filter (only for managers)
-      if (user?.role === 'manager' && monthFilter !== 'all') {
+      if (userObj?.role === 'manager' && monthFilter !== 'all') {
         params.month = monthFilter;
       }
 
@@ -619,7 +609,6 @@ export default function ManageCallbacksPage() {
         return;
       }
 
-      // Create CSV content
       const headers = [
         'Customer Name',
         'Phone Number',
@@ -654,18 +643,16 @@ export default function ManageCallbacksPage() {
           `"${(callback.first_call_date || '').replace(/"/g, '""')}"`,
           `"${(callback.first_call_time || '').replace(/"/g, '""')}"`,
           `"${(callback.callback_notes || '').replace(/"/g, '""')}"`,
-          `"${(callback.created_at || '').replace(/"/g, '""')}"`,
-          `"${(callback.updated_at || '').replace(/"/g, '""')}"`
+          `"${(callback.created_at || '').toString().replace(/"/g, '""')}"`,
+          `"${(callback.updated_at || '').toString().replace(/"/g, '""')}"`
         ].join(','))
       ].join('\n');
 
-      // Create and download file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
       
-      // Create filename with current filters
       const filterSuffix = monthFilter !== 'all' ? `_${monthFilter}` : '';
       const statusSuffix = statusFilter !== 'all' ? `_${statusFilter}` : '';
       const agentSuffix = agentFilter !== 'all' ? `_${agentFilter.replace(/\s+/g, '_')}` : '';
@@ -699,14 +686,14 @@ export default function ManageCallbacksPage() {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>
-              {user?.role === 'manager' ? 'Callbacks Overview' : 'Manage Callbacks'} - {pagination.total} Total
+              {userObj?.role === 'manager' ? 'Callbacks Overview' : 'Manage Callbacks'} - {pagination.total} Total
               {pagination.total >= effectiveLimit && 
                 <span className="text-sm text-muted-foreground ml-2">
                   (fetched {pagination.total} callbacks)
                 </span>
               }
             </CardTitle>
-            {user?.role === 'manager' && (
+            {userObj?.role === 'manager' && (
               <Button 
                 onClick={exportToCSV}
                 variant="outline"
@@ -750,8 +737,7 @@ export default function ManageCallbacksPage() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              {/* Quick filter: Agent - Show for managers and team leaders */}
-              {(user?.role === 'manager' || user?.role === 'team_leader') && (
+              {(userObj?.role === 'manager' || userObj?.role === 'team_leader') && (
                 <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v)} disabled={selectorLoading}>
                   <SelectTrigger className="w-56">
                     <SelectValue placeholder={selectorLoading ? "Loading..." : "Filter by agent"} />
@@ -764,8 +750,7 @@ export default function ManageCallbacksPage() {
                   </SelectContent>
                 </Select>
               )}
-              {/* Month filter - Only show for managers */}
-              {user?.role === 'manager' && (
+              {userObj?.role === 'manager' && (
                 <Select value={monthFilter} onValueChange={(v) => setMonthFilter(v)} disabled={selectorLoading}>
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder={selectorLoading ? "Loading..." : "Filter by month"} />
@@ -778,8 +763,7 @@ export default function ManageCallbacksPage() {
                   </SelectContent>
                 </Select>
               )}
-              {/* Team filter - Only show for managers */}
-              {user?.role === 'manager' && availableTeams.length > 0 && (
+              {userObj?.role === 'manager' && availableTeams.length > 0 && (
                 <Select value={teamFilter} onValueChange={(v) => setTeamFilter(v)} disabled={selectorLoading}>
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder={selectorLoading ? "Loading..." : "Filter by team"} />
@@ -795,7 +779,7 @@ export default function ManageCallbacksPage() {
             </div>
           </div>
 
-          {user?.role === 'manager' && (
+          {userObj?.role === 'manager' && (
             <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 rounded-lg border">
                 <div className="font-semibold mb-2">Updates by Agent (count)</div>
@@ -835,7 +819,7 @@ export default function ManageCallbacksPage() {
                   <th className="py-3 px-4 font-semibold hidden xl:table-cell text-center">Same Phone</th>
                   <th className="py-3 px-4 font-semibold hidden sm:table-cell text-center">Priority</th>
                   <th className="py-3 px-4 font-semibold text-center">Status</th>
-                  {(user?.role === 'salesman' || user?.role === 'team_leader') && (
+                  {(userObj?.role === 'salesman' || userObj?.role === 'team_leader' || userObj?.role === 'manager') && (
                     <th className="py-3 px-4 font-semibold text-right">Actions</th>
                   )}
                   <th className="py-3 px-4 font-semibold text-right">History</th>
@@ -890,7 +874,7 @@ export default function ManageCallbacksPage() {
                       </td>
                       <td className="py-3 px-4 hidden xl:table-cell">
                         <div className="text-xs">
-                          {c.updated_at ? new Date(c.updated_at as any).toLocaleString() : '—'}
+                          {c.updated_at ? new Date(c.updated_at).toLocaleString() : '—'}
                         </div>
                       </td>
                       <td className="py-3 px-4 hidden xl:table-cell text-center" title={(() => { const s = phoneStats.get(c.phone_number || 'unknown'); return s?.dates?.map((d: Date) => new Date(d).toLocaleString()).join(', ') || '' })()}>
@@ -908,10 +892,9 @@ export default function ManageCallbacksPage() {
                       <td className="py-3 px-4 text-center">
                         <Badge className={statusColors[c.status]}>{c.status}</Badge>
                       </td>
-                      {/* Show actions for: manager (all), team_leader (own + team), salesman (own only) */}
-                      {(user?.role === 'manager' || 
-                        (user?.role === 'salesman' && c.SalesAgentID === user?.id) || 
-                        (user?.role === 'team_leader' && (c.SalesAgentID === user?.id || c.sales_team === user?.managedTeam))) && (
+                      {(userObj?.role === 'manager' || 
+                        (userObj?.role === 'salesman' && c.SalesAgentID === userObj?.id) || 
+                        (userObj?.role === 'team_leader' && (c.SalesAgentID === userObj?.id || c.sales_team === userObj?.managedTeam))) && (
                       <td className="py-3 px-4 text-right">
                         <div className="flex gap-1 justify-end">
                           <Dialog>
@@ -1105,7 +1088,7 @@ export default function ManageCallbacksPage() {
                         </div>
                       </td>
                       )}
-                      <td className="py-3 pr-0 text-right">
+                      <td className="py-3 pr-4 text-right">
                         <Dialog open={historyForPhone === (c.phone_number || '')} onOpenChange={(open) => setHistoryForPhone(open ? (c.phone_number || '') : null)}>
                           <DialogTrigger asChild>
                             <Button 
@@ -1118,32 +1101,38 @@ export default function ManageCallbacksPage() {
                               History
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-4xl">
+                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                             <DialogHeader>
                               <DialogTitle className="flex items-center gap-2">
                                 <Clock className="h-5 w-5 text-blue-600" />
                                 Callback Timeline for {c.phone_number}
                               </DialogTitle>
                             </DialogHeader>
-                            <div className="max-h-[70vh] overflow-auto">
+                            <div className="flex-1 overflow-y-auto">
                               <div className="space-y-6 p-4">
                                 {(() => {
                                   const timelineEvents = getTimelineForPhone(c.phone_number || '');
+                                  if (timelineEvents.length === 0) {
+                                    return (
+                                      <div className="text-center py-8 text-gray-500">
+                                        <Phone className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                                        <p>No callback history found for this phone number.</p>
+                                      </div>
+                                    );
+                                  }
+                                  
                                   return timelineEvents.map((event, idx) => {
                                     const isLast = idx === timelineEvents.length - 1;
-                                  const statusColor = statusColors[event.status] || 'bg-gray-500';
-                                  const isFuture = event.date > new Date();
+                                    const statusColor = statusColors[event.status] || 'bg-gray-500';
+                                    const isFuture = event.date > new Date();
                                   
                                   return (
                                     <div key={event.id} className="relative">
-                                      {/* Timeline line */}
                                       {!isLast && (
-                                        <div className={`absolute left-6 top-16 w-0.5 h-20 ${isFuture ? 'bg-gradient-to-b from-gray-300 to-gray-200 border-dashed' : 'bg-gradient-to-b from-blue-300 to-blue-200'}`}></div>
+                                        <div className={`absolute left-6 top-16 w-0.5 h-20 ${isFuture ? 'bg-gradient-to-b from-gray-300 to-gray-200' : 'bg-gradient-to-b from-blue-300 to-blue-200'}`}></div>
                                       )}
                                       
-                                      {/* Timeline item */}
                                       <div className="flex items-start gap-4">
-                                        {/* Timeline dot */}
                                         <div className={`relative z-10 flex-shrink-0 w-12 h-12 rounded-full ${statusColor} flex items-center justify-center shadow-lg ${isFuture ? 'opacity-60 border-2 border-dashed border-gray-400' : ''}`}>
                                           {event.type === 'initial' && <Phone className="h-6 w-6 text-white" />}
                                           {event.type === 'status_update' && event.status === 'contacted' && <MessageSquare className="h-6 w-6 text-white" />}
@@ -1152,10 +1141,9 @@ export default function ManageCallbacksPage() {
                                           {event.type === 'final' && event.status === 'cancelled' && <XCircle className="h-6 w-6 text-white" />}
                                         </div>
                                         
-                                        {/* Content card */}
                                         <div className={`flex-1 border rounded-lg shadow-sm p-4 hover:shadow-md transition-all duration-200 ${isFuture ? 'bg-gray-50 border-gray-300' : 'bg-white border-gray-200'}`}>
                                           <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                               <h4 className="font-semibold text-gray-900">{event.title}</h4>
                                               {event.isFirst && (
                                                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
@@ -1212,7 +1200,7 @@ export default function ManageCallbacksPage() {
                                           {event.callback.callback_notes && (
                                             <div className="mt-3 pt-3 border-t border-gray-100">
                                               <div className="text-xs font-medium text-gray-600 mb-1">Notes</div>
-                                              <div className="text-xs text-gray-800 bg-gray-50 p-2 rounded text-left">{event.callback.callback_notes}</div>
+                                              <div className="text-xs text-gray-800 bg-gray-50 p-2 rounded">{event.callback.callback_notes}</div>
                                             </div>
                                           )}
                                         </div>
@@ -1221,13 +1209,6 @@ export default function ManageCallbacksPage() {
                                   );
                                   });
                                 })()}
-                                
-                                {callbacks.filter(x => (x.phone_number || '') === (c.phone_number || '')).length === 0 && (
-                                  <div className="text-center py-8 text-gray-500">
-                                    <Phone className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                                    <p>No callback history found for this phone number.</p>
-                                  </div>
-                                )}
                               </div>
                             </div>
                           </DialogContent>
@@ -1240,11 +1221,9 @@ export default function ManageCallbacksPage() {
             </table>
           </div>
 
-          {/* Pagination Controls */}
           <PaginationControls />
         </CardContent>
       </Card>
     </div>
   );
 }
-

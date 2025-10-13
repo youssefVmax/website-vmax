@@ -128,7 +128,7 @@ function SalesAnalysisDashboard({
     } catch (error) {
       console.error('Error updating date from props:', error);
     }
-  }, [propSelectedMonth, propSelectedYear, selectedMonth, selectedYear]);
+  }, [propSelectedMonth, propSelectedYear]);
   // ✅ SWR: Replace manual state with SWR hooks
   const { 
     deals = [], 
@@ -843,7 +843,11 @@ function SalesAnalysisDashboard({
                 <XAxis type="number" />
                 <YAxis dataKey="range" type="category" width={80} />
                 <Tooltip formatter={(value) => [`${value} deals`, 'Count']} />
-                <Bar dataKey="count" fill="#fbbf24" />
+                <Bar dataKey="count" fill="#fbbf24">
+                  {analytics.dealSizeData?.map((entry: any, index: number) => (
+                    <Cell key={`cell-${entry.id || entry.range}-${index}`} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
