@@ -147,6 +147,7 @@ function SalesAnalysisDashboard({
   const [users, setUsers] = useState<any[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [totalCallbacksCount, setTotalCallbacksCount] = useState<number | null>(null);
 
   const handleRefresh = async () => {
     try {
@@ -160,6 +161,63 @@ function SalesAnalysisDashboard({
       setTimeout(() => setRefreshing(false), 1000);
     }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadTotalCallbacks = async () => {
+      try {
+        if (!userRole || !user?.id) return;
+
+        const params = new URLSearchParams({
+          userRole,
+          userId: user.id,
+          limit: '1',
+          page: '1'
+        });
+
+        if (user?.managedTeam) {
+          params.set('managedTeam', user.managedTeam);
+        }
+
+        if (selectedMonth && selectedYear) {
+          params.set('month', `${selectedYear}-${selectedMonth}`);
+        }
+
+        const response = await fetch(`/api/callbacks?${params.toString()}`, {
+          signal: controller.signal,
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load callbacks total: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!cancelled) {
+          const apiTotal = typeof data?.total === 'number' ? data.total : Array.isArray(data?.callbacks) ? data.callbacks.length : null;
+          setTotalCallbacksCount(apiTotal);
+        }
+      } catch (error) {
+        if ((error as any)?.name !== 'AbortError') {
+          console.error('❌ Error fetching total callbacks:', error);
+        }
+        if (!cancelled) {
+          setTotalCallbacksCount(null);
+        }
+      }
+    };
+
+    loadTotalCallbacks();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [userRole, user?.id, user?.managedTeam, selectedMonth, selectedYear, refreshing]);
 
   const handleDateChange = (month: string, year: string) => {
     try {
@@ -503,6 +561,8 @@ function SalesAnalysisDashboard({
   // Check if data is ready and stable for chart rendering
   const isDataReady = !refreshing && deals.length >= 0 && callbacks.length >= 0;
 
+  const totalCallbacksDisplay = totalCallbacksCount ?? analytics.totalCallbacks;
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -551,11 +611,11 @@ function SalesAnalysisDashboard({
           subtitle="Per deal"
         />
         <KPICard
-          title="Conversion Rate"
-          value={`${analytics.conversionRate.toFixed(1)}%`}
-          icon={<CheckCircle className="h-6 w-6" />}
+          title="Total Callbacks"
+          value={totalCallbacksDisplay}
+          icon={<Phone className="h-6 w-6" />}
           color="orange"
-          subtitle="Callbacks to deals"
+          subtitle="All recorded callbacks"
         />
       </div>
 

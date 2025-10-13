@@ -143,13 +143,11 @@ export async function GET(request: NextRequest) {
     // Get pending callbacks
     let pendingCallbacks = 0;
     try {
-      console.log('🔍 Querying pending callbacks...');
       const [pendingCallbacksResult] = await query<any>(
         `SELECT COUNT(*) as count FROM callbacks ${callbackWhere ? callbackWhere + ' AND' : 'WHERE'} status = 'pending'`, 
         callbackParams
       );
       pendingCallbacks = pendingCallbacksResult[0]?.count || 0;
-      console.log('✅ Pending callbacks:', pendingCallbacks);
     } catch (error) {
       console.error('❌ Error querying pending callbacks:', error);
     }
@@ -157,13 +155,11 @@ export async function GET(request: NextRequest) {
     // Get overdue callbacks
     let overdueCallbacks = 0;
     try {
-      console.log('🔍 Querying overdue callbacks...');
       const [overdueCallbacksResult] = await query<any>(
         `SELECT COUNT(*) as count FROM callbacks ${callbackWhere ? callbackWhere + ' AND' : 'WHERE'} scheduled_date < CURDATE() AND status != 'completed'`, 
         callbackParams
       );
       overdueCallbacks = overdueCallbacksResult[0]?.count || 0;
-      console.log('✅ Overdue callbacks:', overdueCallbacks);
     } catch (error) {
       console.error('❌ Error querying overdue callbacks:', error);
     }
