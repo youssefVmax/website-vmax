@@ -96,7 +96,6 @@ export default function FullPageDashboard() {
         
         // Initialize API connection
         await apiService.getUsers({ role: 'salesman' })
-        console.log('API service initialized successfully')
       } catch (error) {
         console.error('Failed to initialize API service:', error)
       }
@@ -185,7 +184,6 @@ export default function FullPageDashboard() {
   // Removed auto-redirect. Salesmen now land on Dashboard and stay there unless they choose another tab.
 
   if (!user || !user.role) {
-    console.log('FullPageDashboard: No user or role provided:', { user, role: user?.role })
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-center">
@@ -626,7 +624,7 @@ function PageContent({
     case "settings":
       return <ProfileSettings user={user} />
     default:
-      console.log('PageContent: Unknown activeTab:', activeTab, 'defaulting to dashboard')
+      
       try {
         return <DashboardOverview user={user} setActiveTab={setActiveTab} />
       } catch (error) {
@@ -698,11 +696,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
       return sum + amount;
     }, 0);
     
-    console.log('💰 Dashboard Metrics:', { 
-      dealsCount: deals.length, 
-      totalRevenue,
-      sampleDeal: deals[0] 
-    });
+    
     
     return {
       totalRevenue,
@@ -723,18 +717,18 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     const loadAgentCount = async () => {
       if (user.role === 'manager') {
         try {
-          console.log('🔄 DashboardOverview: Loading agent count...');
+          
           const usersResponse = await fetch('/api/unified-data?userRole=manager&dataTypes=users&limit=1000');
           const usersData = await usersResponse.json();
-          console.log('📊 DashboardOverview: Users API response:', usersData);
+          
           
           if (usersData.success && usersData.data && Array.isArray(usersData.data.users)) {
             // Count all users in the system (not just salesmen)
             const allUsers = usersData.data.users;
             setTotalAgents(allUsers.length);
-            console.log('✅ DashboardOverview: Found', allUsers.length, 'total users');
+            
           } else {
-            console.warn('⚠️ DashboardOverview: Invalid users data structure:', usersData);
+            
             setTotalAgents(0);
           }
         } catch (error) {
@@ -838,7 +832,7 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
     )
   }
 
-  console.log('✅ Dashboard: Rendering success state with metrics:', metrics.totalDeals || 0);
+  
 
   return (
     <div className="space-y-6">

@@ -213,7 +213,6 @@ class DirectMySQLService {
 
   async getUsers(filters: Record<string, string> = {}): Promise<any> {
     try {
-      console.log('🔄 DirectMySQLService: Fetching users via users API');
       const params = new URLSearchParams({
         limit: '1000',
         ...filters
@@ -233,7 +232,6 @@ class DirectMySQLService {
       }
 
       const result = await response.json();
-      console.log('✅ DirectMySQLService: Users fetched successfully:', result.users?.length || 0, 'users');
       return result.success ? (result.users || []) : [];
     } catch (error) {
       console.error('❌ DirectMySQLService: Error fetching users:', error);
