@@ -188,10 +188,13 @@ function SalesAnalysisDashboard({
 
         const data = await response.json();
         if (!cancelled) {
-          // Use systemTotal for KPI display (actual system-wide count), fallback to total (filtered count)
-          const apiTotal = typeof data?.systemTotal === 'number' ? data.systemTotal : 
-                          typeof data?.total === 'number' ? data.total : 
-                          Array.isArray(data?.callbacks) ? data.callbacks.length : null;
+          // Role-aware KPI: manager -> systemTotal; others -> filtered total
+          const apiTotal = userRole === 'manager'
+            ? (typeof data?.systemTotal === 'number' ? data.systemTotal
+               : (typeof data?.total === 'number' ? data.total
+                 : Array.isArray(data?.callbacks) ? data.callbacks.length : null))
+            : (typeof data?.total === 'number' ? data.total
+               : Array.isArray(data?.callbacks) ? data.callbacks.length : null);
           setTotalCallbacksCount(apiTotal);
         }
       } catch (error) {

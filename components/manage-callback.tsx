@@ -683,8 +683,8 @@ export default function ManageCallbacksPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Callbacks</p>
-                <p className="text-2xl font-bold">{totalCallbacksFromAPI.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">All recorded callbacks</p>
+                <p className="text-2xl font-bold">{(userObj?.role === 'manager' ? totalCallbacksFromAPI : filteredTotal).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">{userObj?.role === 'manager' ? 'All recorded callbacks' : 'Role-scoped callbacks'}</p>
               </div>
               <Phone className="h-8 w-8 text-blue-600" />
             </div>

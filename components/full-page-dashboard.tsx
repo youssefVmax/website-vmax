@@ -703,7 +703,10 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
       totalSales: totalRevenue, // Alias for compatibility
       totalDeals: deals.length,
       averageDealSize: deals.length > 0 ? totalRevenue / deals.length : 0,
-      totalCallbacks: totalCallbacksFromAPI ?? callbacks.length, // Use API total if available
+      // Role-aware total callbacks: manager uses system total; others use filtered total or local length
+      totalCallbacks: (user.role === 'manager'
+        ? (totalCallbacksFromAPI ?? callbacks.length)
+        : (typeof totalCallbacksFromAPI === 'number' ? totalCallbacksFromAPI : callbacks.length)),
       totalTargets: targets.length,
       deals,
       callbacks,
@@ -773,11 +776,11 @@ function DashboardOverview({ user, setActiveTab }: { user: any, setActiveTab: (t
 
         const data = await response.json();
         if (!cancelled) {
-          // Use systemTotal for KPI display (actual system-wide count), fallback to total (filtered count)
-          const apiTotal = typeof data?.systemTotal === 'number' ? data.systemTotal : 
-                          typeof data?.total === 'number' ? data.total : null;
+          // Role-aware: manager -> systemTotal; others -> filtered total
+          const apiTotal = user.role === 'manager'
+            ? (typeof data?.systemTotal === 'number' ? data.systemTotal : (typeof data?.total === 'number' ? data.total : null))
+            : (typeof data?.total === 'number' ? data.total : (Array.isArray(data?.callbacks) ? data.callbacks.length : null));
           setTotalCallbacksFromAPI(apiTotal);
-          console.log('📞 DashboardOverview: Loaded callback total from API:', { systemTotal: data?.systemTotal, filteredTotal: data?.total, displayTotal: apiTotal });
         }
       } catch (error) {
         if ((error as any)?.name !== 'AbortError') {
