@@ -141,7 +141,30 @@ export async function GET(request: NextRequest) {
       // Build the complete SQL query with proper parameter handling
       const baseSql = `SELECT * FROM callbacks ${whereSql} ORDER BY COALESCE(updated_at, created_at) DESC, id DESC`;
       const countSql = `SELECT COUNT(*) as c FROM callbacks ${whereSql}`;
-      const systemCountSql = `SELECT COUNT(*) as total FROM callbacks`; // System-wide total for KPIs
+      
+      // Build role-based system total query (without additional filters like search, status, agent, month)
+      // Only apply role-based WHERE clause for system total
+      const roleWhere: string[] = [];
+      const roleParams: any[] = [];
+      
+      if (userRole === 'salesman' && userId) {
+        roleWhere.push('`SalesAgentID` = ?');
+        roleParams.push(userId);
+      } else if (userRole === 'team_leader' && userId) {
+        const [userRows] = await query<any>('SELECT `managedTeam` FROM `users` WHERE `id` = ?', [userId]);
+        const managedTeamValue = userRows[0]?.managedTeam;
+        if (managedTeamValue) {
+          roleWhere.push('(`SalesAgentID` = ? OR `sales_team` = ?)');
+          roleParams.push(userId, managedTeamValue);
+        } else {
+          roleWhere.push('`SalesAgentID` = ?');
+          roleParams.push(userId);
+        }
+      }
+      // Manager sees all callbacks (no role filter)
+      
+      const roleWhereSql = roleWhere.length ? `WHERE ${roleWhere.join(' AND ')}` : '';
+      const systemCountSql = `SELECT COUNT(*) as total FROM callbacks ${roleWhereSql}`;
       
       // For pagination, append LIMIT and OFFSET directly to avoid prepared statement issues
       // limit and offset are already validated integers, so this is safe
@@ -149,7 +172,7 @@ export async function GET(request: NextRequest) {
       
       [rows] = await query<any>(paginatedSql, params);
       [totals] = await query<any>(countSql, params);
-      [systemTotal] = await query<any>(systemCountSql); // Get system-wide total
+      [systemTotal] = await query<any>(systemCountSql, roleParams); // Get role-based total
       
     } catch (queryError) {
       console.error('❌ Callbacks query error:', queryError);

@@ -47,6 +47,7 @@ interface CallbacksManagementProps {
 export function CallbacksManagement({ userRole, user }: CallbacksManagementProps) {
   const [callbacks, setCallbacks] = useState<Callback[]>([]);
   const [totalCallbacks, setTotalCallbacks] = useState(0);
+  const [systemTotal, setSystemTotal] = useState(0);
   const [selectedCallback, setSelectedCallback] = useState<Callback | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
@@ -148,6 +149,7 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
       
       setCallbacks(convertedData);
       setTotalCallbacks(result.total || 0);
+      setSystemTotal(result.systemTotal || result.total || 0);
       paginationActions.setTotalItems(result.total || 0);
       
     } catch (error) {
@@ -155,6 +157,7 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
       showError('Error', 'Failed to load callbacks');
       setCallbacks([]);
       setTotalCallbacks(0);
+      setSystemTotal(0);
       paginationActions.setTotalItems(0);
     } finally {
       paginationActions.setIsLoading(false);
@@ -299,9 +302,18 @@ export function CallbacksManagement({ userRole, user }: CallbacksManagementProps
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Phone className="h-5 w-5" />
-            <span>Callbacks ({totalCallbacks.toLocaleString()})</span>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Phone className="h-5 w-5" />
+              <span>
+                {userRole === 'salesman' ? 'My Callbacks' : 
+                 userRole === 'team_leader' ? 'Team Callbacks' : 
+                 'All Callbacks'}
+              </span>
+            </div>
+            <div className="text-sm font-normal text-muted-foreground">
+              Total: {systemTotal.toLocaleString()} | Filtered: {totalCallbacks.toLocaleString()}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
