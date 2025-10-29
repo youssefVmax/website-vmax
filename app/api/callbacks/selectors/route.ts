@@ -21,13 +21,12 @@ function addCorsHeaders(res: NextResponse) {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 GET /api/callbacks/selectors - Fetching selector data');
     
     const { searchParams } = new URL(request.url);
     const userRole = searchParams.get('userRole');
     const userId = searchParams.get('userId');
     
-    console.log('👤 User context:', { userRole, userId });
+    
 
     // Get available months for filtering (optimized with index)
     let availableMonths: { value: string; label: string }[] = [];
@@ -164,11 +163,7 @@ export async function GET(request: NextRequest) {
       { value: 'high', label: 'High' }
     ];
 
-    console.log('✅ Selector data fetched successfully:', {
-      months: availableMonths.length,
-      agents: availableAgents.length,
-      teams: availableTeams.length
-    });
+    
 
     return addCorsHeaders(NextResponse.json({
       success: true,

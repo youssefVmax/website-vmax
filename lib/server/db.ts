@@ -22,7 +22,6 @@ const pool = mysql.createPool({
 // Test connection on startup
 pool.getConnection()
   .then(connection => {
-    console.log("✅ Connected to MySQL database as youssef");
     connection.release();
   })
   .catch(err => {

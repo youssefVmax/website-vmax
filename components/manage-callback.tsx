@@ -682,17 +682,9 @@ export default function ManageCallbacksPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  {userObj?.role === 'salesman' ? 'My Total Callbacks' : 
-                   userObj?.role === 'team_leader' ? 'Team Total Callbacks' : 
-                   'Total Callbacks'}
-                </p>
+                <p className="text-sm font-medium text-muted-foreground">Total Callbacks</p>
                 <p className="text-2xl font-bold">{totalCallbacksFromAPI.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">
-                  {userObj?.role === 'salesman' ? 'Callbacks you created' : 
-                   userObj?.role === 'team_leader' ? 'Callbacks by your team' : 
-                   'All recorded callbacks'}
-                </p>
+                <p className="text-xs text-muted-foreground">All recorded callbacks</p>
               </div>
               <Phone className="h-8 w-8 text-blue-600" />
             </div>

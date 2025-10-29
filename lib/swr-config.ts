@@ -9,7 +9,6 @@ import { dedupeFetch } from './request-manager';
 
 // Custom fetcher that uses dedupeFetch
 export const swrFetcher = async (url: string) => {
-  console.log(`🔄 SWR Fetcher: ${url}`);
   return dedupeFetch(url);
 };
 
@@ -40,7 +39,6 @@ export const swrConfig: SWRConfiguration = {
   
   // Success/Error callbacks
   onSuccess: (data, key, config) => {
-    console.log(`✅ SWR Success: ${key}`);
   },
   onError: (err, key, config) => {
     console.error(`❌ SWR Error: ${key}`, err);

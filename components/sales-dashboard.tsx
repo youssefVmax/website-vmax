@@ -85,14 +85,6 @@ function SalesAnalysisDashboard({
   onDateChange 
 }: SalesAnalysisDashboardProps) {
   // Safety check and logging
-  console.log('🔄 SalesAnalysisDashboard initialized with props:', {
-    userRole,
-    userId: user?.id,
-    userName: user?.name,
-    propSelectedMonth,
-    propSelectedYear,
-    hasOnDateChange: !!onDateChange
-  });
 
   // Date filter state - use props if provided, otherwise default
   const currentDate = new Date()
@@ -118,11 +110,9 @@ function SalesAnalysisDashboard({
   useEffect(() => {
     try {
       if (propSelectedMonth && propSelectedMonth !== selectedMonth) {
-        console.log('📅 Updating selectedMonth from props:', propSelectedMonth);
         setSelectedMonth(propSelectedMonth);
       }
       if (propSelectedYear && propSelectedYear !== selectedYear) {
-        console.log('📅 Updating selectedYear from props:', propSelectedYear);
         setSelectedYear(propSelectedYear);
       }
     } catch (error) {
@@ -198,12 +188,14 @@ function SalesAnalysisDashboard({
 
         const data = await response.json();
         if (!cancelled) {
-          // Use systemTotal for KPI display (actual system-wide count), fallback to total (filtered count)
-          const apiTotal = typeof data?.systemTotal === 'number' ? data.systemTotal : 
-                          typeof data?.total === 'number' ? data.total : 
-                          Array.isArray(data?.callbacks) ? data.callbacks.length : null;
+          // Role-aware KPI: manager -> systemTotal; others -> filtered total
+          const apiTotal = userRole === 'manager'
+            ? (typeof data?.systemTotal === 'number' ? data.systemTotal
+               : (typeof data?.total === 'number' ? data.total
+                 : Array.isArray(data?.callbacks) ? data.callbacks.length : null))
+            : (typeof data?.total === 'number' ? data.total
+               : Array.isArray(data?.callbacks) ? data.callbacks.length : null);
           setTotalCallbacksCount(apiTotal);
-          console.log('📞 Sales Dashboard: Loaded callback total from API:', { systemTotal: data?.systemTotal, filteredTotal: data?.total, displayTotal: apiTotal });
         }
       } catch (error) {
         if ((error as any)?.name !== 'AbortError') {
@@ -225,7 +217,6 @@ function SalesAnalysisDashboard({
 
   const handleDateChange = (month: string, year: string) => {
     try {
-      console.log('📅 handleDateChange called with:', { month, year });
       if (!month || !year) {
         console.error('❌ Invalid date parameters:', { month, year });
         return;
@@ -237,7 +228,6 @@ function SalesAnalysisDashboard({
       
       // Call parent callback if provided
       if (onDateChange) {
-        console.log('📅 Calling parent onDateChange');
         onDateChange(month, year);
       }
     } catch (error) {
@@ -270,8 +260,6 @@ function SalesAnalysisDashboard({
     
     const totalDeals = deals.length;
     const avgDealSize = totalDeals > 0 ? totalRevenue / totalDeals : 0;
-    
-    console.log('💰 Revenue calculation:', { totalRevenue, totalDeals, avgDealSize });
     
     const totalCallbacks = callbacks.length;
     const completedCallbacks = callbacks.filter((cb: any) => cb.status === 'completed').length;

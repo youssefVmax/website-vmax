@@ -62,7 +62,6 @@ export async function GET(request: NextRequest) {
       // Salesmen can only see their own callbacks
       where.push('`SalesAgentID` = ?');
       params.push(userId);
-      console.log('👤 Filtering for salesman:', userId);
     } else if (userRole === 'team_leader' && userId) {
       // Team leaders see their own callbacks + their team's callbacks
       console.log('👥 Fetching team leader data for:', userId);

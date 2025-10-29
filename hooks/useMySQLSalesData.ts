@@ -112,7 +112,7 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
     try {
       setData(prev => ({ ...prev, loading: true, error: null }));
 
-      console.log('🔄 useMySQLSalesData: Loading data directly from APIs');
+      
 
       // Build filters for API calls
       const apiFilters: Record<string, string> = {};
@@ -132,7 +132,7 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
         apiFilters.userId = filters.userId || '';
       }
 
-      console.log('📊 useMySQLSalesData: Using filters:', apiFilters);
+      
 
       // Load data directly from APIs with better error handling
       const [dealsResult, callbacksResult, targetsResult, usersResult] = await Promise.all([
@@ -183,12 +183,7 @@ export function useMySQLSalesData(filters?: SalesDataFilters): SalesDataHookRetu
           })
       ]);
 
-      console.log('✅ useMySQLSalesData: API Results:', {
-        deals: dealsResult.success ? (dealsResult.deals?.length || 0) : 'failed',
-        callbacks: callbacksResult.success ? (callbacksResult.callbacks?.length || 0) : 'failed',
-        targets: targetsResult.success ? (targetsResult.targets?.length || 0) : 'failed',
-        users: usersResult.success ? (usersResult.users?.length || 0) : 'failed'
-      });
+      
 
       const deals = dealsResult.deals || [];
       const callbacks = callbacksResult.callbacks || [];
