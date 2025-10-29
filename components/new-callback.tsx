@@ -44,6 +44,20 @@ export default function NewCallbackPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
+  // Early return if user is not loaded yet to prevent rendering errors
+  if (!user) {
+    return (
+      <div className="container mx-auto p-4 md:p-6 max-w-4xl">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const [form, setForm] = useState<FormState>({
     customer_name: "",
     phone_number: "",
@@ -79,13 +93,22 @@ export default function NewCallbackPage() {
 
     setLoading(true);
     try {
+      // Safely get sales team - handle undefined/null cases
+      let salesTeam = "Unknown";
+      try {
+        const userAny = user as any;
+        salesTeam = userAny?.managedTeam || userAny?.team || userAny?.salesTeam || "Unknown";
+      } catch (error) {
+        console.warn("Could not determine sales team:", error);
+      }
+
       const payload = {
         customerName: form.customer_name,
         phoneNumber: form.phone_number,
         email: form.email,
         salesAgentId: user.id || "",
-        salesAgentName: user.name,
-        salesTeam: (user as any).managedTeam || user.team || "Unknown",
+        salesAgentName: user.name || "Unknown",
+        salesTeam: salesTeam,
         firstCallDate: form.first_call_date,
         firstCallTime: form.first_call_time,
         callbackReason: form.callback_reason,
@@ -95,8 +118,8 @@ export default function NewCallbackPage() {
         scheduledTime: form.scheduled_time,
         followUpRequired: form.follow_up_required,
         status: "pending" as const,
-        createdBy: user.name,
-        createdById: user.id,
+        createdBy: user.name || "Unknown",
+        createdById: user.id || "",
       };
 
       const id = await callbacksService.addCallback(payload);
